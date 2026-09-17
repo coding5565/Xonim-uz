@@ -1,0 +1,39 @@
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import { Banknote, CalendarDays, Download, Filter, PackageCheck, ReceiptText, RefreshCw, TrendingUp } from '@lucide/vue'
+import { api, download, list, money, today } from '../api'
+import type { Category, Dish, SalesReport } from '../types'
+
+const categories=ref<Category[]>([]), dishes=ref<Dish[]>([]), data=ref<SalesReport>()
+const start=ref(today().slice(0,8)+'01'), end=ref(today()), category=ref(''), dish=ref(''), group=ref('auto')
+const loading=ref(false), exporting=ref(false), error=ref('')
+const visibleDishes=computed(()=>dishes.value.filter(item=>!category.value||item.category===Number(category.value)))
+const maxTrend=computed(()=>Math.max(1,...(data.value?.trend.map(item=>Number(item.revenue))||[1])))
+const maxCategory=computed(()=>Math.max(1,...(data.value?.categories.map(item=>Number(item.revenue))||[1])))
+const params=computed(()=>{const query=new URLSearchParams({start:start.value,end:end.value,group:group.value});if(category.value)query.set('category',category.value);if(dish.value)query.set('dish',dish.value);return query.toString()})
+
+function shiftDate(value:string,days:number){const [year,month,day]=value.split('-').map(Number);const date=new Date(Date.UTC(year,month-1,day+days));return date.toISOString().slice(0,10)}
+function preset(kind:'today'|'week'|'month'){
+  end.value=today();start.value=kind==='today'?end.value:kind==='week'?shiftDate(end.value,-6):end.value.slice(0,8)+'01';load()
+}
+function categoryChanged(){dish.value='';load()}
+async function load(){loading.value=true;error.value='';try{data.value=await api<SalesReport>(`reports/sales/?${params.value}`)}catch(e){error.value=(e as Error).message}finally{loading.value=false}}
+async function exportExcel(){exporting.value=true;error.value='';try{await download(`reports/sales/export/?${params.value}`,`honim-savdo-${start.value}-${end.value}.xlsx`)}catch(e){error.value=(e as Error).message}finally{exporting.value=false}}
+onMounted(async()=>{try{[categories.value,dishes.value]=await Promise.all([list<Category>('categories/'),list<Dish>('dishes/')]);await load()}catch(e){error.value=(e as Error).message}})
+</script>
+
+<template>
+  <div class="page-heading"><div><span class="eyebrow">SAVDO TAHLILI</span><h1>Hisobotlar<span class="heading-dot">.</span></h1><p>Kunlik, oylik va istalgan sana oralig‘idagi savdolar.</p></div><button class="button primary" :disabled="exporting||loading" @click="exportExcel"><Download :size="17"/>{{ exporting?'Tayyorlanmoqda…':'Excel yuklash' }}</button></div>
+  <section class="panel report-filters"><header><Filter :size="19"/><div><h2>Hisobot filtrlari</h2><p>Natija faqat to‘langan cheklar asosida hisoblanadi</p></div><div class="report-presets"><button @click="preset('today')">Bugun</button><button @click="preset('week')">7 kun</button><button @click="preset('month')">Shu oy</button></div></header><div class="report-filter-grid"><label>Boshlanish<input v-model="start" type="date" :max="end" required></label><label>Tugash<input v-model="end" type="date" :min="start" :max="today()" required></label><label>Kategoriya<select v-model="category" @change="categoryChanged"><option value="">Barcha kategoriyalar</option><option v-for="item in categories" :key="item.id" :value="item.id">{{ item.name }}</option></select></label><label>Taom<select v-model="dish"><option value="">Barcha taomlar</option><option v-for="item in visibleDishes" :key="item.id" :value="item.id">{{ item.name }}</option></select></label><label>Grafik guruhi<select v-model="group"><option value="auto">Avtomatik</option><option value="day">Kunlik</option><option value="month">Oylik</option></select></label><button class="button secondary" :disabled="loading" @click="load"><RefreshCw :size="17" :class="{spin:loading}"/>Ko‘rsatish</button></div></section>
+  <p v-if="error" class="alert error" role="alert">{{ error }}</p>
+  <div v-if="!data&&loading" class="empty-state">Hisobot hisoblanmoqda…</div>
+  <template v-if="data">
+    <div class="report-metrics"><article><span class="metric-icon green"><Banknote/></span><div><small>Jami tushum</small><strong>{{ money(data.summary.revenue) }} <em>so‘m</em></strong></div></article><article><span class="metric-icon violet"><ReceiptText/></span><div><small>To‘langan cheklar</small><strong>{{ data.summary.orders }} <em>ta</em></strong></div></article><article><span class="metric-icon orange"><PackageCheck/></span><div><small>Sotilgan porsiya</small><strong>{{ data.summary.items }} <em>ta</em></strong></div></article><article><span class="metric-icon blue"><TrendingUp/></span><div><small>O‘rtacha chek</small><strong>{{ money(data.summary.average_check) }} <em>so‘m</em></strong></div></article></div>
+    <section class="profit-strip"><div><small>Retsept tannarxi</small><strong>{{ money(data.summary.cost) }} so‘m</strong></div><div><small>Yalpi foyda</small><strong>{{ money(data.summary.gross_profit) }} so‘m</strong></div><div><small>Yalpi marja</small><strong>{{ Number(data.summary.gross_margin).toFixed(1) }}%</strong></div><p>Yalpi foyda faqat retsept tannarxini ayiradi. Oylik va umumiy xarajatlar keyingi sof foyda hisobida ayiriladi.</p></section><div class="report-grid">
+      <section class="panel report-trend"><header class="panel-heading"><div><h2>Savdo dinamikasi</h2><p>{{ data.filters.start }} — {{ data.filters.end }} · {{ data.filters.group==='day'?'kunlik':'oylik' }}</p></div><CalendarDays :size="20"/></header><div class="report-chart" role="img" aria-label="Savdo tushumi grafigi"><div v-for="point in data.trend" :key="point.date" class="report-bar" :title="`${point.date}: ${money(point.revenue)} so‘m, ${point.orders} chek`"><div><span :style="{height:`${Number(point.revenue)/maxTrend*100}%`}"/></div><small>{{ data.filters.group==='month'?point.date.slice(0,7):point.date.slice(5) }}</small></div><p v-if="!Number(data.summary.revenue)" class="chart-empty">Tanlangan davrda to‘langan savdo yo‘q</p></div><footer><span>Naqd: <strong>{{ money(data.summary.cash) }}</strong></span><span>Karta: <strong>{{ money(data.summary.card) }}</strong></span></footer></section>
+      <section class="panel report-categories"><header class="panel-heading"><div><h2>Kategoriya bo‘yicha</h2><p>Qaysi yo‘nalish ko‘proq sotildi?</p></div></header><div v-if="data.categories.length" class="category-ranking"><div v-for="item in data.categories" :key="item.category_id"><div><strong>{{ item.category }}</strong><span>{{ item.quantity }} porsiya · {{ item.orders }} chek</span><b>{{ money(item.revenue) }}</b></div><div class="progress-track"><span :style="{width:`${Number(item.revenue)/maxCategory*100}%`}"/></div></div></div><div v-else class="empty-state compact">Kategoriya bo‘yicha ma’lumot yo‘q.</div></section>
+    </div>
+    <section class="panel spaced"><header class="panel-heading"><div><h2>Taomlar kesimida</h2><p>Filtrlangan davrdagi barcha sotilgan taomlar</p></div><span class="pill">{{ data.dishes.length }} ta taom</span></header><div class="table-wrap"><table><thead><tr><th>TAOM</th><th>KATEGORIYA</th><th>PORSIYA</th><th>CHEKLAR</th><th>TUSHUM</th><th>ULUSH</th></tr></thead><tbody><tr v-for="item in data.dishes" :key="item.dish_id"><td><strong>{{ item.dish }}</strong></td><td><span class="pill subtle">{{ item.category }}</span></td><td>{{ item.quantity }}</td><td>{{ item.orders }}</td><td class="number">{{ money(item.revenue) }} so‘m</td><td><div class="share-cell"><span :style="{width:`${Number(data.summary.revenue)?Number(item.revenue)/Number(data.summary.revenue)*100:0}%`}"/></div></td></tr></tbody></table><div v-if="!data.dishes.length" class="empty-state compact">Tanlangan filtr bo‘yicha sotilgan taom topilmadi.</div></div></section>
+    <p class="data-note">Excel faylida Umumiy, Davrlar, Kategoriyalar va Taomlar varaqlari yaratiladi. Summalar kassadagi to‘langan cheklar bilan tenglashtiriladi.</p>
+  </template>
+</template>
