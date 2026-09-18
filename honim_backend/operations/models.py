@@ -77,7 +77,12 @@ class Order(models.Model):
     table = models.CharField(max_length=40, blank=True)
     waiter = models.CharField(max_length=100, blank=True)
     status = models.CharField(max_length=10, default='open', choices=ORDER_STATUSES)
+    # `total` — mijoz to'laydigan summa, ya'ni chegirma AYRILGANDAN keyingi
+    # qiymat. Tushum shu maydondan hisoblanadi, shuning uchun chegirma
+    # avtomatik ravishda tushumni kamaytiradi va alohida ayirish shart emas.
     total = models.DecimalField(max_digits=14, decimal_places=2)
+    discount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    discount_reason = models.CharField(max_length=120, blank=True)
     payment_method = models.CharField(max_length=10, blank=True, choices=SALE_PAYMENT_METHODS)
     created_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(null=True)
@@ -96,6 +101,7 @@ class Order(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['branch', 'key'], name='order_idempotency'),
             models.CheckConstraint(condition=Q(total__gt=0), name='order_positive_total'),
+            models.CheckConstraint(condition=Q(discount__gte=0), name='order_nonnegative_discount'),
             # Bekor qilingan yoki qaytarilgan hisobda sabab ham, vaqt ham bo'lishi shart.
             models.CheckConstraint(
                 condition=~Q(status__in=['cancelled', 'refunded']) | (Q(voided_at__isnull=False) & ~Q(void_reason='')),

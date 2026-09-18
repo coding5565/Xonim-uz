@@ -279,3 +279,9 @@ td .muted{font-size:11px}
 @media(max-width:900px){.shift-form{grid-template-columns:1fr 1fr}.shift-form .button{grid-column:1/-1}}
 @media(max-width:560px){.shift-form{grid-template-columns:1fr}}
 
+/* --- Chegirma --- */
+.bill-discount{display:grid;grid-template-columns:1fr auto;gap:5px 12px;padding:12px 0;border-top:1px solid var(--line);font-size:11px;color:#8b978f}
+.bill-discount b{font:600 12px 'Manrope',sans-serif;color:#4b6355;text-align:right;font-variant-numeric:tabular-nums}
+.theme-dark .bill-discount{border-color:#2a4036;color:#a2b3a9}
+.theme-dark .bill-discount b{color:#cfe3d7}
+

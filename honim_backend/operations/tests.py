@@ -1823,3 +1823,110 @@ class MoneyFormatTests(TestCase):
         # printing.py chek uchun boshqacha formatlaydi ('40 000'), shuning uchun
         # uning funksiyasi som_text deb ataladi va bu ro'yxatga tushmaydi.
         self.assertEqual(sorted(owners), ['money.py'], owners)
+
+
+class DiscountTests(TestCase):
+    """Chegirma: tushumdan o'zi ayriladi, kassir esa cheksiz bera olmaydi."""
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.category = Category.objects.create(branch=self.branch, name='Taom')
+        self.dish = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('50000'))
+        self.client = APIClient()
+        self.client.force_authenticate(self.cashier)
+
+    def open_bill(self, quantity=4):
+        return create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': '',
+            'lines': [{'dish': self.dish.id, 'quantity': quantity, 'note': ''}],
+        })
+
+    def discount(self, order, amount, reason='Doimiy mijoz', client=None):
+        return (client or self.client).post(
+            f'/api/v1/orders/{order.id}/discount/',
+            {'amount': str(amount), 'reason': reason}, format='json',
+        )
+
+    def test_discount_lowers_what_the_guest_pays(self):
+        order = self.open_bill()  # 200 000
+        response = self.discount(order, 30000)
+        self.assertEqual(response.status_code, 200)
+        order.refresh_from_db()
+        self.assertEqual(order.discount, Decimal('30000.00'))
+        self.assertEqual(order.total, Decimal('170000.00'))
+        self.assertEqual(order.discount_reason, 'Doimiy mijoz')
+        entry = AuditEvent.objects.get(action='order.discount')
+        self.assertIn('15.0%', entry.description)
+
+    def test_discount_flows_straight_into_revenue(self):
+        order = self.open_bill()
+        self.discount(order, 30000)
+        self.client.post(f'/api/v1/orders/{order.id}/pay/', {'payment_method': 'cash'}, format='json')
+
+        owner = APIClient()
+        owner.force_authenticate(self.owner)
+        finance = owner.get('/api/v1/finance/').data['profit']
+        # Tushum chegirma ayirilgandan keyingi summa — alohida ayirish shart emas.
+        self.assertEqual(finance['revenue'], '170000.00')
+        self.assertEqual(finance['discounts'], '30000.00')
+        self.assertEqual(finance['discount_share'], '15.00')
+        # Kassa ham 170 000 kutadi.
+        self.assertEqual(self.client.get('/api/v1/shift/').data['expected_cash'], '170000.00')
+
+    def test_reapplying_replaces_rather_than_stacking(self):
+        order = self.open_bill()
+        self.discount(order, 30000)
+        self.discount(order, 10000)
+        order.refresh_from_db()
+        # Ikkinchi chegirma birinchisining ustiga qo'shilmaydi.
+        self.assertEqual(order.discount, Decimal('10000.00'))
+        self.assertEqual(order.total, Decimal('190000.00'))
+
+        # Nol yuborilsa chegirma butunlay olib tashlanadi.
+        self.discount(order, 0, reason='')
+        order.refresh_from_db()
+        self.assertEqual(order.discount, Decimal('0.00'))
+        self.assertEqual(order.total, Decimal('200000.00'))
+        self.assertEqual(order.discount_reason, '')
+
+    def test_cashier_cannot_give_more_than_the_limit_but_a_manager_can(self):
+        order = self.open_bill()  # 200 000
+        # 25% — kassir chegarasidan yuqori.
+        refused = self.discount(order, 50000)
+        self.assertEqual(refused.status_code, 409)
+        order.refresh_from_db()
+        self.assertEqual(order.discount, Decimal('0.00'))
+
+        owner = APIClient()
+        owner.force_authenticate(self.owner)
+        allowed = self.discount(order, 50000, reason='Rahbar qarori', client=owner)
+        self.assertEqual(allowed.status_code, 200)
+        order.refresh_from_db()
+        self.assertEqual(order.total, Decimal('150000.00'))
+
+    def test_a_reason_is_required_and_a_full_discount_is_refused(self):
+        order = self.open_bill()
+        self.assertEqual(self.discount(order, 10000, reason='').status_code, 400)
+        # To'liq chegirma o'rniga hisob bekor qilinadi — yozuv shunda to'g'ri bo'ladi.
+        owner = APIClient()
+        owner.force_authenticate(self.owner)
+        self.assertEqual(self.discount(order, 200000, client=owner).status_code, 400)
+        self.assertEqual(self.discount(order, 300000, client=owner).status_code, 400)
+
+    def test_discount_survives_adding_more_dishes(self):
+        order = self.open_bill(2)  # 100 000
+        self.discount(order, 10000)
+        self.client.post(f'/api/v1/orders/{order.id}/lines/', {
+            'key': str(uuid4()), 'lines': [{'dish': self.dish.id, 'quantity': 1, 'note': ''}],
+        }, format='json')
+        order.refresh_from_db()
+        # 100 000 − 10 000 + 50 000
+        self.assertEqual(order.total, Decimal('140000.00'))
+        self.assertEqual(order.discount, Decimal('10000.00'))
+
+    def test_a_closed_bill_cannot_be_discounted(self):
+        order = self.open_bill()
+        self.client.post(f'/api/v1/orders/{order.id}/pay/', {'payment_method': 'cash'}, format='json')
+        self.assertEqual(self.discount(order, 10000).status_code, 409)

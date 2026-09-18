@@ -30,6 +30,7 @@ AUDIT_LABELS = {
     'order.pay': 'To‘lov qabul qilindi',
     'order.line_remove': 'Hisobdan taom olib tashlandi',
     'order.cancel': 'Hisob bekor qilindi',
+    'order.discount': 'Chegirma qo‘llandi',
     'order.refund': 'To‘lov qaytarildi',
     'shift.close': 'Kun yakunlandi',
     'order.print': 'Chek qayta chop etildi',

@@ -85,7 +85,7 @@ class OrderSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Order
-        fields = ['id', 'table', 'waiter', 'status', 'status_label', 'total', 'payment_method', 'created_at', 'paid_at', 'preparation_status', 'started_at', 'ready_at', 'served_at', 'cashier_name', 'lines', 'print_problems', 'void_reason', 'voided_at', 'voided_by_name']
+        fields = ['id', 'table', 'waiter', 'status', 'status_label', 'total', 'discount', 'discount_reason', 'payment_method', 'created_at', 'paid_at', 'preparation_status', 'started_at', 'ready_at', 'served_at', 'cashier_name', 'lines', 'print_problems', 'void_reason', 'voided_at', 'voided_by_name']
 
     def get_print_problems(self, obj):
         """Talon chiqmagan bo'lsa kassir buni ko'rishi shart, aks holda ovqat pishmay qoladi."""

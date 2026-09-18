@@ -26,6 +26,9 @@ export interface Order {
   status: OrderStatus
   status_label: string
   total: string
+  /** Chegirma summasi; `total` allaqachon undan ayirilgan. */
+  discount: string
+  discount_reason: string
   payment_method: string
   created_at: string
   paid_at: string | null

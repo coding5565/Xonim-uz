@@ -138,6 +138,11 @@ def receipt_bytes(order, *, open_drawer=False):
             ticket.text(f'   izoh: {line.note}')
 
     ticket.rule()
+    # Chegirma bo'lsa mijoz uni chekda ko'rishi kerak: aks holda summa
+    # nega kamayganini tushunmaydi.
+    if order.discount:
+        ticket.row('Oraliq jami', som_text(order.total + order.discount))
+        ticket.row(f'Chegirma ({ascii_only(order.discount_reason)})', f'-{som_text(order.discount)}')
     ticket.raw(BOLD_ON).row('JAMI', f'{som_text(order.total)} so‘m').raw(BOLD_OFF)
     if order.status == 'paid':
         label = SALE_PAYMENT_LABELS.get(order.payment_method, order.payment_method or '-')

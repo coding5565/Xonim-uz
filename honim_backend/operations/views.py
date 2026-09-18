@@ -14,7 +14,7 @@ from .models import ORDER_STATUSES, SALE_PAYMENT_CHOICES, SALE_PAYMENT_LABELS, O
 from .money import money
 from .serializers import AppendLinesInput, OrderInput, OrderSerializer, TableSerializer, ExpenseSerializer, IngredientSerializer, MovementInput, MovementSerializer, RecipeSerializer
 from .printing import PrinterError, print_receipt
-from .services import append_order_lines, audit, cancel_order, create_order, pay_order, create_expense, move_stock, quantity_text, refund_order, remove_order_line, reprice_recipes, Conflict
+from .services import append_order_lines, apply_discount, audit, cancel_order, create_order, pay_order, create_expense, move_stock, quantity_text, refund_order, remove_order_line, reprice_recipes, Conflict
 from .reports import ReportFilters, SalesBoardFilters, build_sales_board, build_sales_report, sales_report_xlsx
 from .ai_assistant import AssistantQuestion, ask_openai, business_snapshot, local_answer
 
@@ -143,6 +143,26 @@ class OrderRefundView(APIView):
         data = VoidInput(data=request.data)
         data.is_valid(raise_exception=True)
         order = safely(refund_order, request.user, pk, data.validated_data['reason'])
+        return Response(OrderSerializer(order).data)
+
+
+class DiscountInput(serializers.Serializer):
+    amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal('0'))
+    reason = serializers.CharField(max_length=120, allow_blank=True, default='')
+
+    def validate_reason(self, value):
+        return value.strip()
+
+
+class OrderDiscountView(APIView):
+    """Ochiq hisobga chegirma qo‘yadi yoki uni olib tashlaydi."""
+
+    permission_classes = [SalesOnly]
+
+    def post(self, request, pk):
+        data = DiscountInput(data=request.data)
+        data.is_valid(raise_exception=True)
+        order = safely(apply_discount, request.user, pk, data.validated_data['amount'], data.validated_data['reason'])
         return Response(OrderSerializer(order).data)
 
 

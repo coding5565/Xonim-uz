@@ -160,7 +160,13 @@ def build_finance(branch, start, end, today):
     lines = OrderLine.objects.filter(order__in=paid)
     spend = Expense.objects.filter(branch=branch, date__gte=start, date__lte=end)
 
-    sales = paid.aggregate(revenue=Coalesce(Sum('total'), Decimal('0')), orders=Count('id'))
+    sales = paid.aggregate(
+        revenue=Coalesce(Sum('total'), Decimal('0')),
+        # Chegirma tushumdan allaqachon ayirilgan (total — to'langan summa),
+        # bu yerda faqat qancha berilgani ko'rsatiladi.
+        discounts=Coalesce(Sum('discount'), Decimal('0')),
+        orders=Count('id'),
+    )
     revenue = sales['revenue']
     cogs = lines.aggregate(total=Coalesce(Sum('cost_total'), Decimal('0')))['total']
     items = lines.aggregate(total=Coalesce(Sum('quantity'), 0))['total']
@@ -237,6 +243,8 @@ def build_finance(branch, start, end, today):
             'orders': sales['orders'],
             'items': items,
             'average_check': money(revenue / sales['orders'] if sales['orders'] else Decimal('0')),
+            'discounts': money(sales['discounts']),
+            'discount_share': percent(sales['discounts'], revenue + sales['discounts']),
         },
         'coverage': cost_coverage(lines, revenue, branch),
         # Pul oqimi foydadan farq qiladi: tannarx pul emas, ombor xaridi esa foyda emas.

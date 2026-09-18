@@ -383,6 +383,49 @@ def restore_order_stock(user, order):
     return len(rows)
 
 
+# Kassir shu foizgacha o'zi chegirma bera oladi; undan yuqorisi boshqaruv
+# qaroriga qoldiriladi. Cheksiz chegirma kassaga eng oson yo'l ochib qo'yardi.
+CASHIER_DISCOUNT_LIMIT = Decimal('20')
+
+
+@transaction.atomic
+def apply_discount(user, order_id, amount, reason):
+    """Ochiq hisobga chegirma qo'yadi. Nol yuborilsa chegirma olib tashlanadi.
+
+    `total` — to'lanadigan summa, shuning uchun chegirma unga darhol ta'sir
+    qiladi va tushum o'z-o'zidan kamayadi: hech qayerda alohida ayirish
+    kerak emas.
+    """
+    order = _open_order(user, order_id)
+    subtotal = order.total + order.discount
+    if amount > subtotal:
+        raise ValidationError('Chegirma hisob summasidan katta bo‘lolmaydi.')
+    if amount == subtotal:
+        raise ValidationError('To‘liq chegirma o‘rniga hisobni bekor qiling.')
+
+    percent = (amount / subtotal * 100) if subtotal else Decimal('0')
+    if user.role == 'cashier' and percent > CASHIER_DISCOUNT_LIMIT:
+        raise Conflict(
+            f'Kassir {CASHIER_DISCOUNT_LIMIT}% dan ortiq chegirma bera olmaydi. '
+            'Bundan kattasini admin kiritadi.'
+        )
+    if amount and not reason:
+        raise ValidationError('Chegirma sababini yozing.')
+
+    order.discount = amount
+    order.discount_reason = reason if amount else ''
+    order.total = subtotal - amount
+    order.save(update_fields=['discount', 'discount_reason', 'total'])
+    if amount:
+        audit(
+            user, 'order.discount',
+            f'#{order.id} · −{amount} so‘m ({percent.quantize(Decimal("0.1"))}%) · {reason}',
+        )
+    else:
+        audit(user, 'order.discount', f'#{order.id} · chegirma olib tashlandi')
+    return order
+
+
 @transaction.atomic
 def pay_order(user, order_id, method):
     order = Order.objects.select_for_update().filter(branch=user.branch, id=order_id).first()

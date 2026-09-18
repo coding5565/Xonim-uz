@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Ban, Plus, Printer, RefreshCw, ShoppingBag, Trash2, Users } from 'lucide-react'
+import { BadgePercent, Ban, Plus, Printer, RefreshCw, ShoppingBag, Trash2, Users } from 'lucide-react'
 import { api, list, money } from '../api'
 import { useSession } from '../session'
 import type { Order, Table, TableZone } from '../types'
@@ -123,6 +123,41 @@ export default function TablesPage() {
     }
   }
 
+  /** Chegirma so'mda kiritiladi; foiz tanlansa summaga aylantiriladi. */
+  async function setDiscount() {
+    if (!bill) return
+    const gross = Number(bill.total) + Number(bill.discount)
+    const typed = prompt(
+      `Chegirma summasi, so‘m (yoki «10%» ko‘rinishida).
+Hisob summasi: ${money(gross)} so‘m.
+Olib tashlash uchun 0 yozing.`,
+      bill.discount === '0.00' ? '' : bill.discount,
+    )
+    if (typed === null) return
+    const trimmed = typed.trim()
+    const amount = trimmed.endsWith('%')
+      ? Math.round(gross * Number(trimmed.slice(0, -1)) / 100)
+      : Number(trimmed)
+    if (!Number.isFinite(amount) || amount < 0) return setError('Chegirma noto‘g‘ri kiritildi.')
+    const reason = amount ? prompt('Chegirma sababi?') : ''
+    if (amount && (!reason || !reason.trim())) return
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      setBill(await api<Order>(`orders/${bill.id}/discount/`, {
+        method: 'POST',
+        body: JSON.stringify({ amount: String(amount), reason: (reason || '').trim() }),
+      }))
+      setNotice(amount ? `Chegirma qo‘llandi: ${money(amount)} so‘m.` : 'Chegirma olib tashlandi.')
+      await load()
+    } catch (exception) {
+      setError((exception as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   /** Butun hisobni to'lovsiz yopadi. Sabab so'raladi — jurnalga yoziladi. */
   async function cancelBill() {
     if (!bill) return
@@ -231,6 +266,14 @@ export default function TablesPage() {
       >
         {bill && (
           <>
+            {Number(bill.discount) > 0 && (
+              <div className="bill-discount">
+                <span>Oraliq jami</span>
+                <b>{money(Number(bill.total) + Number(bill.discount))}</b>
+                <span>Chegirma · {bill.discount_reason}</span>
+                <b className="owed">−{money(bill.discount)}</b>
+              </div>
+            )}
             <div className="cart-total">
               <span>Jami</span>
               <strong>{money(bill.total)} <small>so‘m</small></strong>
@@ -282,6 +325,9 @@ export default function TablesPage() {
             {error && <p className="alert error">{error}</p>}
             <button className="button secondary full" disabled={busy} onClick={reprint}>
               <Printer size={17} />Chekni chop etish
+            </button>
+            <button className="button secondary full" disabled={busy} onClick={setDiscount}>
+              <BadgePercent size={17} />{Number(bill.discount) > 0 ? 'Chegirmani o‘zgartirish' : 'Chegirma berish'}
             </button>
             <button className="button danger full" disabled={busy} onClick={cancelBill}>
               <Ban size={17} />Hisobni bekor qilish
