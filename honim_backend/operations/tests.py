@@ -8,7 +8,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 from users.models import AuditEvent, Branch, User
 from catalog.models import Category, Dish
-from .models import DailyUsage, Order, OrderLine, Expense, Ingredient, Recipe, RecipeLine, SalaryPayment, StockMovement, Table
+from .models import DailyUsage, Order, OrderLine, Expense, Ingredient, Recipe, RecipeLine, SalaryPayment, ShiftClose, StockMovement, Table
 from .services import append_order_lines, create_order, move_stock, Conflict
 
 
@@ -1635,3 +1635,124 @@ class OrderCorrectionTests(TestCase):
         owner = APIClient()
         owner.force_authenticate(self.owner)
         self.assertEqual(owner.post(f'/api/v1/orders/{order.id}/refund/', {'reason': 'Noto‘g‘ri'}, format='json').status_code, 200)
+
+
+class ShiftCloseTests(TestCase):
+    """Kun yakuni: kassada qancha bo'lishi kerak edi va qancha chiqdi."""
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch, first_name='Kassir')
+        self.category = Category.objects.create(branch=self.branch, name='Taom')
+        self.dish = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('50000'))
+        self.client = APIClient()
+        self.client.force_authenticate(self.cashier)
+        self.today = timezone.localdate()
+
+    def sell(self, quantity, method):
+        return create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': method,
+            'lines': [{'dish': self.dish.id, 'quantity': quantity, 'note': ''}],
+        })
+
+    def spend(self, amount, method='cash'):
+        # Xarajatni faqat boshqaruv kiritadi, kassir emas.
+        manager = APIClient()
+        manager.force_authenticate(self.owner)
+        return manager.post('/api/v1/expenses/', {
+            'key': str(uuid4()), 'category': 'Bozor', 'purpose': 'Kunlik xarid',
+            'recipient': '', 'amount': str(amount), 'payment_method': method, 'date': str(self.today),
+        }, format='json')
+
+    def test_expected_cash_counts_only_cash_and_subtracts_cash_spending(self):
+        self.sell(4, 'cash')     # 200 000 naqd
+        self.sell(2, 'card')     # 100 000 karta — kassada qolmaydi
+        self.sell(1, 'click')    # 50 000 Click — kassada qolmaydi
+        self.spend(30000)        # 30 000 naqd chiqdi
+        self.spend(70000, 'card')  # karta orqali — naqdga tegmaydi
+
+        data = self.client.get('/api/v1/shift/').data
+        self.assertFalse(data['closed'])
+        self.assertEqual(data['revenue'], '350000.00')
+        self.assertEqual(data['cash_in'], '200000.00')
+        self.assertEqual(data['cash_out'], '30000.00')
+        # Kassada 200 000 − 30 000 = 170 000 bo'lishi kerak.
+        self.assertEqual(data['expected_cash'], '170000.00')
+        drawer = {row['method']: row['in_drawer'] for row in data['breakdown']}
+        self.assertTrue(drawer['cash'])
+        self.assertFalse(drawer['card'])
+        self.assertFalse(drawer['click'])
+
+    def test_closing_records_the_difference_and_freezes_the_day(self):
+        self.sell(4, 'cash')
+        response = self.client.post('/api/v1/shift/', {'counted_cash': '195000', 'note': 'Sanaldi'}, format='json')
+        self.assertEqual(response.status_code, 201)
+        closed = response.data
+        self.assertTrue(closed['closed'])
+        self.assertEqual(closed['expected_cash'], '200000.00')
+        self.assertEqual(closed['counted_cash'], '195000.00')
+        # 5 000 so'm kam chiqdi.
+        self.assertEqual(closed['difference'], '-5000.00')
+        self.assertEqual(closed['actor'], 'Kassir')
+
+        # Yopilgandan keyin yangi savdo bo'lsa ham yopilgan kun o'zgarmaydi.
+        self.sell(10, 'cash')
+        again = self.client.get('/api/v1/shift/').data
+        self.assertEqual(again['expected_cash'], '200000.00')
+        self.assertEqual(again['revenue'], '200000.00')
+
+    def test_a_big_difference_is_flagged(self):
+        self.sell(4, 'cash')  # 200 000 kutilyapti
+        small = self.client.post('/api/v1/shift/', {'counted_cash': '198000', 'note': ''}, format='json').data
+        self.assertFalse(small['alert'])
+
+        ShiftClose.objects.all().delete()
+        big = self.client.post('/api/v1/shift/', {'counted_cash': '150000', 'note': ''}, format='json').data
+        # 50 000 so'm farq — e'tibor talab qiladi.
+        self.assertEqual(big['difference'], '-50000.00')
+        self.assertTrue(big['alert'])
+
+    def test_a_day_cannot_be_closed_twice(self):
+        self.sell(1, 'cash')
+        self.assertEqual(self.client.post('/api/v1/shift/', {'counted_cash': '50000'}, format='json').status_code, 201)
+        second = self.client.post('/api/v1/shift/', {'counted_cash': '50000'}, format='json')
+        self.assertEqual(second.status_code, 400)
+        self.assertEqual(ShiftClose.objects.count(), 1)
+
+    def test_open_bills_are_shown_so_the_cashier_does_not_close_too_early(self):
+        create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': '',
+            'lines': [{'dish': self.dish.id, 'quantity': 2, 'note': ''}],
+        })
+        data = self.client.get('/api/v1/shift/').data
+        # Ochiq hisob kassaga hali tushmagan — kassir buni ko'rishi kerak.
+        self.assertEqual(data['open_orders'], 1)
+        self.assertEqual(data['expected_cash'], '0.00')
+
+    def test_refunded_sale_leaves_the_expected_cash(self):
+        order = self.sell(4, 'cash')
+        owner = APIClient()
+        owner.force_authenticate(self.owner)
+        owner.post(f'/api/v1/orders/{order.id}/refund/', {'reason': 'Shikoyat'}, format='json')
+        data = self.client.get('/api/v1/shift/').data
+        self.assertEqual(data['expected_cash'], '0.00')
+        self.assertEqual(data['revenue'], '0.00')
+
+    def test_history_is_for_managers_and_sums_the_gaps(self):
+        self.sell(4, 'cash')
+        self.client.post('/api/v1/shift/', {'counted_cash': '195000'}, format='json')
+        # Kassir tarixni ko'rmaydi — bu boshqaruv nazorati.
+        self.assertEqual(self.client.get('/api/v1/shift/history/').status_code, 403)
+        owner = APIClient()
+        owner.force_authenticate(self.owner)
+        history = owner.get('/api/v1/shift/history/').data
+        self.assertEqual(history['summary']['closed_days'], 1)
+        self.assertEqual(history['summary']['total_difference'], '-5000.00')
+        self.assertEqual(history['days'][0]['note'], '')
+
+    def test_future_and_old_days_are_refused(self):
+        tomorrow = self.today + timedelta(days=1)
+        self.assertEqual(self.client.get(f'/api/v1/shift/?date={tomorrow}').status_code, 400)
+        old = self.today - timedelta(days=30)
+        self.assertEqual(self.client.post('/api/v1/shift/', {'date': str(old), 'counted_cash': '0'}, format='json').status_code, 400)

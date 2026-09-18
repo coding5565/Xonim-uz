@@ -14,6 +14,7 @@ from operations.views import (
 )
 from operations.daily_usage import DailyUsageView, UsageComparisonView
 from operations.finance import FinanceView
+from operations.shift import ShiftHistoryView, ShiftView
 from operations.stock_usage import StockUsageView
 
 router = DefaultRouter()
@@ -47,6 +48,8 @@ urlpatterns = [
     path('api/v1/kitchen/orders/', KitchenView.as_view()),
     path('api/v1/kitchen/orders/<int:pk>/status/', KitchenStatusView.as_view()),
     path('api/v1/sales/summary/', SalesSummaryView.as_view()),
+    path('api/v1/shift/', ShiftView.as_view()),
+    path('api/v1/shift/history/', ShiftHistoryView.as_view()),
     path('api/v1/sales/board/', SalesBoardView.as_view()),
     path('api/v1/reports/sales/', SalesReportView.as_view()),
     path('api/v1/reports/sales/export/', SalesReportExportView.as_view()),

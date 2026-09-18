@@ -31,6 +31,7 @@ AUDIT_LABELS = {
     'order.line_remove': 'Hisobdan taom olib tashlandi',
     'order.cancel': 'Hisob bekor qilindi',
     'order.refund': 'To‘lov qaytarildi',
+    'shift.close': 'Kun yakunlandi',
     'order.print': 'Chek qayta chop etildi',
     'print.failed': 'Chop etishda muammo',
     'kitchen.preparing': 'Oshxona: tayyorlanmoqda',
@@ -62,6 +63,7 @@ AUDIT_LABELS = {
 # Jurnalda guruhlash uchun: har harakat qaysi bo'limga tegishli.
 AUDIT_GROUPS = {
     'order': 'Savdo',
+    'shift': 'Kun yakuni',
     'print': 'Chop etish',
     'kitchen': 'Oshxona',
     'stock': 'Ombor',

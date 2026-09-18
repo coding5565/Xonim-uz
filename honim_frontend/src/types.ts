@@ -265,3 +265,36 @@ export interface UsageComparison {
   }
   rows: UsageCompareRow[]
 }
+export interface ShiftMethodRow {
+  method: string
+  label: string
+  amount: string
+  count: number
+  /** Faqat naqd kassada qoladi. */
+  in_drawer: boolean
+}
+export interface ShiftDay {
+  date: string
+  closed: boolean
+  expected_cash: string
+  revenue: string
+  orders: number
+  breakdown: ShiftMethodRow[]
+  backdate_days: number
+  alert_som: string
+  /** Yopilmagan kunda bo‘ladi. */
+  cash_in?: string
+  cash_out?: string
+  open_orders?: number
+  /** Yopilgan kunda bo‘ladi. */
+  actor?: string
+  closed_at?: string
+  counted_cash?: string
+  difference?: string
+  note?: string
+  alert?: boolean
+}
+export interface ShiftHistory {
+  days: ShiftDay[]
+  summary: { closed_days: number; total_difference: string; alerts: number; alert_som: string }
+}

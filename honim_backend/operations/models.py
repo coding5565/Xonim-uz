@@ -163,6 +163,37 @@ class SalaryPayment(models.Model):
         ]
 
 
+class ShiftClose(models.Model):
+    """Kun yakuni: kassada qancha pul bo'lishi kerak edi va qancha chiqdi.
+
+    Kutilgan naqd pul yopilish paytida MUZLATILADI. Keyin o'sha kunga
+    tegishli biror yozuv o'zgarsa ham, yopilgan kun hisobi o'zgarmaydi —
+    aks holda solishtirish ma'nosini yo'qotardi.
+    """
+
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT)
+    actor = models.ForeignKey(User, on_delete=models.PROTECT)
+    date = models.DateField()
+    # Naqd savdodan kunlik naqd xarajat ayirilgan qiymat.
+    expected_cash = models.DecimalField(max_digits=14, decimal_places=2)
+    counted_cash = models.DecimalField(max_digits=14, decimal_places=2)
+    difference = models.DecimalField(max_digits=14, decimal_places=2)
+    revenue = models.DecimalField(max_digits=14, decimal_places=2)
+    orders = models.PositiveIntegerField(default=0)
+    # To'lov turlari kesimi o'sha kun holatida saqlanadi.
+    breakdown = models.JSONField(default=dict, blank=True)
+    note = models.CharField(max_length=250, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-date', '-id']
+        constraints = [
+            # Bir kunni ikki marta yopib bo'lmaydi.
+            models.UniqueConstraint(fields=['branch', 'date'], name='shift_one_close_per_day'),
+            models.CheckConstraint(condition=Q(counted_cash__gte=0), name='shift_nonnegative_count'),
+        ]
+
+
 class Ingredient(models.Model):
     branch = models.ForeignKey(Branch, on_delete=models.PROTECT)
     name = models.CharField(max_length=100)

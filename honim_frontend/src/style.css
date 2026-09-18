@@ -260,3 +260,22 @@ td .muted{font-size:11px}
 .theme-dark .button.danger{background:#251a17;border-color:#5c3a31;color:#e8a690}
 .theme-dark .button.danger:hover:not(:disabled){background:#33231e}
 
+/* --- Kun yakuni --- */
+.panel-heading h2{display:flex;align-items:center;gap:8px}
+.shift-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;padding:2px 22px 16px}
+.shift-grid>div{border:1px solid var(--line);border-radius:11px;padding:15px 16px;background:#fafbf9}
+.shift-grid small{display:block;font-size:10px;color:#98a49c}
+.shift-grid strong{display:block;font:800 21px 'Manrope',sans-serif;color:#2f5540;letter-spacing:-.6px;margin:7px 0 5px;font-variant-numeric:tabular-nums}
+.shift-grid em{font:400 10px 'DM Sans',sans-serif;color:#9aa69e;line-height:1.55;display:block}
+.shift-form{display:grid;grid-template-columns:minmax(150px,1fr) minmax(170px,1.4fr) auto auto;gap:12px;align-items:end;padding:6px 22px 20px}
+.shift-form label{margin:0;font-size:11px}
+.shift-form input{font-size:12px;padding:10px 11px}
+.shift-gap{display:flex;flex-direction:column;justify-content:center;gap:3px;font-size:10px;color:#8b978f;white-space:nowrap;padding-bottom:4px}
+.shift-gap strong{font:700 16px 'Manrope',sans-serif;color:#2f5540;font-variant-numeric:tabular-nums}
+.shift-gap small{font-size:9px}
+.shift-form .button{min-height:40px}
+.theme-dark .shift-grid>div{background:#1a2721;border-color:#2c4138}
+.theme-dark .shift-grid strong,.theme-dark .shift-gap strong{color:#a8dbc0}
+@media(max-width:900px){.shift-form{grid-template-columns:1fr 1fr}.shift-form .button{grid-column:1/-1}}
+@media(max-width:560px){.shift-form{grid-template-columns:1fr}}
+

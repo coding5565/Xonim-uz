@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { api, dateLabel, list, money, today } from '../api'
 import { useSession } from '../session'
+import ShiftClosePanel from '../components/ShiftClosePanel'
 import type { Category, Dish, SalesBoard, SalesSummary } from '../types'
 
 interface Filters {
@@ -176,6 +177,8 @@ export default function SalesPage() {
           </p>
         </>
       )}
+
+      <ShiftClosePanel />
 
       <section className="panel report-filters">
         <header>
