@@ -9,6 +9,7 @@ from catalog.views import CategoryViewSet, DishViewSet, PublicMenuView
 from operations.views import (
     AssistantChatView, DashboardView, ExpenseViewSet, IngredientViewSet, KitchenStatusView,
     KitchenView, OrderLinesView, OrderViewSet, ReceiptPrintView, PayView, RecipeViewSet, SalesReportExportView,
+    OrderCancelView, OrderLineDetailView, OrderRefundView,
     SalesBoardView, SalesReportView, SalesSummaryView, StockView, TableViewSet,
 )
 from operations.daily_usage import DailyUsageView, UsageComparisonView
@@ -39,6 +40,9 @@ urlpatterns = [
     path('api/v1/public/menu/<slug:slug>/', PublicMenuView.as_view()),
     path('api/v1/orders/<int:pk>/pay/', PayView.as_view()),
     path('api/v1/orders/<int:pk>/lines/', OrderLinesView.as_view()),
+    path('api/v1/orders/<int:pk>/lines/<int:line_id>/', OrderLineDetailView.as_view()),
+    path('api/v1/orders/<int:pk>/cancel/', OrderCancelView.as_view()),
+    path('api/v1/orders/<int:pk>/refund/', OrderRefundView.as_view()),
     path('api/v1/orders/<int:pk>/print/', ReceiptPrintView.as_view()),
     path('api/v1/kitchen/orders/', KitchenView.as_view()),
     path('api/v1/kitchen/orders/<int:pk>/status/', KitchenStatusView.as_view()),

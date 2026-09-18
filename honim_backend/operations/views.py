@@ -10,10 +10,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from users.models import AuditEvent
 from users.permissions import BranchMember, KitchenOnly, ManagerOnly, OwnerOnly, SalesOnly
-from .models import SALE_PAYMENT_CHOICES, SALE_PAYMENT_LABELS, Order, OrderLine, Table, Expense, Ingredient, Recipe, StockMovement
+from .models import ORDER_STATUSES, SALE_PAYMENT_CHOICES, SALE_PAYMENT_LABELS, Order, OrderLine, Table, Expense, Ingredient, Recipe, StockMovement
 from .serializers import AppendLinesInput, OrderInput, OrderSerializer, TableSerializer, ExpenseSerializer, IngredientSerializer, MovementInput, MovementSerializer, RecipeSerializer
 from .printing import PrinterError, print_receipt
-from .services import append_order_lines, audit, create_order, pay_order, create_expense, move_stock, quantity_text, reprice_recipes, Conflict
+from .services import append_order_lines, audit, cancel_order, create_order, pay_order, create_expense, move_stock, quantity_text, refund_order, remove_order_line, reprice_recipes, Conflict
 from .reports import ReportFilters, SalesBoardFilters, build_sales_board, build_sales_report, sales_report_xlsx
 from .ai_assistant import AssistantQuestion, ask_openai, business_snapshot, local_answer
 
@@ -32,7 +32,7 @@ class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.Ge
     def get_queryset(self):
         queryset = Order.objects.filter(branch=self.request.user.branch).select_related('cashier').prefetch_related('lines')
         status = self.request.query_params.get('status')
-        return queryset.filter(status=status) if status in ('open', 'paid') else queryset
+        return queryset.filter(status=status) if status in dict(ORDER_STATUSES) else queryset
 
     def create(self, request):
         serializer = OrderInput(data=request.data)
@@ -101,6 +101,50 @@ class OrderLinesView(APIView):
         return Response(OrderSerializer(order).data)
 
 
+class VoidInput(serializers.Serializer):
+    # Sabab majburiy: keyin nima uchun bekor qilinganini bilish shart.
+    reason = serializers.CharField(max_length=200, trim_whitespace=True)
+
+    def validate_reason(self, value):
+        if len(value.strip()) < 3:
+            raise serializers.ValidationError('Sababni yozing.')
+        return value.strip()
+
+
+class OrderLineDetailView(APIView):
+    """Ochiq hisobdan noto‘g‘ri qo‘shilgan taomni olib tashlaydi."""
+
+    permission_classes = [SalesOnly]
+
+    def delete(self, request, pk, line_id):
+        order = safely(remove_order_line, request.user, pk, line_id)
+        return Response(OrderSerializer(order).data)
+
+
+class OrderCancelView(APIView):
+    """To‘lovsiz hisobni bekor qiladi."""
+
+    permission_classes = [SalesOnly]
+
+    def post(self, request, pk):
+        data = VoidInput(data=request.data)
+        data.is_valid(raise_exception=True)
+        order = safely(cancel_order, request.user, pk, data.validated_data['reason'])
+        return Response(OrderSerializer(order).data)
+
+
+class OrderRefundView(APIView):
+    """To‘langan hisobni qaytaradi. Faqat admin va superadmin."""
+
+    permission_classes = [ManagerOnly]
+
+    def post(self, request, pk):
+        data = VoidInput(data=request.data)
+        data.is_valid(raise_exception=True)
+        order = safely(refund_order, request.user, pk, data.validated_data['reason'])
+        return Response(OrderSerializer(order).data)
+
+
 class ReceiptPrintView(APIView):
     """Chekni qayta chop etadi. Avtomatik chop etish to'lov paytida bo'ladi."""
 
@@ -124,10 +168,12 @@ class KitchenView(APIView):
     permission_classes = [KitchenOnly]
 
     def get(self, request):
+        # Bekor qilingan yoki qaytarilgan hisob oshxona taxtasida turmasligi
+        # kerak — aks holda pishirilib ketardi.
         orders = Order.objects.filter(
             branch=request.user.branch,
             preparation_status__in=['queued', 'preparing', 'ready'],
-        ).select_related('cashier').prefetch_related('lines').order_by('created_at', 'id')
+        ).exclude(status__in=['cancelled', 'refunded']).select_related('cashier').prefetch_related('lines').order_by('created_at', 'id')
         return Response(OrderSerializer(orders, many=True).data)
 
 

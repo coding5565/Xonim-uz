@@ -18,7 +18,29 @@ export interface Table {
 export interface Category { id: number; name: string; position: number; station: Station }
 export interface Dish { id: number; category: number; category_name: string; name: string; description: string; price: string; portion: string; image: string | null; available: boolean; archived: boolean; station: Station | ''; print_station: Station }
 export interface Line { id: number; dish: number; name: string; price: string; quantity: number; note: string; added: boolean }
-export interface Order { id: number; table: string; waiter: string; status: 'open' | 'paid'; total: string; payment_method: string; created_at: string; cashier_name: string; preparation_status: 'queued'|'preparing'|'ready'|'served'; started_at: string|null; ready_at: string|null; served_at: string|null; lines: Line[]; print_problems: string[] }
+export type OrderStatus = 'open' | 'paid' | 'cancelled' | 'refunded'
+export interface Order {
+  id: number
+  table: string
+  waiter: string
+  status: OrderStatus
+  status_label: string
+  total: string
+  payment_method: string
+  created_at: string
+  paid_at: string | null
+  cashier_name: string
+  preparation_status: 'queued' | 'preparing' | 'ready' | 'served'
+  started_at: string | null
+  ready_at: string | null
+  served_at: string | null
+  lines: Line[]
+  print_problems: string[]
+  /** Bekor qilingan yoki qaytarilgan bo'lsa to'ldiriladi. */
+  void_reason: string
+  voided_at: string | null
+  voided_by_name: string
+}
 export interface Expense { id: number; category: string; purpose: string; recipient: string; amount: string; payment_method: string; date: string; actor_name: string }
 export interface Ingredient { id: number; name: string; unit: string; quantity: string; minimum: string; unit_cost: string; stock_value: string }
 export interface Movement { id: number; ingredient_name: string; unit: string; kind: string; quantity: string; unit_cost: string; cost_total: string; date: string; note: string }

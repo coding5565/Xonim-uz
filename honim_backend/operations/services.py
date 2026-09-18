@@ -9,8 +9,8 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError, APIException
 from catalog.models import Dish
 from users.models import AuditEvent
-from .models import SALE_PAYMENT_LABELS, Order, OrderLine, Expense, Ingredient, Recipe, RecipeLine, StockMovement, Table
-from .printing import print_prep_tickets, print_receipt_quietly
+from .models import CLOSED_STATUSES, ORDER_STATUS_LABELS, SALE_PAYMENT_LABELS, Order, OrderLine, Expense, Ingredient, Recipe, RecipeLine, StockMovement, Table
+from .printing import print_prep_tickets, print_receipt_quietly, print_void_ticket
 
 
 class Conflict(APIException):
@@ -266,6 +266,121 @@ def append_order_lines(user, order_id, data):
     names = ', '.join(f'{dishes[line["dish"]].name} x{line["quantity"]}' for line in data['lines'])
     audit(user, 'order.append', f'#{order.id} · +{added} so‘m · {names}')
     return order
+
+
+def _open_order(user, order_id):
+    """Ochiq hisobni qulflab oladi; yopilgan bo'lsa sababini aytadi."""
+    order = Order.objects.select_for_update().filter(branch=user.branch, id=order_id).first()
+    if not order:
+        raise ValidationError('Buyurtma topilmadi.')
+    if order.status != 'open':
+        raise Conflict(f'Bu hisob «{ORDER_STATUS_LABELS[order.status]}» holatida — o‘zgartirib bo‘lmaydi.')
+    return order
+
+
+@transaction.atomic
+def remove_order_line(user, order_id, line_id):
+    """Ochiq hisobdan bitta qatorni olib tashlaydi.
+
+    Kassir noto'g'ri taom bosib yuborsa shu yo'l bilan qaytaradi. Oxirgi
+    qatorni olib tashlab bo'lmaydi: summasi nol hisob mavjud bo'lolmaydi,
+    bunday holatda butun hisob bekor qilinadi.
+    """
+    order = _open_order(user, order_id)
+    line = OrderLine.objects.filter(order=order, pk=line_id).select_related('dish').first()
+    if not line:
+        raise ValidationError('Bu qator hisobda yo‘q.')
+    if order.lines.count() == 1:
+        raise Conflict('Bu oxirgi qator. Butun hisobni bekor qiling.')
+
+    removed = line.price * line.quantity
+    name, amount = line.name, line.quantity
+    line.delete()
+    order.total = order.total - removed
+    order.save(update_fields=['total'])
+    audit(user, 'order.line_remove', f'#{order.id} · {name} x{amount} olib tashlandi · −{removed} so‘m')
+    # Oshxona allaqachon talonni olgan bo'lishi mumkin, shuning uchun bekor
+    # qilingani ham qog'ozda chiqadi — aks holda taom baribir pishirilardi.
+    order.print_problems = print_void_ticket(order, f'{name} x{amount} BEKOR')
+    order.refresh_from_db()
+    return order
+
+
+@transaction.atomic
+def cancel_order(user, order_id, reason):
+    """To'lovsiz hisobni bekor qiladi. Yozuv o'chmaydi — tarixda qoladi."""
+    order = _open_order(user, order_id)
+    order.status = 'cancelled'
+    order.void_reason = reason
+    order.voided_at = timezone.now()
+    order.voided_by = user
+    order.save(update_fields=['status', 'void_reason', 'voided_at', 'voided_by'])
+    audit(user, 'order.cancel', f'#{order.id} · {order.total} so‘m · {reason}')
+    order.print_problems = print_void_ticket(order, 'HISOB BEKOR QILINDI')
+    return order
+
+
+@transaction.atomic
+def refund_order(user, order_id, reason):
+    """To'langan hisobni qaytaradi: pul ham, ombor ham orqaga qaytadi.
+
+    Sotuv paytida ayrilgan masalliqlar omborga qaytariladi va buni ko'rsatuvchi
+    teskari harakat yoziladi — qoldiq yana to'g'ri bo'lishi uchun.
+    """
+    order = Order.objects.select_for_update().filter(branch=user.branch, id=order_id).first()
+    if not order:
+        raise ValidationError('Buyurtma topilmadi.')
+    if order.status == 'refunded':
+        return order
+    if order.status != 'paid':
+        raise Conflict(f'Faqat to‘langan hisob qaytariladi. Bu hisob «{ORDER_STATUS_LABELS[order.status]}».')
+
+    restored = restore_order_stock(user, order)
+    order.status = 'refunded'
+    order.void_reason = reason
+    order.voided_at = timezone.now()
+    order.voided_by = user
+    order.save(update_fields=['status', 'void_reason', 'voided_at', 'voided_by'])
+    audit(
+        user, 'order.refund',
+        f'#{order.id} · {order.total} so‘m qaytarildi · {restored} ta masalliq omborga qaytdi · {reason}',
+    )
+    return order
+
+
+@transaction.atomic
+def restore_order_stock(user, order):
+    """Qaytarilgan buyurtma masalliqlarini omborga qaytaradi."""
+    moves = list(StockMovement.objects.filter(
+        branch=user.branch, kind='sale_consumption', note__startswith=f'#{order.id} buyurtma',
+    ).select_related('ingredient'))
+    if not moves:
+        return 0
+    back = {}
+    for move in moves:
+        back[move.ingredient_id] = back.get(move.ingredient_id, Decimal('0')) + move.quantity
+    locked = {
+        item.id: item
+        for item in Ingredient.objects.select_for_update().filter(branch=user.branch, id__in=back).order_by('id')
+    }
+    rows = []
+    for ingredient_id, amount in back.items():
+        ingredient = locked[ingredient_id]
+        Ingredient.objects.filter(pk=ingredient_id).update(quantity=F('quantity') + amount)
+        key = uuid5(NAMESPACE_URL, f'honim-refund-stock:{order.id}:{ingredient_id}')
+        StockMovement.objects.create(
+            branch=user.branch, ingredient=ingredient, actor=user, key=key,
+            request_hash=fingerprint({'refund': order.id, 'ingredient': ingredient_id, 'quantity': str(amount)}),
+            kind='receipt', quantity=amount, date=timezone.localdate(),
+            unit_cost=ingredient.unit_cost, cost_total=Decimal('0'),
+            note=f'#{order.id} buyurtma qaytarildi',
+        )
+        rows.append((
+            'stock.receipt',
+            f'#{order.id} qaytarildi · {ingredient.name} · +{quantity_text(amount)} {ingredient.unit}',
+        ))
+    audit_many(user, rows)
+    return len(rows)
 
 
 @transaction.atomic

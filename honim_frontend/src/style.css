@@ -248,3 +248,15 @@ td .muted{font-size:11px}
 .amount-field input{flex:1;min-width:0}
 .amount-field select{width:auto;min-width:56px;padding:9px 6px;font-size:11px}
 
+/* --- Hisobni tuzatish --- */
+.bill-lines>div{align-items:center}
+.line-remove{border:0;background:transparent;padding:6px;border-radius:6px;color:#b08074;display:inline-flex}
+.line-remove:hover:not(:disabled){background:#fbeeea;color:#9c4a38}
+.line-remove:disabled{opacity:.25}
+.button.danger{background:#fff;border-color:#eccec4;color:#a75640}
+.button.danger:hover:not(:disabled){background:#fdf1ed;border-color:#dfae9e}
+.theme-dark .line-remove{color:#d79c8c}
+.theme-dark .line-remove:hover:not(:disabled){background:#33211c}
+.theme-dark .button.danger{background:#251a17;border-color:#5c3a31;color:#e8a690}
+.theme-dark .button.danger:hover:not(:disabled){background:#33231e}
+

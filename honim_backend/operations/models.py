@@ -16,6 +16,19 @@ SALE_PAYMENT_METHODS = [
 SALE_PAYMENT_LABELS = dict(SALE_PAYMENT_METHODS)
 SALE_PAYMENT_CHOICES = [method for method, _ in SALE_PAYMENT_METHODS]
 
+# Hisob holati. «cancelled» — to'lovsiz bekor qilingan, «refunded» — to'langandan
+# keyin pul qaytarilgan. Ikkalasi ham tushumga KIRMAYDI, lekin tarixda qoladi:
+# yozuvni o'chirish nazoratni yo'q qilardi.
+ORDER_STATUSES = [
+    ('open', 'Ochiq'),
+    ('paid', 'To‘langan'),
+    ('cancelled', 'Bekor qilingan'),
+    ('refunded', 'Qaytarilgan'),
+]
+ORDER_STATUS_LABELS = dict(ORDER_STATUSES)
+# Yopilgan, ya'ni stolni bo'shatadigan holatlar.
+CLOSED_STATUSES = ['paid', 'cancelled', 'refunded']
+
 
 class TableZone(models.TextChoices):
     """Zaldagi joylashuv. Kassir ekrani shu bo'yicha chiziladi."""
@@ -63,7 +76,7 @@ class Order(models.Model):
     request_hash = models.CharField(max_length=64)
     table = models.CharField(max_length=40, blank=True)
     waiter = models.CharField(max_length=100, blank=True)
-    status = models.CharField(max_length=10, default='open', choices=[('open', 'Ochiq'), ('paid', 'To‘langan')])
+    status = models.CharField(max_length=10, default='open', choices=ORDER_STATUSES)
     total = models.DecimalField(max_digits=14, decimal_places=2)
     payment_method = models.CharField(max_length=10, blank=True, choices=SALE_PAYMENT_METHODS)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -72,10 +85,23 @@ class Order(models.Model):
     started_at = models.DateTimeField(null=True, blank=True)
     ready_at = models.DateTimeField(null=True, blank=True)
     served_at = models.DateTimeField(null=True, blank=True)
+    # Bekor qilish yoki qaytarish izi. Sababsiz bekor qilib bo'lmaydi —
+    # keyin nima uchun qilinganini aniqlash uchun.
+    void_reason = models.CharField(max_length=200, blank=True)
+    voided_at = models.DateTimeField(null=True, blank=True)
+    voided_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name='voided_orders')
 
     class Meta:
         ordering = ['-created_at', '-id']
-        constraints = [models.UniqueConstraint(fields=['branch', 'key'], name='order_idempotency'), models.CheckConstraint(condition=Q(total__gt=0), name='order_positive_total')]
+        constraints = [
+            models.UniqueConstraint(fields=['branch', 'key'], name='order_idempotency'),
+            models.CheckConstraint(condition=Q(total__gt=0), name='order_positive_total'),
+            # Bekor qilingan yoki qaytarilgan hisobda sabab ham, vaqt ham bo'lishi shart.
+            models.CheckConstraint(
+                condition=~Q(status__in=['cancelled', 'refunded']) | (Q(voided_at__isnull=False) & ~Q(void_reason='')),
+                name='order_void_needs_reason',
+            ),
+        ]
 
 
 class OrderLine(models.Model):

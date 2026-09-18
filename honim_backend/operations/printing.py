@@ -311,6 +311,45 @@ def print_prep_tickets(order, lines=None, *, addition=False):
     return problems
 
 
+def void_ticket_bytes(order, message):
+    """Bekor qilish taloni: oshxona nimani pishirmasligini bilishi uchun."""
+    ticket = Ticket()
+    ticket.raw(b'\x1b\x61\x01')          # markazga
+    ticket.raw(b'\x1d\x21\x11')          # ikki baravar
+    ticket.text('BEKOR')
+    ticket.raw(b'\x1d\x21\x00')
+    ticket.text(ascii_only(message))
+    ticket.raw(b'\x1b\x61\x00')          # chapga
+    ticket.rule()
+    ticket.row('Buyurtma', f'#{order.id:04d}')
+    ticket.row('Stol', ascii_only(order.table or '-'))
+    ticket.row('Vaqt', timezone.localtime().strftime('%H:%M  %d.%m.%Y'))
+    return ticket.finish()
+
+
+def print_void_ticket(order, message):
+    """Bekor qilinganini har ikkala printerga ham chiqaradi.
+
+    Qaysi stansiyaga ketganini aniq bilmaymiz, shuning uchun sozlangan
+    printerlarning hammasiga yuboriladi — pishirilib qolgandan ko'ra
+    ortiqcha qog'oz yaxshi.
+    """
+    problems = []
+    seen = set()
+    for station in ('kitchen', 'counter'):
+        target = station_target(station)
+        if not target or target in seen:
+            continue
+        seen.add(target)
+        label = STATION_LABELS.get(station, station)
+        try:
+            send_to(target, void_ticket_bytes(order, message))
+        except Exception as error:
+            logger.warning('Bekor taloni chiqmadi: #%s %s', order.id, station, exc_info=True)
+            problems.append(f'{label}: bekor taloni chiqmadi ({error}).')
+    return problems
+
+
 def print_receipt_quietly(order):
     """Avtomatik chop etish uchun. Hech qachon xato ko'tarmaydi.
 

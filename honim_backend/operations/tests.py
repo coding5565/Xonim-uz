@@ -8,7 +8,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 from users.models import AuditEvent, Branch, User
 from catalog.models import Category, Dish
-from .models import DailyUsage, Order, OrderLine, Expense, Ingredient, Recipe, RecipeLine, SalaryPayment, StockMovement
+from .models import DailyUsage, Order, OrderLine, Expense, Ingredient, Recipe, RecipeLine, SalaryPayment, StockMovement, Table
 from .services import append_order_lines, create_order, move_stock, Conflict
 
 
@@ -1495,3 +1495,143 @@ class FullSetupFlowTests(TestCase):
         self.assertEqual(order.lines.first().cost_total, Decimal('16000.00'))
         # Yangi retsept tannarxi esa yangilangan.
         self.assertEqual(RecipeLine.objects.first().batch_cost, Decimal('3200.00'))
+
+
+class OrderCorrectionTests(TestCase):
+    """Kassir xatosini qaytarish: qator o'chirish, bekor qilish, pul qaytarish."""
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.kitchen = User.objects.create_user('oshxona', password='test-only-long-password', role='kitchen', branch=self.branch)
+        self.category = Category.objects.create(branch=self.branch, name='Taom')
+        self.osh = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('50000'))
+        self.choy = Dish.objects.create(branch=self.branch, category=self.category, name='Choy', price=Decimal('10000'))
+        self.rice = Ingredient.objects.create(branch=self.branch, name='Guruch', unit='kg', quantity=Decimal('100'), unit_cost=Decimal('5000'))
+        recipe = Recipe.objects.create(branch=self.branch, dish=self.osh, name='Osh', yield_quantity=Decimal('10'))
+        RecipeLine.objects.create(recipe=recipe, ingredient=self.rice, quantity=Decimal('2'), batch_cost=Decimal('10000'))
+        self.table = Table.objects.create(branch=self.branch, number=1)
+        self.client = APIClient()
+        self.client.force_authenticate(self.cashier)
+
+    def open_bill(self, lines=None):
+        return create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'table_id': self.table.id, 'waiter': '', 'payment_method': '',
+            'lines': lines or [
+                {'dish': self.osh.id, 'quantity': 2, 'note': ''},
+                {'dish': self.choy.id, 'quantity': 3, 'note': ''},
+            ],
+        })
+
+    def test_wrong_dish_can_be_taken_off_an_open_bill(self):
+        order = self.open_bill()
+        self.assertEqual(order.total, Decimal('130000'))  # 2×50 000 + 3×10 000
+        wrong = order.lines.get(name='Choy')
+
+        response = self.client.delete(f'/api/v1/orders/{order.id}/lines/{wrong.id}/')
+        self.assertEqual(response.status_code, 200)
+        order.refresh_from_db()
+        self.assertEqual(order.total, Decimal('100000'))
+        self.assertEqual(order.lines.count(), 1)
+        entry = AuditEvent.objects.get(action='order.line_remove')
+        self.assertIn('Choy x3', entry.description)
+
+    def test_the_last_line_cannot_be_removed_only_the_whole_bill(self):
+        order = self.open_bill([{'dish': self.osh.id, 'quantity': 1, 'note': ''}])
+        only = order.lines.first()
+        response = self.client.delete(f'/api/v1/orders/{order.id}/lines/{only.id}/')
+        # Summasi nol hisob bo'lolmaydi, shuning uchun butun hisob bekor qilinadi.
+        self.assertEqual(response.status_code, 409)
+        order.refresh_from_db()
+        self.assertEqual(order.lines.count(), 1)
+
+    def test_cancelling_an_open_bill_frees_the_table_and_keeps_the_record(self):
+        order = self.open_bill()
+        response = self.client.post(f'/api/v1/orders/{order.id}/cancel/', {'reason': 'Mijoz ketib qoldi'}, format='json')
+        self.assertEqual(response.status_code, 200)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'cancelled')
+        self.assertEqual(order.void_reason, 'Mijoz ketib qoldi')
+        self.assertEqual(order.voided_by, self.cashier)
+        self.assertIsNotNone(order.voided_at)
+        # Yozuv o'chmaydi — tarixda qoladi.
+        self.assertTrue(Order.objects.filter(pk=order.pk).exists())
+        # Stol bo'shaydi.
+        table = self.client.get('/api/v1/tables/').data['results'][0]
+        self.assertIsNone(table['open_order'])
+        # Bekor qilingan hisob oshxona taxtasida turmaydi.
+        kitchen = APIClient()
+        kitchen.force_authenticate(self.kitchen)
+        self.assertEqual(kitchen.get('/api/v1/kitchen/orders/').data, [])
+
+    def test_cancelling_requires_a_reason_and_only_works_once(self):
+        order = self.open_bill()
+        self.assertEqual(self.client.post(f'/api/v1/orders/{order.id}/cancel/', {'reason': ''}, format='json').status_code, 400)
+        self.assertEqual(self.client.post(f'/api/v1/orders/{order.id}/cancel/', {'reason': 'ha'}, format='json').status_code, 400)
+        self.assertEqual(self.client.post(f'/api/v1/orders/{order.id}/cancel/', {'reason': 'Mijoz ketdi'}, format='json').status_code, 200)
+        # Ikkinchi marta bekor qilib bo'lmaydi.
+        again = self.client.post(f'/api/v1/orders/{order.id}/cancel/', {'reason': 'yana'}, format='json')
+        self.assertEqual(again.status_code, 409)
+
+    def test_cancelled_bill_cannot_be_paid_or_added_to(self):
+        order = self.open_bill()
+        self.client.post(f'/api/v1/orders/{order.id}/cancel/', {'reason': 'Mijoz ketdi'}, format='json')
+        self.assertEqual(self.client.post(f'/api/v1/orders/{order.id}/pay/', {'payment_method': 'cash'}, format='json').status_code, 409)
+        added = self.client.post(f'/api/v1/orders/{order.id}/lines/', {
+            'key': str(uuid4()), 'lines': [{'dish': self.choy.id, 'quantity': 1, 'note': ''}],
+        }, format='json')
+        self.assertEqual(added.status_code, 409)
+
+    def test_refund_returns_the_money_and_the_ingredients(self):
+        order = create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': 'cash',
+            'lines': [{'dish': self.osh.id, 'quantity': 10, 'note': ''}],
+        })
+        self.rice.refresh_from_db()
+        self.assertEqual(self.rice.quantity, Decimal('98.000'))  # 100 − 2 kg
+
+        owner = APIClient()
+        owner.force_authenticate(self.owner)
+        response = owner.post(f'/api/v1/orders/{order.id}/refund/', {'reason': 'Mijoz shikoyat qildi'}, format='json')
+        self.assertEqual(response.status_code, 200)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'refunded')
+        # Masalliq omborga qaytadi.
+        self.rice.refresh_from_db()
+        self.assertEqual(self.rice.quantity, Decimal('100.000'))
+        # Qaytish alohida harakat bo'lib yoziladi, eski yozuv o'chmaydi.
+        back = StockMovement.objects.get(note=f'#{order.id} buyurtma qaytarildi')
+        self.assertEqual(back.quantity, Decimal('2.000'))
+        self.assertTrue(StockMovement.objects.filter(kind='sale_consumption', note__startswith=f'#{order.id}').exists())
+
+    def test_refunded_sale_leaves_every_revenue_figure(self):
+        order = create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': 'cash',
+            'lines': [{'dish': self.osh.id, 'quantity': 10, 'note': ''}],
+        })
+        owner = APIClient()
+        owner.force_authenticate(self.owner)
+        before = owner.get('/api/v1/finance/').data['profit']['revenue']
+        self.assertEqual(before, '500000.00')
+
+        owner.post(f'/api/v1/orders/{order.id}/refund/', {'reason': 'Noto‘g‘ri to‘lov'}, format='json')
+        # Qaytarilgan savdo tushumda ham, tannarxda ham qolmaydi.
+        after = owner.get('/api/v1/finance/').data
+        self.assertEqual(after['profit']['revenue'], '0.00')
+        self.assertEqual(after['profit']['cogs'], '0.00')
+        # Eslatma: bu ikki endpoint pulni boshqa formatda qaytaradi ('0' va '0.00').
+        # Formatni money.py ga birlashtirganda tekislanadi.
+        self.assertEqual(Decimal(owner.get('/api/v1/sales/summary/').data['today']['revenue']), Decimal('0'))
+        self.assertEqual(Decimal(owner.get('/api/v1/dashboard/').data['revenue']), Decimal('0'))
+
+    def test_only_managers_refund_but_any_cashier_cancels(self):
+        order = create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': 'cash',
+            'lines': [{'dish': self.osh.id, 'quantity': 1, 'note': ''}],
+        })
+        # Kassir pul qaytara olmaydi — bu boshqaruv qarori.
+        self.assertEqual(self.client.post(f'/api/v1/orders/{order.id}/refund/', {'reason': 'xato'}, format='json').status_code, 403)
+        owner = APIClient()
+        owner.force_authenticate(self.owner)
+        self.assertEqual(owner.post(f'/api/v1/orders/{order.id}/refund/', {'reason': 'Noto‘g‘ri'}, format='json').status_code, 200)

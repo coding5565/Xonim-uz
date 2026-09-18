@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Printer, RefreshCw, ShoppingBag, Users } from 'lucide-react'
+import { Ban, Plus, Printer, RefreshCw, ShoppingBag, Trash2, Users } from 'lucide-react'
 import { api, list, money } from '../api'
 import { useSession } from '../session'
 import type { Order, Table, TableZone } from '../types'
@@ -100,6 +100,43 @@ export default function TablesPage() {
     } catch (exception) {
       setError((exception as Error).message)
       setMethod('')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Noto'g'ri bosilgan taomni ochiq hisobdan olib tashlaydi. */
+  async function removeLine(lineId: number, name: string) {
+    if (!bill) return
+    if (!confirm(`«${name}» hisobdan olib tashlansinmi?`)) return
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      setBill(await api<Order>(`orders/${bill.id}/lines/${lineId}/`, { method: 'DELETE' }))
+      setNotice(`${name} olib tashlandi.`)
+      await load()
+    } catch (exception) {
+      setError((exception as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Butun hisobni to'lovsiz yopadi. Sabab so'raladi — jurnalga yoziladi. */
+  async function cancelBill() {
+    if (!bill) return
+    const reason = prompt('Nima uchun bekor qilinyapti?')
+    if (!reason || reason.trim().length < 3) return
+    setBusy(true)
+    setError('')
+    try {
+      await api(`orders/${bill.id}/cancel/`, { method: 'POST', body: JSON.stringify({ reason: reason.trim() }) })
+      setSelected(undefined)
+      setBill(undefined)
+      await load()
+    } catch (exception) {
+      setError((exception as Error).message)
     } finally {
       setBusy(false)
     }
@@ -206,6 +243,15 @@ export default function TablesPage() {
                     {line.note && <small>izoh: {line.note}</small>}
                   </span>
                   <strong>{money(Number(line.price) * line.quantity)}</strong>
+                  <button
+                    className="line-remove"
+                    disabled={busy || bill.lines.length === 1}
+                    title={bill.lines.length === 1 ? 'Oxirgi qator — butun hisobni bekor qiling' : 'Olib tashlash'}
+                    aria-label={`${line.name} ni olib tashlash`}
+                    onClick={() => removeLine(line.id, line.name)}
+                  >
+                    <Trash2 size={15} />
+                  </button>
                 </div>
               ))}
             </div>
@@ -236,6 +282,9 @@ export default function TablesPage() {
             {error && <p className="alert error">{error}</p>}
             <button className="button secondary full" disabled={busy} onClick={reprint}>
               <Printer size={17} />Chekni chop etish
+            </button>
+            <button className="button danger full" disabled={busy} onClick={cancelBill}>
+              <Ban size={17} />Hisobni bekor qilish
             </button>
           </>
         )}

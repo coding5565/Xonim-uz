@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Printer, ReceiptText, Search } from 'lucide-react'
+import { ArrowRight, Printer, ReceiptText, Search, Undo2 } from 'lucide-react'
 import { api, dateLabel, list, money } from '../api'
 import { useSession } from '../session'
 import type { Order } from '../types'
 import AppModal from '../components/AppModal'
 
+/** Bekor qilingan va qaytarilgan hisob to'langanidan boshqa rangda turadi. */
+const statusTone = (status: Order['status']) =>
+  status === 'paid' ? 'paid' : status === 'open' ? 'open' : 'neutral'
+
 export default function OrdersPage() {
   const { user } = useSession()
+  const manager = user?.role === 'owner' || user?.role === 'admin'
   const [orders, setOrders] = useState<Order[]>([])
   const [filter, setFilter] = useState('all')
   const [query, setQuery] = useState('')
@@ -59,6 +64,27 @@ export default function OrdersPage() {
     }
   }
 
+  /** To'langan hisobni qaytaradi: pul ham, ombor ham orqaga qaytadi. */
+  async function refund() {
+    if (!selected) return
+    const reason = prompt('Nima uchun qaytarilyapti?')
+    if (!reason || reason.trim().length < 3) return
+    setBusy(true)
+    setError('')
+    try {
+      const updated = await api<Order>(`orders/${selected.id}/refund/`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: reason.trim() }),
+      })
+      setSelected(updated)
+      await load()
+    } catch (exception) {
+      setError((exception as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function printReceipt() {
     if (!selected) return
     setPrinting(true)
@@ -91,6 +117,8 @@ export default function OrdersPage() {
             <button className={filter === 'all' ? 'selected' : undefined} onClick={() => setFilter('all')}>Barchasi</button>
             <button className={filter === 'open' ? 'selected' : undefined} onClick={() => setFilter('open')}>To‘lov kutilmoqda</button>
             <button className={filter === 'paid' ? 'selected' : undefined} onClick={() => setFilter('paid')}>To‘langan</button>
+            <button className={filter === 'cancelled' ? 'selected' : undefined} onClick={() => setFilter('cancelled')}>Bekor qilingan</button>
+            <button className={filter === 'refunded' ? 'selected' : undefined} onClick={() => setFilter('refunded')}>Qaytarilgan</button>
           </div>
           <div className="search-field">
             <Search size={17} />
@@ -115,9 +143,10 @@ export default function OrdersPage() {
                   <td>{dateLabel(order.created_at)}</td>
                   <td className="number">{money(order.total)} so‘m</td>
                   <td>
-                    <span className={`status ${order.status}`}>
-                      {order.status === 'paid' ? 'To‘langan' : 'To‘lov kutilmoqda'}
+                    <span className={`status ${statusTone(order.status)}`}>
+                      {order.status === 'open' ? 'To‘lov kutilmoqda' : order.status_label}
                     </span>
+                    {order.void_reason && <small>{order.void_reason}</small>}
                   </td>
                   <td>
                     <button className="text-link" onClick={() => { setSelected(order); setError(''); setPrinted('') }}>
@@ -177,6 +206,17 @@ export default function OrdersPage() {
                   {busy ? 'Saqlanmoqda…' : 'To‘lovni qayd etish'}
                 </button>
               </form>
+            )}
+            {selected.status === 'paid' && manager && (
+              <button className="button danger full" disabled={busy} onClick={refund}>
+                <Undo2 size={17} />To‘lovni qaytarish
+              </button>
+            )}
+            {(selected.status === 'cancelled' || selected.status === 'refunded') && (
+              <p className="alert">
+                <strong>{selected.status_label}</strong> · {selected.void_reason}
+                {selected.voided_by_name && ` · ${selected.voided_by_name}`}
+              </p>
             )}
             {printed && <p className="alert success">{printed}</p>}
             <button className="button primary full" disabled={printing} onClick={printReceipt}>
