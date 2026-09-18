@@ -395,4 +395,14 @@ td .muted{font-size:11px}
 .main-shell:has(.assistant-page) .main-content{display:flex;flex-direction:column;min-height:0;overflow:hidden;padding-bottom:18px}
 .main-shell:has(.assistant-page) .app-footer{display:none}
 @media(max-width:950px){.main-shell:has(.assistant-page){height:auto;min-height:100dvh}}
+/* --- Til almashtirgich --- */
+.lang-switch{display:flex;gap:2px;background:#f2f5f3;border:1px solid #e4eae6;border-radius:8px;padding:2px}
+.lang-switch button{border:0;background:transparent;border-radius:6px;padding:5px 8px;font:700 10px 'DM Sans',sans-serif;color:#8b978f;letter-spacing:.4px}
+.lang-switch button:hover:not(.selected){background:#e7edea;color:#5b6b62}
+.lang-switch button.selected{background:#fff;color:var(--green);box-shadow:0 1px 3px #1234260f}
+.theme-dark .lang-switch{background:#1c2b25;border-color:#2c4138}
+.theme-dark .lang-switch button{color:#9eb0a5}
+.theme-dark .lang-switch button:hover:not(.selected){background:#243a30}
+.theme-dark .lang-switch button.selected{background:#2a5a44;color:#bde4cf}
+@media(max-width:650px){.lang-switch button{padding:4px 6px;font-size:9px}}
 

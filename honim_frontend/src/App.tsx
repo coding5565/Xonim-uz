@@ -7,6 +7,7 @@ import {
 import { api } from './api'
 import { SHOW_KITCHEN_SCREEN } from './config'
 import { session, useSession } from './session'
+import { LANGUAGES, useI18n, type Lang } from './i18n'
 import type { User } from './types'
 
 type Role = User['role']
@@ -47,6 +48,7 @@ function roleName(role: Role | undefined) {
 
 export default function App() {
   const { user } = useSession()
+  const { t, lang, setLang, locale } = useI18n()
   const location = useLocation()
   const navigate = useNavigate()
   const [collapsed, setCollapsed] = useState(false)
@@ -63,7 +65,7 @@ export default function App() {
   // Kassa ichki marshrutlari (/pos/stol/4) ham "Kassa" bandiga tegishli.
   const isCurrent = (path: string) =>
     location.pathname === path || (path !== '/' && location.pathname.startsWith(`${path}/`))
-  const title = nav.find(item => isCurrent(item.path))?.name || 'Sozlamalar'
+  const title = t(nav.find(item => isCurrent(item.path))?.name || 'Sozlamalar')
 
   function closeMobileNav() {
     if (window.matchMedia('(max-width: 950px)').matches) setCollapsed(false)
@@ -81,7 +83,7 @@ export default function App() {
 
   return (
     <div className={`app-shell${collapsed ? ' collapsed' : ''}`}>
-      {collapsed && <button className="sidebar-backdrop" aria-label="Menyuni yopish" onClick={closeMobileNav} />}
+      {collapsed && <button className="sidebar-backdrop" aria-label={t('Menyuni yopish')} onClick={closeMobileNav} />}
       <aside className="sidebar">
         <Link to="/" className="brand">
           <span className="brand-mark">h<span>•</span></span>
@@ -89,10 +91,10 @@ export default function App() {
         </Link>
         <div className="workspace">
           <span className="workspace-avatar">H</span>
-          <div><strong>Honim Restaurant</strong><small>Asosiy restoran</small></div>
+          <div><strong>Honim Restaurant</strong><small>{t('Asosiy restoran')}</small></div>
           <ChevronRight size={14} />
         </div>
-        <p className="nav-caption">ISH MAYDONI</p>
+        <p className="nav-caption">{t('ISH MAYDONI')}</p>
         <nav>
           {nav.map(item => {
             const Icon = item.icon
@@ -104,7 +106,7 @@ export default function App() {
                 onClick={closeMobileNav}
               >
                 <Icon size={20} />
-                <span>{item.name}</span>
+                <span>{t(item.name)}</span>
                 {item.badge && <span className="nav-badge">{item.badge}</span>}
               </Link>
             )
@@ -113,18 +115,18 @@ export default function App() {
         <div className="sidebar-bottom">
           <div className="menu-promo">
             <span className="promo-icon"><UtensilsCrossed size={20} /></span>
-            <strong>Mehmonlar uchun menyu</strong>
-            <p>Taomlaringiz bir skan masofada.</p>
-            <Link to="/menu" target="_blank" onClick={closeMobileNav}>Menyuni ochish <ArrowUpRight size={16} /></Link>
+            <strong>{t('Mehmonlar uchun menyu')}</strong>
+            <p>{t('Taomlaringiz bir skan masofada.')}</p>
+            <Link to="/menu" target="_blank" onClick={closeMobileNav}>{t('Menyuni ochish')} <ArrowUpRight size={16} /></Link>
           </div>
           {user?.role !== 'kitchen' && (
             <Link to="/settings" className="settings-link" onClick={closeMobileNav}>
-              <Settings2 size={19} />Sozlamalar va QR
+              <Settings2 size={19} />{t('Sozlamalar va QR')}
             </Link>
           )}
-          <button className="profile" onClick={logout} title="Tizimdan chiqish">
+          <button className="profile" onClick={logout} title={t('Tizimdan chiqish')}>
             <span className="avatar">{user?.name.charAt(0)}</span>
-            <span><strong>{user?.name}</strong><small>{roleName(user?.role)}</small></span>
+            <span><strong>{user?.name}</strong><small>{t(roleName(user?.role))}</small></span>
             <LogOut size={17} />
           </button>
         </div>
@@ -132,33 +134,45 @@ export default function App() {
       <div className="main-shell">
         <header className="topbar">
           <div className="breadcrumb">
-            <button className="icon-button" aria-label="Menyuni ochish/yopish" onClick={() => setCollapsed(value => !value)}>
+            <button className="icon-button" aria-label={t('Menyuni ochish/yopish')} onClick={() => setCollapsed(value => !value)}>
               {collapsed ? <Menu size={19} /> : <PanelLeftClose size={19} />}
             </button>
-            <span className="breadcrumb-home">Ish maydoni</span>
+            <span className="breadcrumb-home">{t('Ish maydoni')}</span>
             <ChevronRight size={14} />
             <strong>{title}</strong>
           </div>
           <div className="topbar-right">
-            <span className="local-badge"><span />Localhost · Sinov versiyasi</span>
+            <span className="local-badge"><span />{t('Localhost · Sinov versiyasi')}</span>
             <span className="top-date">
-              {new Intl.DateTimeFormat('uz-UZ', { day: 'numeric', month: 'long' }).format(new Date())}
+              {new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long' }).format(new Date())}
             </span>
             <button
               className="theme-toggle"
-              aria-label={darkMode ? 'Yorug‘ rejimga o‘tish' : 'Tungi rejimga o‘tish'}
-              title={darkMode ? 'Yorug‘ rejim' : 'Tungi rejim'}
+              aria-label={t(darkMode ? 'Yorug‘ rejimga o‘tish' : 'Tungi rejimga o‘tish')}
+              title={t(darkMode ? 'Yorug‘ rejim' : 'Tungi rejim')}
               onClick={() => setDarkMode(value => !value)}
             >
               {darkMode ? <Sun size={17} /> : <Moon size={17} />}
             </button>
+            <div className="lang-switch" role="group" aria-label={t('Tilni tanlash')}>
+              {LANGUAGES.map(item => (
+                <button
+                  key={item.code}
+                  className={lang === item.code ? 'selected' : undefined}
+                  title={item.label}
+                  onClick={() => setLang(item.code as Lang)}
+                >
+                  {item.short}
+                </button>
+              ))}
+            </div>
             <span className="top-avatar"><Command size={18} /></span>
           </div>
         </header>
         {error && <p className="alert error">{error}</p>}
         <main className="main-content"><Outlet /></main>
         <footer className="app-footer">
-          HONIM WORKSPACE <span>Mahalliy sinov • ma’lumotlar ushbu kompyuterda saqlanadi</span>
+          HONIM WORKSPACE <span>{t('Mahalliy sinov • ma’lumotlar ushbu kompyuterda saqlanadi')}</span>
         </footer>
       </div>
     </div>

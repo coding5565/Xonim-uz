@@ -1,0 +1,193 @@
+"""Server xabarlarining ruscha va inglizcha tarjimalari.
+
+Kalit — o'zbekcha matnning o'zi. Yangi xabar qo'shilsa, tarjimasiz ham
+ishlayveradi: o'zbekchasi ko'rinadi.
+"""
+
+RU = {
+    # --- Umumiy xatolar ---
+    'Buyurtma topilmadi.': 'Заказ не найден.',
+    'Mahsulot topilmadi.': 'Продукт не найден.',
+    'Stol topilmadi.': 'Стол не найден.',
+    'Xodim topilmadi.': 'Сотрудник не найден.',
+    'Kategoriya topilmadi.': 'Категория не найдена.',
+    'Bu qator hisobda yo‘q.': 'Этой строки нет в счёте.',
+    'Amal holati o‘zgargan. Ma’lumotni yangilang.':
+        'Состояние операции изменилось. Обновите данные.',
+    'Amal boshqa so‘rov bilan to‘qnashdi. Shu amalni qayta tekshiring.':
+        'Операция столкнулась с другим запросом. Проверьте её ещё раз.',
+    'Login yoki parol noto‘g‘ri.': 'Неверный логин или пароль.',
+    'Bu login band.': 'Этот логин занят.',
+
+    # --- Buyurtma ---
+    'Ayrim taomlar mavjud emas. Menyuni yangilang.':
+        'Некоторые блюда недоступны. Обновите меню.',
+    'Buyurtma summasi juda katta.': 'Сумма заказа слишком велика.',
+    'Bu stolda ochiq hisob bor. Taomni o‘sha hisobga qo‘shing.':
+        'На этом столе есть открытый счёт. Добавьте блюдо в него.',
+    'To‘langan hisobga taom qo‘shib bo‘lmaydi. Yangi hisob oching.':
+        'В оплаченный счёт нельзя добавить блюдо. Откройте новый.',
+    'Buyurtma boshqa usul bilan to‘langan.': 'Заказ оплачен другим способом.',
+    'Bir taomni takrorlamang; ko‘pi bilan 100 satr.':
+        'Не повторяйте блюдо; не более 100 строк.',
+    'Bu oxirgi qator. Butun hisobni bekor qiling.':
+        'Это последняя строка. Отмените счёт целиком.',
+    'Sababni yozing.': 'Укажите причину.',
+
+    # --- Chegirma ---
+    'Chegirma hisob summasidan katta bo‘lolmaydi.':
+        'Скидка не может превышать сумму счёта.',
+    'To‘liq chegirma o‘rniga hisobni bekor qiling.':
+        'Вместо полной скидки отмените счёт.',
+    'Chegirma sababini yozing.': 'Укажите причину скидки.',
+
+    # --- Ombor ---
+    'Omborda yetarli mahsulot yo‘q.': 'На складе недостаточно продукта.',
+    'Dona butun son bo‘lishi kerak.': 'Штуки должны быть целым числом.',
+    'Qoldiq chegaradan oshadi.': 'Остаток превышает предел.',
+    'Bu mahsulot mavjud.': 'Такой продукт уже есть.',
+    'Narx faqat kirimda kiritiladi.': 'Цена указывается только при приходе.',
+    'Dastlabki versiyada ombor harakati faqat bugungi sana bilan.':
+        'В этой версии движение по складу возможно только сегодняшней датой.',
+
+    # --- Kunlik sarf ---
+    'Kelajakdagi kun uchun sarf kiritilmaydi.':
+        'Нельзя вносить расход за будущий день.',
+    'Bir mahsulotni faqat bir marta kiriting.':
+        'Вносите каждый продукт только один раз.',
+    'Bir kunda ko‘pi bilan 200 qator.': 'Не более 200 строк за день.',
+    'Ayrim mahsulotlar topilmadi.': 'Некоторые продукты не найдены.',
+
+    # --- Kun yakuni ---
+    'Kelajakdagi kunni yopib bo‘lmaydi.': 'Нельзя закрыть будущий день.',
+    'Bu kun allaqachon yopilgan.': 'Этот день уже закрыт.',
+
+    # --- Davr va sana ---
+    'Boshlanish sanasi tugash sanasidan keyin bo‘lishi mumkin emas.':
+        'Дата начала не может быть позже даты окончания.',
+    'Kelajakdagi sana uchun savdo hisoboti tuzilmaydi.':
+        'Отчёт о продажах за будущую дату не строится.',
+    'Bir hisobot oralig‘i ko‘pi bilan 3 yil.':
+        'Диапазон отчёта — не более 3 лет.',
+    'Bir oraliq ko‘pi bilan bir yil.': 'Диапазон — не более одного года.',
+    'Oy noto‘g‘ri. Format: YYYY-MM.': 'Неверный месяц. Формат: YYYY-MM.',
+    'Oy 01 dan 12 gacha bo‘lishi kerak.': 'Месяц должен быть от 01 до 12.',
+    'Kelajak oyi uchun hisobot tuzilmaydi.': 'Отчёт за будущий месяц не строится.',
+    'Kelajak oyi uchun oylik hisoboti tuzilmaydi.':
+        'Отчёт по зарплате за будущий месяц не строится.',
+    'Kelajakdagi xarajatni hisobga olish mumkin emas.':
+        'Нельзя учесть расход будущей датой.',
+
+    # --- Oylik ---
+    'Bu xodim uchun tanlangan oy oyligi allaqachon to‘langan.':
+        'Зарплата этому сотруднику за выбранный месяц уже выплачена.',
+    'Superadmin hisobini bu yerdan o‘zgartirib bo‘lmaydi.':
+        'Учётную запись суперадмина отсюда изменить нельзя.',
+    'Superadmin oyligi bu bo‘limda yuritilmaydi.':
+        'Зарплата суперадмина в этом разделе не ведётся.',
+    'Kelajakdagi to‘lov sanasi mumkin emas.': 'Дата выплаты не может быть в будущем.',
+    'Kelajak oyi uchun to‘lov kiritib bo‘lmaydi.':
+        'Нельзя внести выплату за будущий месяц.',
+
+    # --- Stol va menyu ---
+    'Bu raqamli stol allaqachon bor.': 'Стол с таким номером уже существует.',
+    'Bu stolda ochiq hisob bor. Avval to‘lovni yakunlang.':
+        'На этом столе открытый счёт. Сначала завершите оплату.',
+    'Taom boshqa filialga tegishli.': 'Блюдо принадлежит другому филиалу.',
+    'Mahsulot boshqa filialga tegishli.': 'Продукт принадлежит другому филиалу.',
+    'Kategoriya tanlangan taomga tegishli emas.':
+        'Категория не относится к выбранному блюду.',
+}
+
+EN = {
+    # --- Umumiy xatolar ---
+    'Buyurtma topilmadi.': 'Order not found.',
+    'Mahsulot topilmadi.': 'Item not found.',
+    'Stol topilmadi.': 'Table not found.',
+    'Xodim topilmadi.': 'Employee not found.',
+    'Kategoriya topilmadi.': 'Category not found.',
+    'Bu qator hisobda yo‘q.': 'That line is not on this bill.',
+    'Amal holati o‘zgargan. Ma’lumotni yangilang.':
+        'This has changed since you loaded it. Refresh and try again.',
+    'Amal boshqa so‘rov bilan to‘qnashdi. Shu amalni qayta tekshiring.':
+        'This clashed with another request. Check it before retrying.',
+    'Login yoki parol noto‘g‘ri.': 'Wrong username or password.',
+    'Bu login band.': 'That username is taken.',
+
+    # --- Buyurtma ---
+    'Ayrim taomlar mavjud emas. Menyuni yangilang.':
+        'Some dishes are unavailable. Refresh the menu.',
+    'Buyurtma summasi juda katta.': 'The order total is too large.',
+    'Bu stolda ochiq hisob bor. Taomni o‘sha hisobga qo‘shing.':
+        'This table already has an open bill. Add the dish to it.',
+    'To‘langan hisobga taom qo‘shib bo‘lmaydi. Yangi hisob oching.':
+        'A paid bill cannot take more dishes. Open a new one.',
+    'Buyurtma boshqa usul bilan to‘langan.': 'This order was paid by another method.',
+    'Bir taomni takrorlamang; ko‘pi bilan 100 satr.':
+        'Do not repeat a dish; 100 lines at most.',
+    'Bu oxirgi qator. Butun hisobni bekor qiling.':
+        'That is the last line. Cancel the whole bill instead.',
+    'Sababni yozing.': 'Give a reason.',
+
+    # --- Chegirma ---
+    'Chegirma hisob summasidan katta bo‘lolmaydi.':
+        'The discount cannot exceed the bill.',
+    'To‘liq chegirma o‘rniga hisobni bekor qiling.':
+        'For a full discount, cancel the bill instead.',
+    'Chegirma sababini yozing.': 'Give a reason for the discount.',
+
+    # --- Ombor ---
+    'Omborda yetarli mahsulot yo‘q.': 'Not enough stock.',
+    'Dona butun son bo‘lishi kerak.': 'Pieces must be a whole number.',
+    'Qoldiq chegaradan oshadi.': 'The balance would exceed the limit.',
+    'Bu mahsulot mavjud.': 'That item already exists.',
+    'Narx faqat kirimda kiritiladi.': 'A price is only entered on a receipt.',
+    'Dastlabki versiyada ombor harakati faqat bugungi sana bilan.':
+        'For now stock movements can only be dated today.',
+
+    # --- Kunlik sarf ---
+    'Kelajakdagi kun uchun sarf kiritilmaydi.':
+        'Usage cannot be recorded for a future day.',
+    'Bir mahsulotni faqat bir marta kiriting.': 'Enter each item only once.',
+    'Bir kunda ko‘pi bilan 200 qator.': '200 lines a day at most.',
+    'Ayrim mahsulotlar topilmadi.': 'Some items were not found.',
+
+    # --- Kun yakuni ---
+    'Kelajakdagi kunni yopib bo‘lmaydi.': 'A future day cannot be closed.',
+    'Bu kun allaqachon yopilgan.': 'This day is already closed.',
+
+    # --- Davr va sana ---
+    'Boshlanish sanasi tugash sanasidan keyin bo‘lishi mumkin emas.':
+        'The start date cannot be after the end date.',
+    'Kelajakdagi sana uchun savdo hisoboti tuzilmaydi.':
+        'No sales report is produced for a future date.',
+    'Bir hisobot oralig‘i ko‘pi bilan 3 yil.': 'A report covers three years at most.',
+    'Bir oraliq ko‘pi bilan bir yil.': 'A range covers one year at most.',
+    'Oy noto‘g‘ri. Format: YYYY-MM.': 'Invalid month. Use YYYY-MM.',
+    'Oy 01 dan 12 gacha bo‘lishi kerak.': 'The month must be between 01 and 12.',
+    'Kelajak oyi uchun hisobot tuzilmaydi.': 'No report is produced for a future month.',
+    'Kelajak oyi uchun oylik hisoboti tuzilmaydi.':
+        'No payroll report is produced for a future month.',
+    'Kelajakdagi xarajatni hisobga olish mumkin emas.':
+        'An expense cannot be dated in the future.',
+
+    # --- Oylik ---
+    'Bu xodim uchun tanlangan oy oyligi allaqachon to‘langan.':
+        'This employee has already been paid for that month.',
+    'Superadmin hisobini bu yerdan o‘zgartirib bo‘lmaydi.':
+        'The owner account cannot be changed here.',
+    'Superadmin oyligi bu bo‘limda yuritilmaydi.':
+        'The owner salary is not handled in this section.',
+    'Kelajakdagi to‘lov sanasi mumkin emas.': 'The payment date cannot be in the future.',
+    'Kelajak oyi uchun to‘lov kiritib bo‘lmaydi.':
+        'A payment cannot be recorded for a future month.',
+
+    # --- Stol va menyu ---
+    'Bu raqamli stol allaqachon bor.': 'A table with that number already exists.',
+    'Bu stolda ochiq hisob bor. Avval to‘lovni yakunlang.':
+        'This table has an open bill. Settle it first.',
+    'Taom boshqa filialga tegishli.': 'That dish belongs to another branch.',
+    'Mahsulot boshqa filialga tegishli.': 'That item belongs to another branch.',
+    'Kategoriya tanlangan taomga tegishli emas.':
+        'The category does not match the selected dish.',
+}

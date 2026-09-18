@@ -7,6 +7,8 @@ from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError, APIException
+
+from core.i18n import _
 from catalog.models import Dish
 from users.models import AuditEvent
 from .models import CLOSED_STATUSES, ORDER_STATUS_LABELS, SALE_PAYMENT_LABELS, Order, OrderLine, Expense, Ingredient, Recipe, RecipeLine, StockMovement, Table
@@ -173,10 +175,10 @@ def create_order(user, data):
         return previous
     dishes = {dish.id: dish for dish in Dish.objects.select_for_update().filter(branch=user.branch, archived=False, available=True, id__in=[line['dish'] for line in data['lines']])}
     if len(dishes) != len(data['lines']):
-        raise ValidationError('Ayrim taomlar mavjud emas. Menyuni yangilang.')
+        raise ValidationError(_('Ayrim taomlar mavjud emas. Menyuni yangilang.'))
     total = sum((dishes[line['dish']].price * line['quantity'] for line in data['lines']), Decimal('0'))
     if total > Decimal('999999999999.99'):
-        raise ValidationError('Buyurtma summasi juda katta.')
+        raise ValidationError(_('Buyurtma summasi juda katta.'))
     paid = bool(data['payment_method'])
 
     table = None
@@ -184,9 +186,9 @@ def create_order(user, data):
     if data.get('table_id'):
         table = Table.objects.filter(branch=user.branch, pk=data['table_id'], active=True).first()
         if not table:
-            raise ValidationError('Stol topilmadi.')
+            raise ValidationError(_('Stol topilmadi.'))
         if Order.objects.filter(table_ref=table, status='open').exists():
-            raise Conflict('Bu stolda ochiq hisob bor. Taomni o‘sha hisobga qo‘shing.')
+            raise Conflict(_('Bu stolda ochiq hisob bor. Taomni o‘sha hisobga qo‘shing.'))
         table_text = str(table.number)
 
     recipes = _recipes_for_dishes(user.branch, dishes)
@@ -219,7 +221,7 @@ def append_order_lines(user, order_id, data):
     """
     order = Order.objects.select_for_update().filter(branch=user.branch, id=order_id).first()
     if not order:
-        raise ValidationError('Buyurtma topilmadi.')
+        raise ValidationError(_('Buyurtma topilmadi.'))
     if order.status != 'open':
         raise Conflict('To‘langan hisobga taom qo‘shib bo‘lmaydi. Yangi hisob oching.')
     if OrderLine.objects.filter(order=order, batch_key=data['key']).exists():
@@ -233,10 +235,10 @@ def append_order_lines(user, order_id, data):
         )
     }
     if len(dishes) != len(data['lines']):
-        raise ValidationError('Ayrim taomlar mavjud emas. Menyuni yangilang.')
+        raise ValidationError(_('Ayrim taomlar mavjud emas. Menyuni yangilang.'))
     added = sum((dishes[line['dish']].price * line['quantity'] for line in data['lines']), Decimal('0'))
     if order.total + added > Decimal('999999999999.99'):
-        raise ValidationError('Buyurtma summasi juda katta.')
+        raise ValidationError(_('Buyurtma summasi juda katta.'))
 
     recipes = _recipes_for_dishes(user.branch, dishes)
     now = timezone.now()
@@ -272,7 +274,7 @@ def _open_order(user, order_id):
     """Ochiq hisobni qulflab oladi; yopilgan bo'lsa sababini aytadi."""
     order = Order.objects.select_for_update().filter(branch=user.branch, id=order_id).first()
     if not order:
-        raise ValidationError('Buyurtma topilmadi.')
+        raise ValidationError(_('Buyurtma topilmadi.'))
     if order.status != 'open':
         raise Conflict(f'Bu hisob «{ORDER_STATUS_LABELS[order.status]}» holatida — o‘zgartirib bo‘lmaydi.')
     return order
@@ -289,9 +291,9 @@ def remove_order_line(user, order_id, line_id):
     order = _open_order(user, order_id)
     line = OrderLine.objects.filter(order=order, pk=line_id).select_related('dish').first()
     if not line:
-        raise ValidationError('Bu qator hisobda yo‘q.')
+        raise ValidationError(_('Bu qator hisobda yo‘q.'))
     if order.lines.count() == 1:
-        raise Conflict('Bu oxirgi qator. Butun hisobni bekor qiling.')
+        raise Conflict(_('Bu oxirgi qator. Butun hisobni bekor qiling.'))
 
     removed = line.price * line.quantity
     name, amount = line.name, line.quantity
@@ -329,7 +331,7 @@ def refund_order(user, order_id, reason):
     """
     order = Order.objects.select_for_update().filter(branch=user.branch, id=order_id).first()
     if not order:
-        raise ValidationError('Buyurtma topilmadi.')
+        raise ValidationError(_('Buyurtma topilmadi.'))
     if order.status == 'refunded':
         return order
     if order.status != 'paid':
@@ -399,9 +401,9 @@ def apply_discount(user, order_id, amount, reason):
     order = _open_order(user, order_id)
     subtotal = order.total + order.discount
     if amount > subtotal:
-        raise ValidationError('Chegirma hisob summasidan katta bo‘lolmaydi.')
+        raise ValidationError(_('Chegirma hisob summasidan katta bo‘lolmaydi.'))
     if amount == subtotal:
-        raise ValidationError('To‘liq chegirma o‘rniga hisobni bekor qiling.')
+        raise ValidationError(_('To‘liq chegirma o‘rniga hisobni bekor qiling.'))
 
     percent = (amount / subtotal * 100) if subtotal else Decimal('0')
     if user.role == 'cashier' and percent > CASHIER_DISCOUNT_LIMIT:
@@ -410,7 +412,7 @@ def apply_discount(user, order_id, amount, reason):
             'Bundan kattasini admin kiritadi.'
         )
     if amount and not reason:
-        raise ValidationError('Chegirma sababini yozing.')
+        raise ValidationError(_('Chegirma sababini yozing.'))
 
     order.discount = amount
     order.discount_reason = reason if amount else ''
@@ -430,7 +432,7 @@ def apply_discount(user, order_id, amount, reason):
 def pay_order(user, order_id, method):
     order = Order.objects.select_for_update().filter(branch=user.branch, id=order_id).first()
     if not order:
-        raise ValidationError('Buyurtma topilmadi.')
+        raise ValidationError(_('Buyurtma topilmadi.'))
     if order.status == 'paid':
         if order.payment_method != method:
             raise Conflict('Buyurtma boshqa usul bilan to‘langan.')
@@ -476,21 +478,21 @@ def move_stock(user, data):
         return previous
     stock = Ingredient.objects.select_for_update().filter(branch=user.branch, pk=data['ingredient']).first()
     if not stock:
-        raise ValidationError('Mahsulot topilmadi.')
+        raise ValidationError(_('Mahsulot topilmadi.'))
     quantity = data['quantity']
     if stock.unit == 'dona' and quantity != quantity.to_integral_value():
-        raise ValidationError('Dona butun son bo‘lishi kerak.')
+        raise ValidationError(_('Dona butun son bo‘lishi kerak.'))
     spent = data.get('cost_total') or Decimal('0')
     if data['kind'] == 'consumption':
         changed = Ingredient.objects.filter(pk=stock.pk, quantity__gte=quantity).update(quantity=F('quantity') - quantity)
         if not changed:
-            raise ValidationError('Omborda yetarli mahsulot yo‘q.')
+            raise ValidationError(_('Omborda yetarli mahsulot yo‘q.'))
         # Sarf joriy o'rtacha tannarxda baholanadi va shu yerda muzlatiladi.
         unit_cost = stock.unit_cost
         spent = (unit_cost * quantity).quantize(Decimal('0.01'))
     else:
         if stock.quantity + quantity > Decimal('99999999999.999'):
-            raise ValidationError('Qoldiq chegaradan oshadi.')
+            raise ValidationError(_('Qoldiq chegaradan oshadi.'))
         unit_cost = (spent / quantity).quantize(Decimal('0.0001')) if spent else stock.unit_cost
         average = weighted_unit_cost(stock, quantity, spent)
         Ingredient.objects.filter(pk=stock.pk).update(quantity=F('quantity') + quantity, unit_cost=average)

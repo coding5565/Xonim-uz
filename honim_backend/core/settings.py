@@ -23,7 +23,7 @@ if not SECRET_KEY:
     SECRET_KEY = secret_path.read_text(encoding='utf-8').strip()
 ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 INSTALLED_APPS = ['django.contrib.auth', 'django.contrib.contenttypes', 'django.contrib.sessions', 'django.contrib.staticfiles', 'rest_framework', 'users', 'catalog', 'operations']
-MIDDLEWARE = ['django.middleware.security.SecurityMiddleware', 'django.contrib.sessions.middleware.SessionMiddleware', 'django.middleware.common.CommonMiddleware', 'django.middleware.csrf.CsrfViewMiddleware', 'django.contrib.auth.middleware.AuthenticationMiddleware', 'django.middleware.clickjacking.XFrameOptionsMiddleware']
+MIDDLEWARE = ['django.middleware.security.SecurityMiddleware', 'django.contrib.sessions.middleware.SessionMiddleware', 'django.middleware.locale.LocaleMiddleware', 'django.middleware.common.CommonMiddleware', 'django.middleware.csrf.CsrfViewMiddleware', 'django.contrib.auth.middleware.AuthenticationMiddleware', 'django.middleware.clickjacking.XFrameOptionsMiddleware']
 ROOT_URLCONF = 'core.urls'
 AUTH_USER_MODEL = 'users.User'
 DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': BASE_DIR / 'db.sqlite3', 'OPTIONS': {'timeout': 20}}}
@@ -61,6 +61,10 @@ if 'test' in sys.argv:
 TIME_ZONE = 'Asia/Tashkent'
 USE_TZ = True
 LANGUAGE_CODE = 'uz'
+USE_I18N = True
+# Panel uchta tilda. Tarjimalar core/translations.py da — gettext emas,
+# oddiy lug'at, shuning uchun .mo kompilyatsiya qilish shart emas.
+LANGUAGES = [('uz', 'O‘zbekcha'), ('ru', 'Русский'), ('en', 'English')]
 STATIC_URL = '/static/'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'

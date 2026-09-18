@@ -1,3 +1,5 @@
+import { currentLang } from './i18n'
+
 let csrf = ''
 
 export class ApiError extends Error {
@@ -37,6 +39,8 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
       credentials: 'same-origin',
       headers: {
         ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+        // Server xabarlari ham tanlangan tilda kelishi uchun.
+        'Accept-Language': currentLang(),
         ...(method !== 'GET' ? { 'X-CSRFToken': csrf } : {}),
         ...options.headers,
       },

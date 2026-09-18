@@ -2,6 +2,7 @@ import { StrictMode, Suspense, lazy, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import App from './App'
+import { I18nProvider } from './i18n'
 import { ensureSession, homeFor, useSession, type Role } from './session'
 import '@fontsource/dm-sans/400.css'
 import '@fontsource/dm-sans/500.css'
@@ -63,7 +64,8 @@ const staffed: Role[] = ['owner', 'admin', 'cashier']
 
 createRoot(document.getElementById('app')!).render(
   <StrictMode>
-    <BrowserRouter>
+    <I18nProvider>
+      <BrowserRouter>
       <Suspense fallback={null}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
@@ -95,6 +97,7 @@ createRoot(document.getElementById('app')!).render(
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
-    </BrowserRouter>
+      </BrowserRouter>
+    </I18nProvider>
   </StrictMode>,
 )
