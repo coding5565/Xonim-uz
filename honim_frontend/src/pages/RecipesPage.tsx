@@ -347,7 +347,8 @@ export default function RecipesPage() {
               <label>
                 {t('Birlik')}
                 <select value={form.yield_unit} onChange={event => updateForm({ yield_unit: event.target.value })}>
-                  <option>dona</option><option>porsiya</option>
+                  <option value="dona">{t('dona')}</option>
+                  <option value="porsiya">{t('porsiya')}</option>
                 </select>
               </label>
               <label>

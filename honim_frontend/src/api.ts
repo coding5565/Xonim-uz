@@ -1,4 +1,4 @@
-import { currentLang } from './i18n'
+import { currentLang, translate } from './i18n'
 
 let csrf = ''
 
@@ -19,12 +19,12 @@ function message(data: unknown): string {
       })
       .join(' ')
   }
-  return 'So‘rov bajarilmadi.'
+  return translate('So‘rov bajarilmadi.')
 }
 
 export async function refreshCsrf() {
   const response = await fetch('/api/v1/auth/csrf/', { credentials: 'same-origin' })
-  if (!response.ok) throw new Error('Serverga ulanib bo‘lmadi.')
+  if (!response.ok) throw new Error(translate('Serverga ulanib bo‘lmadi.'))
   csrf = (await response.json()).csrfToken
 }
 
@@ -46,12 +46,12 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
       },
     })
   } catch {
-    throw new Error('Mahalliy server bilan aloqa yo‘q. Kiritilgan ma’lumotlarni saqlab turing.')
+    throw new Error(translate('Mahalliy server bilan aloqa yo‘q. Kiritilgan ma’lumotlarni saqlab turing.'))
   }
 
   const body: unknown = await response.json().catch(() => null)
   if (!response.ok) {
-    throw new ApiError(body ? message(body) : 'Server javob bermadi. Qayta urinib ko‘ring.', response.status)
+    throw new ApiError(body ? message(body) : translate('Server javob bermadi. Qayta urinib ko‘ring.'), response.status)
   }
   return body as T
 }
@@ -75,11 +75,11 @@ export async function download(path: string, filename: string) {
   try {
     response = await fetch(`/api/v1/${path}`, { credentials: 'same-origin' })
   } catch {
-    throw new Error('Hisobot faylini yuklab bo‘lmadi. Server bilan aloqani tekshiring.')
+    throw new Error(translate('Hisobot faylini yuklab bo‘lmadi. Server bilan aloqani tekshiring.'))
   }
   if (!response.ok) {
     const body: unknown = await response.json().catch(() => null)
-    throw new ApiError(body ? message(body) : 'Excel fayli tayyorlanmadi.', response.status)
+    throw new ApiError(body ? message(body) : translate('Excel fayli tayyorlanmadi.'), response.status)
   }
   const url = URL.createObjectURL(await response.blob())
   const anchor = document.createElement('a')

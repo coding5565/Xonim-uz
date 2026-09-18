@@ -102,3 +102,11 @@ export function useI18n() {
 export function currentLang(): Lang {
   return stored()
 }
+
+/**
+ * React'dan tashqarida tarjima qilish uchun (masalan api.ts dagi tarmoq
+ * xatolari). Hook ishlatib bo'lmaydigan joylarda shu chaqiriladi.
+ */
+export function translate(text: string, vars?: Record<string, string | number>) {
+  return fill(DICTIONARIES[stored()][text] ?? text, vars)
+}

@@ -210,7 +210,8 @@ export default function ExpensesPage() {
               <label>
                 {t('Kategoriya')}
                 <select value={form.category} onChange={event => update({ category: event.target.value })}>
-                  {categories.map(item => <option key={item}>{item}</option>)}
+                  {/* Qiymat o'zbekcha saqlanadi, ko'rinishi tarjima qilinadi. */}
+                  {categories.map(item => <option key={item} value={item}>{t(item)}</option>)}
                 </select>
               </label>
               <label>

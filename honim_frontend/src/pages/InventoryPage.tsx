@@ -269,7 +269,9 @@ export default function InventoryPage() {
                   <label>
                     {t('Birlik')}
                     <select value={item.unit} onChange={event => updateItem({ unit: event.target.value })}>
-                      <option>kg</option><option>l</option><option>dona</option>
+                      <option value="kg">{t('kg')}</option>
+                      <option value="l">{t('l')}</option>
+                      <option value="dona">{t('dona')}</option>
                     </select>
                   </label>
                   <label>
