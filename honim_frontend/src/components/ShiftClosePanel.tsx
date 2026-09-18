@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { AlertTriangle, CheckCircle2, Lock, Scale, Wallet } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, CreditCard, Lock, Scale, Wallet } from 'lucide-react'
 import { api, dateLabel, money, today } from '../api'
 import { useSession } from '../session'
 import type { ShiftDay, ShiftHistory } from '../types'
@@ -45,6 +45,11 @@ export default function ShiftClosePanel() {
   }
 
   if (!day) return null
+
+  // Kassada qoladigan pul bilan hisobga tushadigani ajratib ko'rsatiladi:
+  // kassir faqat birinchisini sanaydi.
+  const inDrawer = day.breakdown.filter(row => row.in_drawer)
+  const toAccount = day.breakdown.filter(row => !row.in_drawer)
 
   // Kassir yozayotgan raqamdan farqni darhol ko'rsatamiz — xato shu yerda bilinadi.
   const gap = counted === '' ? null : Number(counted) - Number(day.expected_cash)
@@ -104,10 +109,26 @@ export default function ShiftClosePanel() {
         </div>
 
         {!!day.breakdown.length && (
-          <p className="data-note">
-            {day.breakdown.map(row =>
-              `${row.label} ${money(row.amount)} so‘m${row.in_drawer ? ' (kassada)' : ''}`).join(' · ')}
-          </p>
+          <div className="drawer-split">
+            <div className="drawer-side counted">
+              <header><Wallet size={15} />Kassada — sanaladi</header>
+              {inDrawer.map(row => (
+                <p key={row.method}><span>{row.label}</span><b>{money(row.amount)}</b></p>
+              ))}
+              {!inDrawer.length && <p className="muted">Naqd savdo bo‘lmagan</p>}
+              {Number(day.cash_out || 0) > 0 && (
+                <p className="outflow"><span>Naqd xarajat</span><b>−{money(day.cash_out || 0)}</b></p>
+              )}
+            </div>
+            <div className="drawer-side">
+              <header><CreditCard size={15} />Hisobga tushgan — sanalmaydi</header>
+              {toAccount.map(row => (
+                <p key={row.method}><span>{row.label}</span><b>{money(row.amount)}</b></p>
+              ))}
+              {!toAccount.length && <p className="muted">Karta orqali savdo bo‘lmagan</p>}
+              <small>Bu pul kassada yotmaydi — provayder hisobiga tushadi.</small>
+            </div>
+          </div>
         )}
 
         {day.closed ? (
@@ -122,6 +143,7 @@ export default function ShiftClosePanel() {
           <form onSubmit={close} className="shift-form">
             <label>
               Kassadagi naqd pul, so‘m
+              <small className="field-hint">Faqat qutidagi naqd — karta puli hisobga kirmaydi</small>
               <input
                 value={counted}
                 onChange={event => setCounted(event.target.value)}
