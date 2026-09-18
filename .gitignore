@@ -13,3 +13,5 @@ media/
 *.log
 .run/
 test-results/
+scan-raw.txt
+scan-str.txt
