@@ -12,6 +12,7 @@ from operations.views import (
     OrderCancelView, OrderDiscountView, OrderLineDetailView, OrderRefundView,
     SalesBoardView, SalesReportView, SalesSummaryView, StockView, TableViewSet,
 )
+from operations.assistant_chats import AssistantChatDetailView, AssistantChatListView
 from operations.daily_usage import DailyUsageView, UsageComparisonView
 from operations.finance import FinanceView
 from operations.shift import ShiftHistoryView, ShiftView
@@ -61,6 +62,8 @@ urlpatterns = [
     path('api/v1/dashboard/', DashboardView.as_view()),
     path('api/v1/finance/', FinanceView.as_view()),
     path('api/v1/assistant/chat/', AssistantChatView.as_view()),
+    path('api/v1/assistant/chats/', AssistantChatListView.as_view()),
+    path('api/v1/assistant/chats/<int:pk>/', AssistantChatDetailView.as_view()),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

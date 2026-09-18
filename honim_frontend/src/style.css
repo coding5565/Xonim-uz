@@ -654,3 +654,118 @@ html.theme-dark{
   .panel-heading{padding:var(--s5) var(--s5) var(--s4)}
   h1{font-size:23px}
 }
+
+/* ── Ko'rsatkich kartalari: rang ma'noga bog'langan ─────────────────────
+   Ilgari to'rtta karta bir xil oq to'rtburchak edi — ko'z qayerga
+   qarashni bilmasdi. Endi rang o'zi aytadi: yashil — pul kirdi,
+   iliq — pul chiqdi, to'q yashil — yakuniy natija. */
+.metric-card{position:relative;overflow:hidden;transition:transform .15s,box-shadow .15s}
+.metric-card:hover{transform:translateY(-2px);box-shadow:var(--sh2)}
+.metric-card:before{content:'';position:absolute;inset:0 auto 0 0;width:3px;border-radius:3px}
+
+.metric-card.tone-in{background:var(--green-50);border-color:var(--green-200)}
+.metric-card.tone-in:before{background:var(--green-600)}
+.metric-card.tone-in .metric-value{color:var(--green-800)}
+.metric-card.tone-in .metric-icon{background:var(--green-100);color:var(--green-600)}
+
+.metric-card.tone-out{background:var(--warm-50);border-color:var(--warm-200)}
+.metric-card.tone-out:before{background:var(--warm-500)}
+.metric-card.tone-out .metric-value{color:var(--warm-800)}
+.metric-card.tone-out .metric-icon{background:var(--warm-100);color:var(--warm-700)}
+
+/* Yakuniy natija — eng ko'zga tashlanadigan karta. */
+.metric-card.tone-hero{background:linear-gradient(145deg,var(--green),var(--green-900));border-color:transparent;box-shadow:var(--sh2)}
+.metric-card.tone-hero .metric-top,.metric-card.tone-hero p{color:#a9cdbb}
+.metric-card.tone-hero .metric-value{color:#fff}
+.metric-card.tone-hero .metric-value small{color:#9ec4b1}
+.metric-card.tone-hero .metric-icon{background:#ffffff1f;color:#d3ebdd}
+.metric-card.tone-hero:before{display:none}
+
+/* Manfiy natijada o'sha karta iliq rangga o'tadi — raqamni o'qimasdan
+   ham holat ko'rinadi. */
+.metric-card.tone-hero-down{background:linear-gradient(145deg,var(--warm),var(--warm-800));border-color:transparent;box-shadow:var(--sh2)}
+.metric-card.tone-hero-down .metric-top,.metric-card.tone-hero-down p{color:#efd4ba}
+.metric-card.tone-hero-down .metric-value{color:#fff}
+.metric-card.tone-hero-down .metric-value small{color:#edcfb2}
+.metric-card.tone-hero-down .metric-icon{background:#ffffff22;color:#f6e2cd}
+.metric-card.tone-hero-down:before{display:none}
+
+.metric-card.tone-flat{background:var(--surface);border-color:var(--line)}
+.metric-card.tone-flat:before{background:var(--line)}
+.metric-card.tone-flat .metric-value{color:var(--ink)}
+.metric-card.tone-flat .metric-icon{background:var(--line-2);color:var(--muted)}
+
+/* Hisobot kartalari ham shu mantiqqa ergashadi. */
+.report-metrics article{position:relative;overflow:hidden;transition:transform .15s,box-shadow .15s}
+.report-metrics article:hover{transform:translateY(-2px);box-shadow:var(--sh2)}
+.report-metrics article:has(.metric-icon.green){background:var(--green-50);border-color:var(--green-200)}
+.report-metrics article:has(.metric-icon.green) strong{color:var(--green-800)}
+.report-metrics article:has(.metric-icon.orange){background:var(--warm-50);border-color:var(--warm-200)}
+.report-metrics article:has(.metric-icon.orange) strong{color:var(--warm-800)}
+
+/* Jadvalda pul ustunlari ham ma'no oladi. */
+td.number strong{color:var(--ink)}
+.chart-legend .green-dot{background:var(--green-600)}
+.chart-legend .orange-dot{background:var(--warm-500)}
+.revenue-bar{background:linear-gradient(180deg,var(--green-600),var(--green))}
+.expense-bar{background:linear-gradient(180deg,var(--warm-500),var(--warm))}
+.progress-track>span{background:var(--green-200)}
+.expense-category i{background:var(--warm-500)}
+
+.theme-dark .metric-card.tone-in{background:#16302400;background-color:#16291f;border-color:#2c5240}
+.theme-dark .metric-card.tone-in .metric-value{color:#8fd8b1}
+.theme-dark .metric-card.tone-out{background-color:#2a2015;border-color:#5a4028}
+.theme-dark .metric-card.tone-out .metric-value{color:#e7b77e}
+.theme-dark .metric-card.tone-flat{background:var(--surface);border-color:var(--line)}
+.theme-dark .report-metrics article:has(.metric-icon.green){background-color:#16291f;border-color:#2c5240}
+.theme-dark .report-metrics article:has(.metric-icon.green) strong{color:#8fd8b1}
+.theme-dark .report-metrics article:has(.metric-icon.orange){background-color:#2a2015;border-color:#5a4028}
+.theme-dark .report-metrics article:has(.metric-icon.orange) strong{color:#e7b77e}
+
+/* ── Suhbatlar ro'yxati ────────────────────────────────────────────────── */
+.chat-page{flex-direction:row;gap:0}
+.chat-main{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0}
+.chat-list{
+  flex:0 0 232px;width:232px;display:none;flex-direction:column;min-height:0;
+  border-right:1px solid var(--line);padding-right:var(--s4);margin-right:var(--s5);
+}
+.chat-page.with-list .chat-list{display:flex}
+.chat-list-top{flex:0 0 auto;padding-bottom:var(--s3)}
+.chat-new{
+  width:100%;display:flex;align-items:center;justify-content:center;gap:8px;
+  border:1px solid var(--green-200);background:var(--green-50);color:var(--green-800);
+  border-radius:var(--r2);padding:11px;font:600 var(--f-md) 'DM Sans',sans-serif;
+}
+.chat-new:hover{background:var(--green-100)}
+.chat-list-rows{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px;scrollbar-width:thin}
+.chat-row{display:flex;align-items:center;border-radius:var(--r1)}
+.chat-row:hover{background:var(--green-50)}
+.chat-row.selected{background:var(--green-100)}
+.chat-row-open{flex:1;min-width:0;text-align:left;border:0;background:transparent;padding:10px 11px}
+.chat-row-open strong{display:block;font:550 var(--f-sm) 'DM Sans',sans-serif;color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-row.selected .chat-row-open strong{color:var(--green-800);font-weight:650}
+.chat-row-open small{display:block;font-size:10px;color:var(--soft);margin-top:3px}
+.chat-row-drop{border:0;background:transparent;color:var(--soft);padding:8px;border-radius:var(--r1);opacity:0}
+.chat-row:hover .chat-row-drop{opacity:1}
+.chat-row-drop:hover{color:var(--warm-700);background:var(--warm-100)}
+.chat-list-empty{font-size:var(--f-xs);color:var(--soft);text-align:center;padding:var(--s6) var(--s3);line-height:1.7}
+.chat-toggle{border:0;background:transparent;color:var(--soft);padding:9px;border-radius:var(--r1);margin-right:var(--s1)}
+.chat-toggle:hover{background:var(--green-50);color:var(--green)}
+.chat-top{gap:var(--s3)}
+.chat-top>div:nth-child(2){flex:1;min-width:0}
+
+.theme-dark .chat-list{border-color:var(--line)}
+.theme-dark .chat-new{background:var(--green-100);border-color:var(--green-200);color:#bde4cf}
+.theme-dark .chat-row:hover{background:#1d2c26}
+.theme-dark .chat-row.selected{background:var(--green-100)}
+.theme-dark .chat-row.selected .chat-row-open strong{color:#bde4cf}
+
+@media(max-width:900px){
+  .chat-page.with-list .chat-list{
+    position:absolute;inset:0 auto 0 0;z-index:5;width:250px;flex:0 0 250px;
+    background:var(--bg);padding:var(--s3) var(--s4) var(--s3) 0;margin:0;
+    box-shadow:var(--sh3);
+  }
+}
+

@@ -5,6 +5,12 @@ ishlayveradi: o'zbekchasi ko'rinadi.
 """
 
 RU = {
+    'Suhbat topilmadi.':
+        'Диалог не найден.',
+    'Suhbat o‘chirildi.':
+        'Диалог удалён.',
+    'AI kaliti hali ulanmagan. Bugun, kecha yoki hafta bo‘yicha tezkor savollardan birini bosing, yoki OpenAI kalitini ulang.':
+        'Ключ AI ещё не подключён. Нажмите один из быстрых вопросов или подключите ключ OpenAI.',
     # --- Umumiy xatolar ---
     'Buyurtma topilmadi.': 'Заказ не найден.',
     'Mahsulot topilmadi.': 'Продукт не найден.',
@@ -119,6 +125,12 @@ RU = {
 
 
 EN = {
+    'Suhbat topilmadi.':
+        'Chat not found.',
+    'Suhbat o‘chirildi.':
+        'Chat deleted.',
+    'AI kaliti hali ulanmagan. Bugun, kecha yoki hafta bo‘yicha tezkor savollardan birini bosing, yoki OpenAI kalitini ulang.':
+        'The AI key is not connected yet. Use one of the quick questions, or connect an OpenAI key.',
     # --- Umumiy xatolar ---
     'Buyurtma topilmadi.': 'Order not found.',
     'Mahsulot topilmadi.': 'Item not found.',

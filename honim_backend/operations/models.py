@@ -245,6 +245,34 @@ class StockMovement(models.Model):
         indexes = [models.Index(fields=['branch', 'ingredient', 'date'], name='stock_branch_item_date_idx')]
 
 
+class AssistantChat(models.Model):
+    """Saqlangan AI suhbati. Har foydalanuvchi faqat o'zinikini ko'radi."""
+
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT)
+    actor = models.ForeignKey(User, on_delete=models.PROTECT, related_name='assistant_chats')
+    # Sarlavha birinchi savoldan olinadi — foydalanuvchi qo'lda yozmaydi.
+    title = models.CharField(max_length=120)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-updated_at', '-id']
+        indexes = [models.Index(fields=['branch', 'actor', '-updated_at'], name='chat_owner_recent_idx')]
+
+
+class AssistantMessage(models.Model):
+    """Suhbatdagi bitta gap. Grafiklar javob bilan birga saqlanadi."""
+
+    chat = models.ForeignKey(AssistantChat, on_delete=models.CASCADE, related_name='messages')
+    role = models.CharField(max_length=10, choices=[('user', 'Savol'), ('assistant', 'Javob')])
+    text = models.TextField()
+    charts = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['id']
+
+
 class DailyUsage(models.Model):
     """Admin kechqurun kiritadigan HAQIQIY sarf.
 

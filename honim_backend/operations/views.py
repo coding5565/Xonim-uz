@@ -17,6 +17,7 @@ from .printing import PrinterError, print_receipt
 from .services import append_order_lines, apply_discount, audit, cancel_order, create_order, pay_order, create_expense, move_stock, quantity_text, refund_order, remove_order_line, reprice_recipes, Conflict
 from .reports import ReportFilters, SalesBoardFilters, build_sales_board, build_sales_report, sales_report_xlsx
 from .ai_assistant import AssistantQuestion, ask_openai, business_snapshot, local_answer
+from .assistant_chats import remember
 from core.i18n import _
 
 
@@ -456,13 +457,21 @@ class AssistantChatView(APIView):
         serializer.is_valid(raise_exception=True)
         snapshot = business_snapshot(request.user.branch)
         question = serializer.validated_data['question']
+        chat_id = serializer.validated_data.get('chat')
+
         result = local_answer(question, snapshot)
         if result:
-            return Response({**result, 'source': 'crm'})
-        answer = ask_openai(question, snapshot)
-        if answer is None:
-            return Response({
-                'answer': 'AI kaliti hali ulanmagan. Bugun, kecha yoki hafta bo‘yicha tezkor savollardan birini bosing, yoki OpenAI kalitini ulang.',
-                'charts': [], 'source': 'setup',
-            })
-        return Response({'answer': answer, 'charts': [], 'source': 'ai'})
+            payload = {**result, 'source': 'crm'}
+        else:
+            answer = ask_openai(question, snapshot)
+            if answer is None:
+                payload = {
+                    'answer': _('AI kaliti hali ulanmagan. Bugun, kecha yoki hafta bo‘yicha tezkor savollardan birini bosing, yoki OpenAI kalitini ulang.'),
+                    'charts': [], 'source': 'setup',
+                }
+            else:
+                payload = {'answer': answer, 'charts': [], 'source': 'ai'}
+
+        # Savol ham, javob ham saqlanadi — suhbat keyin ochilganda tiklanadi.
+        chat = remember(request.user, chat_id, question, payload['answer'], payload.get('charts'))
+        return Response({**payload, 'chat': chat.id, 'chat_title': chat.title})

@@ -66,11 +66,13 @@ export default function DashboardPage() {
       : t('{change}% oldingi davrga', { change })
   }
 
+  // Rang ma'noga bog'langan: yashil — pul kirdi, iliq — pul chiqdi,
+  // natija kartasi esa musbat yoki manfiyligiga qarab rang oladi.
   const tiles = data ? [
-    { name: 'Jami tushum', value: data.revenue, icon: Wallet, color: 'green', note: growth() },
-    { name: 'Kiritilgan xarajat', value: data.expenses, icon: ArrowDownLeft, color: 'orange', note: t('To‘langan va to‘lanmagan') },
-    { name: 'Sof pul oqimi', value: data.net_cash, icon: TrendingUp, color: 'blue', note: t('Kirim − to‘langan chiqim') },
-    { name: 'To‘langan cheklar', value: data.paid_count, icon: ReceiptText, color: 'violet', note: tn('{count} ta ochiq hisob', Number(data.open_count)), count: true },
+    { name: 'Jami tushum', value: data.revenue, icon: Wallet, color: 'green', tone: 'in', note: growth() },
+    { name: 'Kiritilgan xarajat', value: data.expenses, icon: ArrowDownLeft, color: 'orange', tone: 'out', note: t('To‘langan va to‘lanmagan') },
+    { name: 'Sof pul oqimi', value: data.net_cash, icon: TrendingUp, color: 'green', tone: Number(data.net_cash) < 0 ? 'hero-down' : 'hero', note: t('Kirim − to‘langan chiqim') },
+    { name: 'To‘langan cheklar', value: data.paid_count, icon: ReceiptText, color: 'violet', tone: 'flat', note: tn('{count} ta ochiq hisob', Number(data.open_count)), count: true },
   ] : []
 
   return (
@@ -108,7 +110,7 @@ export default function DashboardPage() {
             {tiles.map(tile => {
               const Icon = tile.icon
               return (
-                <article key={tile.name} className="metric-card">
+                <article key={tile.name} className={`metric-card tone-${tile.tone}`}>
                   <div className="metric-top">
                     <span>{t(tile.name)}</span>
                     <span className={`metric-icon ${tile.color}`}><Icon size={19} /></span>

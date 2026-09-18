@@ -8,7 +8,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 from users.models import AuditEvent, Branch, User
 from catalog.models import Category, Dish
-from .models import DailyUsage, Order, OrderLine, Expense, Ingredient, Recipe, RecipeLine, SalaryPayment, ShiftClose, StockMovement, Table
+from .models import AssistantChat, AssistantMessage, DailyUsage, Order, OrderLine, Expense, Ingredient, Recipe, RecipeLine, SalaryPayment, ShiftClose, StockMovement, Table
 from .money import money, percent, quantity, share
 from .services import append_order_lines, create_order, move_stock, Conflict
 
@@ -1930,3 +1930,102 @@ class DiscountTests(TestCase):
         order = self.open_bill()
         self.client.post(f'/api/v1/orders/{order.id}/pay/', {'payment_method': 'cash'}, format='json')
         self.assertEqual(self.discount(order, 10000).status_code, 409)
+
+
+class AssistantChatTests(TestCase):
+    """AI suhbatlari saqlanadi va faqat egasiga ko'rinadi."""
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.other = Branch.objects.create(name='Two', slug='two')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.admin = User.objects.create_user('admin', password='test-only-long-password', role='admin', branch=self.branch)
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+
+    def ask(self, question, chat=None):
+        body = {'question': question}
+        if chat:
+            body['chat'] = chat
+        return self.client.post('/api/v1/assistant/chat/', body, format='json')
+
+    def test_a_question_starts_a_chat_titled_after_it(self):
+        response = self.ask('Bugun qanday o‘tdi?')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('chat', response.data)
+        chat = AssistantChat.objects.get()
+        self.assertEqual(chat.title, 'Bugun qanday o‘tdi?')
+        self.assertEqual(chat.actor, self.owner)
+        # Savol ham, javob ham saqlanadi.
+        self.assertEqual([item.role for item in chat.messages.all()], ['user', 'assistant'])
+        self.assertTrue(chat.messages.last().text)
+
+    def test_a_long_question_gets_a_trimmed_title(self):
+        long_question = 'Bugun ' + 'juda uzun savol ' * 10
+        self.ask(long_question)
+        title = AssistantChat.objects.get().title
+        self.assertLessEqual(len(title), 60)
+        self.assertTrue(title.endswith('…'))
+
+    def test_following_up_stays_in_the_same_chat(self):
+        first = self.ask('Bugun qanday o‘tdi?').data['chat']
+        second = self.ask('Oxirgi 7 kun tahlili', chat=first).data['chat']
+        self.assertEqual(first, second)
+        self.assertEqual(AssistantChat.objects.count(), 1)
+        self.assertEqual(AssistantMessage.objects.count(), 4)
+        # Sarlavha birinchi savoldan qoladi.
+        self.assertEqual(AssistantChat.objects.get().title, 'Bugun qanday o‘tdi?')
+
+    def test_a_new_question_without_a_chat_opens_a_new_one(self):
+        self.ask('Bugun qanday o‘tdi?')
+        self.ask('Omborda nima kamaygan?')
+        self.assertEqual(AssistantChat.objects.count(), 2)
+
+    def test_the_list_shows_newest_first_with_a_preview(self):
+        self.ask('Bugun qanday o‘tdi?')
+        self.ask('Omborda nima kamaygan?')
+        rows = self.client.get('/api/v1/assistant/chats/').data['chats']
+        self.assertEqual([row['title'] for row in rows], ['Omborda nima kamaygan?', 'Bugun qanday o‘tdi?'])
+        self.assertEqual(rows[0]['preview'], 'Omborda nima kamaygan?')
+
+    def test_opening_a_chat_returns_the_whole_conversation(self):
+        chat = self.ask('Bugun qanday o‘tdi?').data['chat']
+        self.ask('Oxirgi 7 kun tahlili', chat=chat)
+        data = self.client.get(f'/api/v1/assistant/chats/{chat}/').data
+        self.assertEqual(len(data['messages']), 4)
+        self.assertEqual(data['messages'][0]['text'], 'Bugun qanday o‘tdi?')
+        self.assertEqual(data['messages'][0]['role'], 'user')
+        # Grafiklar javob bilan birga qaytadi.
+        self.assertIsInstance(data['messages'][1]['charts'], list)
+
+    def test_a_chat_can_be_deleted_with_its_messages(self):
+        chat = self.ask('Bugun qanday o‘tdi?').data['chat']
+        self.assertEqual(self.client.delete(f'/api/v1/assistant/chats/{chat}/').status_code, 200)
+        self.assertFalse(AssistantChat.objects.exists())
+        self.assertFalse(AssistantMessage.objects.exists())
+
+    def test_one_owner_never_sees_another_persons_chat(self):
+        mine = self.ask('Bugun qanday o‘tdi?').data['chat']
+        stranger = User.objects.create_user('owner2', password='test-only-long-password', role='owner', branch=self.branch)
+        theirs = APIClient()
+        theirs.force_authenticate(stranger)
+        # Bu shaxsiy ish daftari: boshqa superadmin ham ko'rmaydi.
+        self.assertEqual(theirs.get('/api/v1/assistant/chats/').data['chats'], [])
+        self.assertEqual(theirs.get(f'/api/v1/assistant/chats/{mine}/').status_code, 400)
+        self.assertEqual(theirs.delete(f'/api/v1/assistant/chats/{mine}/').status_code, 400)
+        self.assertTrue(AssistantChat.objects.filter(pk=mine).exists())
+
+    def test_writing_into_someone_elses_chat_is_refused(self):
+        mine = self.ask('Bugun qanday o‘tdi?').data['chat']
+        stranger = User.objects.create_user('owner3', password='test-only-long-password', role='owner', branch=self.branch)
+        theirs = APIClient()
+        theirs.force_authenticate(stranger)
+        response = theirs.post('/api/v1/assistant/chat/', {'question': 'Salom', 'chat': mine}, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(AssistantMessage.objects.filter(chat_id=mine).count(), 2)
+
+    def test_only_the_owner_role_reaches_the_assistant(self):
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        self.assertEqual(client.get('/api/v1/assistant/chats/').status_code, 403)
+        self.assertEqual(client.post('/api/v1/assistant/chat/', {'question': 'Salom'}, format='json').status_code, 403)

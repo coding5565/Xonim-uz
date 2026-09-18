@@ -18,6 +18,8 @@ from core.i18n import _
 
 class AssistantQuestion(serializers.Serializer):
     question = serializers.CharField(max_length=800, trim_whitespace=True)
+    # Qaysi suhbatga yozilsin; bo'sh bo'lsa yangi suhbat ochiladi.
+    chat = serializers.IntegerField(min_value=1, required=False, allow_null=True)
 
     def validate_question(self, value):
         if len(value) < 2:
