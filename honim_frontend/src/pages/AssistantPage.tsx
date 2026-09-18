@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Bot, LoaderCircle, Send, Sparkles } from 'lucide-react'
 import { api, money } from '../api'
 
@@ -45,6 +45,21 @@ export default function AssistantPage() {
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const [messages, setMessages] = useState<Message[]>([greeting])
+  const threadEnd = useRef<HTMLDivElement>(null)
+
+  // Yangi javob kelganda ro'yxat pastga suriladi — foydalanuvchi o'zi
+  // aylantirib izlamasligi uchun.
+  useEffect(() => {
+    threadEnd.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [messages, sending])
+
+  /** Enter yuboradi, Shift+Enter yangi satr qo'shadi. */
+  function onKey(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault()
+      send()
+    }
+  }
 
   async function send(text = message) {
     const question = text.trim()
@@ -67,7 +82,7 @@ export default function AssistantPage() {
   }
 
   return (
-    <>
+    <div className="assistant-page">
       <div className="page-heading assistant-heading">
         <div>
           <span className="eyebrow">HONIM AI</span>
@@ -108,6 +123,7 @@ export default function AssistantPage() {
               <div className="typing"><LoaderCircle size={16} className="spin" />Tahlil qilinmoqda…</div>
             </article>
           )}
+          <div ref={threadEnd} />
         </div>
         {error && <p className="alert error">{error}</p>}
         <form className="assistant-input" onSubmit={(event: FormEvent) => { event.preventDefault(); send() }}>
@@ -125,6 +141,7 @@ export default function AssistantPage() {
             <textarea
               value={message}
               onChange={event => setMessage(event.target.value)}
+              onKeyDown={onKey}
               rows={2}
               maxLength={800}
               placeholder="Masalan: bugun tushum kechagiga nisbatan necha foiz o‘zgardi?"
@@ -133,8 +150,9 @@ export default function AssistantPage() {
               <Send size={18} />Yuborish
             </button>
           </div>
+          <p className="compose-hint">Enter — yuborish · Shift+Enter — yangi satr</p>
         </form>
       </section>
-    </>
+    </div>
   )
 }

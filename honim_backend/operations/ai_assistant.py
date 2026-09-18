@@ -1,7 +1,7 @@
 import json
 import os
 from datetime import timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -74,6 +74,14 @@ def _percent(current, previous):
     return round((current - previous) / previous * 100, 1)
 
 
+def som(value):
+    """Javob matni uchun: 140000 -> «140 000». Chekdagidek probel bilan."""
+    try:
+        return f'{int(Decimal(str(value))):,}'.replace(',', ' ')
+    except (InvalidOperation, ValueError, TypeError):
+        return str(value)
+
+
 def local_answer(question, snapshot):
     lower = question.lower()
     today, yesterday = snapshot['today'], snapshot['yesterday']
@@ -84,14 +92,14 @@ def local_answer(question, snapshot):
         direction = 'o‘sdi' if change is not None and change >= 0 else 'kamaydi'
         compare = 'Kecha savdo bo‘lmagani uchun foiz hisoblanmadi.' if change is None else f'Kecha bilan solishtirganda tushum {abs(change)}% ga {direction}.'
         return {
-            'answer': f"Bugun tushum {today['sales']['revenue']} so‘m, {today['sales']['orders']} ta to‘langan chek va {today['expenses']} so‘m xarajat qayd etildi. {compare}",
+            'answer': f"Bugun tushum {som(today['sales']['revenue'])} so‘m, {today['sales']['orders']} ta to‘langan chek va {som(today['expenses'])} so‘m xarajat qayd etildi. {compare}",
             'charts': [{'type': 'comparison', 'title': 'Bugun va kecha', 'labels': ['Kecha', 'Bugun'], 'values': [yesterday['sales']['revenue'], today['sales']['revenue']]}],
         }
     if any(term in lower for term in ('hafta', '7 kun')):
         current, previous = snapshot['last_7_days'], snapshot['previous_7_days']
         change = _percent(current['sales']['revenue'], previous['sales']['revenue'])
         suffix = 'Oldingi haftada savdo bo‘lmagani uchun foiz hisoblanmadi.' if change is None else f'O‘sish: {change}%.'
-        return {'answer': f"Oxirgi 7 kunda tushum {current['sales']['revenue']} so‘m, xarajat {current['expenses']} so‘m. {suffix}", 'charts': [{'type': 'comparison', 'title': 'Haftalik tushum', 'labels': ['Oldingi 7 kun', 'Oxirgi 7 kun'], 'values': [previous['sales']['revenue'], current['sales']['revenue']]}]}
+        return {'answer': f"Oxirgi 7 kunda tushum {som(current['sales']['revenue'])} so‘m, xarajat {som(current['expenses'])} so‘m. {suffix}", 'charts': [{'type': 'comparison', 'title': 'Haftalik tushum', 'labels': ['Oldingi 7 kun', 'Oxirgi 7 kun'], 'values': [previous['sales']['revenue'], current['sales']['revenue']]}]}
     if any(term in lower for term in ('taom', 'sotildi', 'menu')):
         items = snapshot['top_dishes_7_days']
         if not items:
@@ -106,7 +114,7 @@ def local_answer(question, snapshot):
         return {'answer': f"Quyidagi mahsulotlar minimal qoldiqda yoki undan past: {names}.", 'charts': []}
     if any(term in lower for term in ('xarajat', 'rasxod', 'chiqim')):
         current = snapshot['last_7_days']
-        return {'answer': f"Oxirgi 7 kunda {current['expenses']} so‘m xarajat va {current['sales']['revenue']} so‘m tushum qayd etilgan.", 'charts': [{'type': 'comparison', 'title': '7 kunlik pul oqimi', 'labels': ['Tushum', 'Xarajat'], 'values': [current['sales']['revenue'], current['expenses']]}]}
+        return {'answer': f"Oxirgi 7 kunda {som(current['expenses'])} so‘m xarajat va {som(current['sales']['revenue'])} so‘m tushum qayd etilgan.", 'charts': [{'type': 'comparison', 'title': '7 kunlik pul oqimi', 'labels': ['Tushum', 'Xarajat'], 'values': [current['sales']['revenue'], current['expenses']]}]}
     return None
 
 
