@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { api, money, today } from '../api'
 import { useI18n } from '../i18n'
+import { CardsSkeleton, ChartSkeleton, PanelSkeleton } from '../components/Skeleton'
 import type { Finance } from '../types'
 
 type Translate = (text: string, vars?: Record<string, string | number>) => string
@@ -59,7 +60,15 @@ export default function FinancePage() {
             <h1>{t('Umumiy moliya')}<span className="heading-dot">.</span></h1>
           </div>
         </div>
-        {error ? <p className="alert error">{error}</p> : <div className="empty-state">{t('Hisoblanmoqda…')}</div>}
+        {error ? <p className="alert error">{error}</p> : (
+          <>
+            <section className="panel"><PanelSkeleton rows={5} /></section>
+            <div className="finance-grid">
+              <section className="panel"><PanelSkeleton rows={3} /></section>
+              <section className="panel"><ChartSkeleton bars={5} /></section>
+            </div>
+          </>
+        )}
       </>
     )
   }

@@ -775,3 +775,149 @@ td.number strong{color:var(--ink)}
 .chat-row-name{width:100%;margin:2px;padding:8px 10px;font:600 var(--f-sm) 'DM Sans',sans-serif;border-radius:var(--r1);border-color:var(--green-200)}
 .theme-dark .chat-row-edit:hover{color:#bde4cf;background:var(--green-100)}
 
+/* ══════════════════════════════════════════════════════════════════════════
+   HONIM — SIFAT QATLAMI
+   Interfeys «ishlaydi»dan «yoqimli»ga o'tadigan joy shu yerda.
+
+   Muammo: 100KB CSS'da atigi 12 ta transition va 3 ta animatsiya bor edi,
+   skeleton umuman yo'q, focus-visible bitta. Shuning uchun hamma narsa
+   birdan paydo bo'lardi va jonsiz ko'rinardi.
+
+   Bu yerda to'rt narsa: kutish holati, harakat, fokus va grafik nafisligi.
+   Hammasi `prefers-reduced-motion` ni hurmat qiladi.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root{
+  --ease:cubic-bezier(.22,.61,.36,1);      /* chiqish — tez boshlanib, yumshoq to'xtaydi */
+  --ease-in-out:cubic-bezier(.65,0,.35,1);
+  --fast:.14s; --base:.22s; --slow:.4s;
+}
+
+/* ── 1. Kutish holati: skeleton ────────────────────────────────────────── */
+@keyframes sk-shine{to{background-position:200% 0}}
+.sk-line,.sk-round,.sk-bar{
+  display:block;border-radius:6px;
+  background:linear-gradient(90deg,var(--line-2) 8%,var(--line) 20%,var(--line-2) 34%);
+  background-size:200% 100%;
+  animation:sk-shine 1.25s linear infinite;
+}
+.sk-round{width:40px;height:40px;border-radius:var(--r2)}
+.sk-card{display:flex;flex-direction:column;gap:14px;background:var(--surface);border-color:var(--line)}
+.sk-card:before{display:none}
+.sk-card .metric-top{margin-bottom:2px}
+.sk-table td{border-color:var(--line-2)}
+.sk-chart{display:flex;align-items:flex-end;gap:10px;height:190px;padding:var(--s5) var(--s6)}
+.sk-bar{flex:1;border-radius:6px 6px 3px 3px;min-width:14px}
+.sk-panel{display:flex;flex-direction:column;gap:13px;padding:var(--s6)}
+
+/* ── 2. Harakat: paydo bo'lish va javob ────────────────────────────────── */
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+
+/* Sahifa ochilganda bloklar ketma-ket ko'tariladi — bir vaqtda emas,
+   shunda ko'z tartibni o'zi payqaydi. */
+.main-content>*{animation:rise var(--base) var(--ease) both}
+.main-content>*:nth-child(2){animation-delay:.04s}
+.main-content>*:nth-child(3){animation-delay:.08s}
+.main-content>*:nth-child(4){animation-delay:.12s}
+.main-content>*:nth-child(n+5){animation-delay:.16s}
+
+.metric-grid>*,.report-metrics>*{animation:rise var(--base) var(--ease) both}
+.metric-grid>*:nth-child(2),.report-metrics>*:nth-child(2){animation-delay:.05s}
+.metric-grid>*:nth-child(3),.report-metrics>*:nth-child(3){animation-delay:.1s}
+.metric-grid>*:nth-child(4),.report-metrics>*:nth-child(4){animation-delay:.15s}
+
+/* Bosiladigan narsalar bosilganda javob beradi. */
+.button,.pos-dish,.table-card,.chat-cards button,.usage-day,.chat-row,
+.report-presets button,.tabs button,.lang-switch button{transition:
+  background var(--fast) var(--ease), border-color var(--fast) var(--ease),
+  color var(--fast) var(--ease), transform var(--fast) var(--ease),
+  box-shadow var(--fast) var(--ease)}
+.button:active:not(:disabled),.pos-dish:active,.chat-cards button:active{transform:translateY(1px) scale(.995)}
+.panel{transition:box-shadow var(--base) var(--ease),border-color var(--base) var(--ease)}
+tbody tr{transition:background var(--fast) var(--ease)}
+.icon-button,.text-link,.table-action,.line-remove,.chat-row-edit,.chat-row-drop{
+  transition:background var(--fast) var(--ease),color var(--fast) var(--ease),opacity var(--fast) var(--ease)}
+
+/* Modal ochilishi */
+.modal{animation:rise var(--base) var(--ease) both}
+.modal::backdrop{animation:fade var(--base) var(--ease) both}
+
+/* Ogohlantirish va xabarlar sakrab chiqmasin */
+.alert{animation:rise var(--fast) var(--ease) both}
+
+/* Aylanuvchi belgi bir tekis aylansin */
+.spin{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── 3. Fokus: klaviatura bilan ishlash ko'rinadigan bo'lsin ───────────── */
+:where(button,a,input,select,textarea,[tabindex]):focus-visible{
+  outline:2px solid var(--green-600);
+  outline-offset:2px;
+  border-radius:var(--r1);
+}
+.button:focus-visible{outline-offset:3px}
+.primary:focus-visible{outline-color:var(--green-900)}
+nav a:focus-visible{outline-offset:-2px}
+/* Sichqoncha bilan bosilganda halqa chiqmaydi — faqat klaviaturada. */
+:where(button,a):focus:not(:focus-visible){outline:none}
+
+/* ── 4. Grafik: o'sib chiqadi va sichqonchaga javob beradi ─────────────── */
+.bars>span,.report-bar>div>span,.turn-chart-row i,.share-cell span,.progress-track>span{
+  transform-origin:bottom;
+}
+.bars>span{animation:grow var(--slow) var(--ease) both;border-radius:5px 5px 2px 2px}
+.bar-group:nth-child(2) .bars>span{animation-delay:.03s}
+.bar-group:nth-child(3) .bars>span{animation-delay:.06s}
+.bar-group:nth-child(4) .bars>span{animation-delay:.09s}
+.bar-group:nth-child(5) .bars>span{animation-delay:.12s}
+.bar-group:nth-child(6) .bars>span{animation-delay:.15s}
+.bar-group:nth-child(n+7) .bars>span{animation-delay:.18s}
+
+/* Ustun ustiga borilganda o'sha kun ajralib turadi, qolganlari so'nadi. */
+.bar-groups:hover .bar-group{opacity:.45;transition:opacity var(--fast) var(--ease)}
+.bar-groups:hover .bar-group:hover{opacity:1}
+.bar-group{border-radius:var(--r1);cursor:default}
+.bar-group:hover{background:var(--green-50)}
+.bar-group:hover>small{color:var(--green-800);font-weight:600}
+
+.report-chart .report-bar>div>span{animation:grow var(--slow) var(--ease) both}
+.report-chart:hover .report-bar{opacity:.45;transition:opacity var(--fast) var(--ease)}
+.report-chart:hover .report-bar:hover{opacity:1}
+.report-bar{border-radius:var(--r1)}
+.report-bar:hover{background:var(--green-50)}
+
+/* Jarayon chiziqlari ham o'sib chiqadi */
+.progress-track>span,.share-cell span{transform-origin:left;animation:sk-grow-x var(--slow) var(--ease) both}
+@keyframes sk-grow-x{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+
+/* ── 5. Jadval nafisliklari ────────────────────────────────────────────── */
+/* Yopishqoq sarlavha bu yerda ishlamaydi: .table-wrap balandligi
+   cheklanmagani uchun u hech qachon aylanmaydi. Qo'shib qo'yish o'lik kod
+   bo'lardi — jadval kerak bo'lsa keyin balandlik bilan birga qo'shiladi. */
+tbody tr:last-child td{border-bottom:0}
+thead th:first-child{border-top-left-radius:var(--r2)}
+thead th:last-child{border-top-right-radius:var(--r2)}
+
+/* ── 6. Kichik nafisliklar ─────────────────────────────────────────────── */
+/* Pul ustunlari bir chiziqda tursin */
+td.number,.metric-value,.chain-row b,.chain-total b,.shift-grid strong,
+.warn-grid strong,.report-metrics strong{font-variant-numeric:tabular-nums}
+/* Uzun matn qatorni buzmasin */
+td strong,.chat-row-open strong{overflow-wrap:anywhere}
+/* Tanlangan matn brend rangida */
+::selection{background:var(--green-100);color:var(--green-900)}
+/* Aylantirish chizig'i hamma joyda bir xil */
+*{scrollbar-width:thin;scrollbar-color:#cbd6cf transparent}
+.theme-dark *{scrollbar-color:#31473e transparent}
+
+/* ── 7. Harakat kamaytirilsin deb so'ralgan bo'lsa ─────────────────────── */
+@media(prefers-reduced-motion:reduce){
+  *,*:before,*:after{
+    animation-duration:.01ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.01ms !important;
+    scroll-behavior:auto !important;
+  }
+}

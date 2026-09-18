@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { api, dateLabel, money } from '../api'
 import { useI18n } from '../i18n'
+import { CardsSkeleton, ChartSkeleton, PanelSkeleton } from '../components/Skeleton'
 import { useSession } from '../session'
 import type { Dashboard } from '../types'
 
@@ -104,6 +105,15 @@ export default function DashboardPage() {
       </div>
       {error && <p className="alert error" role="alert">{error}</p>}
       {!data && loading && <div className="empty-state">{t('Hisobot yuklanmoqda…')}</div>}
+      {!data && (
+        <>
+          <CardsSkeleton />
+          <div className="dashboard-grid">
+            <section className="panel"><ChartSkeleton /></section>
+            <section className="panel"><PanelSkeleton /></section>
+          </div>
+        </>
+      )}
       {data && (
         <>
           <div className="metric-grid">

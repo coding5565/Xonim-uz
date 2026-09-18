@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { api, money } from '../api'
 import { useI18n } from '../i18n'
+import { CardsSkeleton, TableSkeleton } from '../components/Skeleton'
 import type { Payroll, PayrollEmployee } from '../types'
 
 const STATUS_LABELS: Record<PayrollEmployee['status'], string> = {
@@ -82,6 +83,12 @@ export default function PayrollPage() {
 
       {error && <p className="alert error">{error}</p>}
 
+      {!data && (
+        <>
+          <CardsSkeleton />
+          <section className="panel"><TableSkeleton rows={5} columns={6} /></section>
+        </>
+      )}
       {data && (
         <>
           <div className="report-metrics">

@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Filter, History, RefreshCw, ShieldCheck, X } from 'lucide-react'
 import { api, today } from '../api'
 import { useI18n } from '../i18n'
+import { TableSkeleton } from '../components/Skeleton'
 import type { ActivityFacet, ActivityLog } from '../types'
 
 interface Filters {
@@ -227,6 +228,7 @@ export default function ActivityPage() {
               ))}
             </tbody>
           </table>
+          {loading && !rows.length && <TableSkeleton rows={8} columns={4} />}
           {!loading && !rows.length && <div className="empty-state">{t('Bu tanlov bo‘yicha harakat topilmadi.')}</div>}
         </div>
         {!!data && data.pages > 1 && (
