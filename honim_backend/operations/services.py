@@ -2,13 +2,15 @@ import hashlib
 import json
 from uuid import NAMESPACE_URL, uuid5
 from decimal import Decimal
+from django.conf import settings
 from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError, APIException
 from catalog.models import Dish
 from users.models import AuditEvent
-from .models import Order, OrderLine, Expense, Ingredient, Recipe, StockMovement
+from .models import SALE_PAYMENT_LABELS, Order, OrderLine, Expense, Ingredient, Recipe, RecipeLine, StockMovement, Table
+from .printing import print_prep_tickets, print_receipt_quietly
 
 
 class Conflict(APIException):
@@ -28,7 +30,42 @@ def existing(model, user, data):
 
 
 def audit(user, action, description):
-    AuditEvent.objects.create(branch=user.branch, actor=user, action=action, description=description)
+    AuditEvent.objects.create(branch=user.branch, actor=user, action=action, description=description[:300])
+
+
+def audit_many(user, rows):
+    """Bir nechta yozuvni bitta so'rovda jurnalga qo'yadi.
+
+    Bitta to'lov o'nlab masalliqqa tegishi mumkin, shuning uchun har biri uchun
+    alohida INSERT yubormaymiz.
+    """
+    if not rows:
+        return
+    AuditEvent.objects.bulk_create([
+        AuditEvent(branch=user.branch, actor=user, action=action, description=description[:300])
+        for action, description in rows
+    ])
+
+
+def quantity_text(value):
+    """Miqdorni jurnal uchun o'qiladigan holga keltiradi: 20.000 -> 20."""
+    trimmed = Decimal(value).quantize(Decimal('0.001'))
+    return f'{trimmed.normalize():f}'
+
+
+def reprice_recipes(ingredient):
+    """Masalliq narxi o'zgarganda uni ishlatgan retseptlarni qayta hisoblaydi.
+
+    Faqat joriy retsept tannarxi yangilanadi. Sotilgan buyurtmalardagi
+    OrderLine.cost_total tegilmaydi — u sotuv paytida muzlatilgan va eski
+    hisobotlar shunga tayanadi.
+    """
+    lines = list(RecipeLine.objects.filter(ingredient=ingredient))
+    for line in lines:
+        line.batch_cost = (line.quantity * ingredient.unit_cost).quantize(Decimal('0.01'))
+    if lines:
+        RecipeLine.objects.bulk_update(lines, ['batch_cost'])
+    return len(lines)
 
 
 def recipe_cost(recipe):
@@ -83,13 +120,50 @@ def consume_order_stock(user, order):
 
     for line, recipe_line, quantity in usage_rows:
         key = uuid5(NAMESPACE_URL, f'honim-sale-stock:{order.id}:{line.id}:{recipe_line.ingredient_id}')
+        ingredient = ingredients[recipe_line.ingredient_id]
+        # Sotuv paytidagi ombor tannarxi muzlatiladi: keyin narx o'zgarsa ham
+        # eski hisobotlar o'zgarmaydi.
         StockMovement.objects.create(
-            branch=user.branch, ingredient=ingredients[recipe_line.ingredient_id], actor=user,
+            branch=user.branch, ingredient=ingredient, actor=user,
             key=key, request_hash=fingerprint({'order': order.id, 'line': line.id, 'ingredient': recipe_line.ingredient_id, 'quantity': str(quantity)}),
             kind='sale_consumption', quantity=quantity, date=timezone.localdate(),
+            unit_cost=ingredient.unit_cost, cost_total=(ingredient.unit_cost * quantity).quantize(Decimal('0.01')),
             note=f'#{order.id} buyurtma · {line.name}',
         )
-    audit(user, 'stock.sale_consumption', f'#{order.id} buyurtma retsept bo‘yicha ombordan ayrildi')
+    # Har bir masalliq alohida yoziladi: qaysi mahsulot, qancha va qachon
+    # ayrilgani jurnaldan ko'rinib tursin.
+    audit_many(user, [
+        (
+            'stock.sale_consumption',
+            f'#{order.id} buyurtma · {ingredients[ingredient_id].name} · -{quantity_text(quantity)} {ingredients[ingredient_id].unit}',
+        )
+        for ingredient_id, quantity in sorted(required.items(), key=lambda item: ingredients[item[0]].name)
+    ])
+
+
+
+def _autoprint(order):
+    """Chekni tranzaksiya yopilgandan keyin chiqaradi.
+
+    on_commit ishlatiladi, chunki savdo allaqachon yozilgan: printer o'chiq
+    bo'lsa ham buyurtma bekor bo'lmasligi kerak. print_receipt_quietly hech
+    qachon xato ko'tarmaydi, shuning uchun on_commit zanjiri ham buzilmaydi.
+    Nosozlik jurnalga tushadi — kassir keyin qayta chop etishi kerakligini
+    superadmin ko'rib turishi uchun.
+    """
+    if not getattr(settings, 'RECEIPT_AUTO_PRINT', False):
+        return
+    cashier = order.cashier
+
+    def run():
+        if not print_receipt_quietly(order) and getattr(settings, 'RECEIPT_PRINTER', ''):
+            audit(cashier, 'print.failed', f'#{order.id} · kassa cheki chiqmadi')
+
+    transaction.on_commit(run)
+
+
+def _log_print_problems(user, order, problems):
+    audit_many(user, [('print.failed', f'#{order.id} · {problem}') for problem in problems])
 
 
 @transaction.atomic
@@ -104,8 +178,19 @@ def create_order(user, data):
     if total > Decimal('999999999999.99'):
         raise ValidationError('Buyurtma summasi juda katta.')
     paid = bool(data['payment_method'])
+
+    table = None
+    table_text = data['table']
+    if data.get('table_id'):
+        table = Table.objects.filter(branch=user.branch, pk=data['table_id'], active=True).first()
+        if not table:
+            raise ValidationError('Stol topilmadi.')
+        if Order.objects.filter(table_ref=table, status='open').exists():
+            raise Conflict('Bu stolda ochiq hisob bor. Taomni o‘sha hisobga qo‘shing.')
+        table_text = str(table.number)
+
     recipes = _recipes_for_dishes(user.branch, dishes)
-    order = Order.objects.create(branch=user.branch, cashier=user, key=data['key'], request_hash=fingerprint(data), table=data['table'], waiter=data['waiter'], total=total, status='paid' if paid else 'open', payment_method=data['payment_method'], paid_at=timezone.now() if paid else None)
+    order = Order.objects.create(branch=user.branch, cashier=user, key=data['key'], request_hash=fingerprint(data), table=table_text, table_ref=table, waiter=data['waiter'], total=total, status='paid' if paid else 'open', payment_method=data['payment_method'], paid_at=timezone.now() if paid else None)
     for line in data['lines']:
         dish = dishes[line['dish']]
         recipe = recipes.get(dish.id)
@@ -113,7 +198,73 @@ def create_order(user, data):
         OrderLine.objects.create(order=order, dish=dish, name=dish.name, price=dish.price, quantity=line['quantity'], note=line['note'], cost_per_unit=unit_cost, cost_total=unit_cost * line['quantity'])
     if paid:
         consume_order_stock(user, order)
-    audit(user, 'order.create', f'#{order.id} · {total} so‘m')
+        _autoprint(order)
+    # Tayyorlash talonlari har doim chiqadi: ovqat to'lovni kutmaydi.
+    order.print_problems = print_prep_tickets(order)
+    _log_print_problems(user, order, order.print_problems)
+    audit(user, 'order.create', f'#{order.id} · {table.label if table else (table_text or "olib ketish")} · {total} so‘m · {len(data["lines"])} qator')
+    return order
+
+
+def _line_unit_cost(recipe):
+    return (recipe_cost(recipe) / recipe.yield_quantity).quantize(Decimal('0.01')) if recipe else Decimal('0')
+
+
+@transaction.atomic
+def append_order_lines(user, order_id, data):
+    """Add what the guest asked for after the bill was opened.
+
+    The row lock serialises concurrent adds to the same bill, so checking the
+    batch key before inserting is enough to make a retried request a no-op.
+    """
+    order = Order.objects.select_for_update().filter(branch=user.branch, id=order_id).first()
+    if not order:
+        raise ValidationError('Buyurtma topilmadi.')
+    if order.status != 'open':
+        raise Conflict('To‘langan hisobga taom qo‘shib bo‘lmaydi. Yangi hisob oching.')
+    if OrderLine.objects.filter(order=order, batch_key=data['key']).exists():
+        order.refresh_from_db()
+        return order
+
+    dishes = {
+        dish.id: dish
+        for dish in Dish.objects.select_for_update().filter(
+            branch=user.branch, archived=False, available=True, id__in=[line['dish'] for line in data['lines']]
+        )
+    }
+    if len(dishes) != len(data['lines']):
+        raise ValidationError('Ayrim taomlar mavjud emas. Menyuni yangilang.')
+    added = sum((dishes[line['dish']].price * line['quantity'] for line in data['lines']), Decimal('0'))
+    if order.total + added > Decimal('999999999999.99'):
+        raise ValidationError('Buyurtma summasi juda katta.')
+
+    recipes = _recipes_for_dishes(user.branch, dishes)
+    now = timezone.now()
+    for line in data['lines']:
+        dish = dishes[line['dish']]
+        unit_cost = _line_unit_cost(recipes.get(dish.id))
+        OrderLine.objects.create(
+            order=order, dish=dish, name=dish.name, price=dish.price, quantity=line['quantity'],
+            note=line['note'], cost_per_unit=unit_cost, cost_total=unit_cost * line['quantity'],
+            batch_key=data['key'], added_at=now,
+        )
+
+    order.total = order.total + added
+    fields = ['total']
+    # A bill the kitchen already finished has to come back on the board, or the
+    # new dishes would never be cooked.
+    if order.preparation_status in ('ready', 'served'):
+        order.preparation_status = 'queued'
+        order.ready_at = None
+        order.served_at = None
+        fields += ['preparation_status', 'ready_at', 'served_at']
+    order.save(update_fields=fields)
+    # Faqat shu qo'shimchadagi qatorlar chiqadi, butun buyurtma qayta emas.
+    fresh = list(OrderLine.objects.filter(order=order, batch_key=data['key']).select_related('dish__category'))
+    order.print_problems = print_prep_tickets(order, fresh, addition=True)
+    _log_print_problems(user, order, order.print_problems)
+    names = ', '.join(f'{dishes[line["dish"]].name} x{line["quantity"]}' for line in data['lines'])
+    audit(user, 'order.append', f'#{order.id} · +{added} so‘m · {names}')
     return order
 
 
@@ -131,7 +282,8 @@ def pay_order(user, order_id, method):
     if not changed:
         raise Conflict()
     order.refresh_from_db()
-    audit(user, 'order.pay', f'#{order.id} · {method}')
+    _autoprint(order)
+    audit(user, 'order.pay', f'#{order.id} · {SALE_PAYMENT_LABELS.get(method, method)} · {order.total} so‘m')
     return order
 
 
@@ -141,8 +293,22 @@ def create_expense(user, data):
     if previous:
         return previous
     obj = Expense.objects.create(branch=user.branch, actor=user, request_hash=fingerprint(data), **data)
-    audit(user, 'expense.create', f'{obj.purpose} · {obj.amount} so‘m')
+    audit(user, 'expense.create', f'{obj.category} · {obj.purpose} · {obj.amount} so‘m · {obj.date}')
     return obj
+
+
+def weighted_unit_cost(stock, quantity, spent):
+    """Kirimdan keyingi o'rtacha tortilgan tannarx.
+
+    Eski qoldiq o'z narxida, yangi partiya o'z narxida qo'shiladi. Narx
+    kiritilmasa eski tannarx saqlanadi — nol narx bilan o'rtachani buzmaydi.
+    """
+    if spent is None or spent <= 0:
+        return stock.unit_cost
+    total_quantity = stock.quantity + quantity
+    if total_quantity <= 0:
+        return stock.unit_cost
+    return ((stock.quantity * stock.unit_cost + spent) / total_quantity).quantize(Decimal('0.0001'))
 
 
 @transaction.atomic
@@ -156,14 +322,31 @@ def move_stock(user, data):
     quantity = data['quantity']
     if stock.unit == 'dona' and quantity != quantity.to_integral_value():
         raise ValidationError('Dona butun son bo‘lishi kerak.')
+    spent = data.get('cost_total') or Decimal('0')
     if data['kind'] == 'consumption':
         changed = Ingredient.objects.filter(pk=stock.pk, quantity__gte=quantity).update(quantity=F('quantity') - quantity)
         if not changed:
             raise ValidationError('Omborda yetarli mahsulot yo‘q.')
+        # Sarf joriy o'rtacha tannarxda baholanadi va shu yerda muzlatiladi.
+        unit_cost = stock.unit_cost
+        spent = (unit_cost * quantity).quantize(Decimal('0.01'))
     else:
         if stock.quantity + quantity > Decimal('99999999999.999'):
             raise ValidationError('Qoldiq chegaradan oshadi.')
-        Ingredient.objects.filter(pk=stock.pk).update(quantity=F('quantity') + quantity)
-    obj = StockMovement.objects.create(branch=user.branch, actor=user, ingredient=stock, request_hash=fingerprint(data), **{key: value for key, value in data.items() if key != 'ingredient'})
-    audit(user, f'stock.{obj.kind}', f'{stock.name} · {quantity} {stock.unit}')
+        unit_cost = (spent / quantity).quantize(Decimal('0.0001')) if spent else stock.unit_cost
+        average = weighted_unit_cost(stock, quantity, spent)
+        Ingredient.objects.filter(pk=stock.pk).update(quantity=F('quantity') + quantity, unit_cost=average)
+        if average != stock.unit_cost:
+            # Yangi narx retseptlar tannarxiga darhol o'tadi.
+            stock.unit_cost = average
+            reprice_recipes(stock)
+    fields = {key: value for key, value in data.items() if key not in ('ingredient', 'cost_total')}
+    obj = StockMovement.objects.create(
+        branch=user.branch, actor=user, ingredient=stock, request_hash=fingerprint(data),
+        unit_cost=unit_cost, cost_total=spent, **fields,
+    )
+    sign = '-' if obj.kind == 'consumption' else '+'
+    left = Ingredient.objects.values_list('quantity', flat=True).get(pk=stock.pk)
+    money_text = f' · {obj.cost_total} so‘m' if obj.cost_total else ''
+    audit(user, f'stock.{obj.kind}', f'{stock.name} · {sign}{quantity_text(quantity)} {stock.unit}{money_text} · {obj.date} · qoldiq {quantity_text(left)} {stock.unit}')
     return obj

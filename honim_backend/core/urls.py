@@ -3,13 +3,17 @@ from django.conf.urls.static import static
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
+from users.payroll import PayrollView
 from users.views import AuditView, CsrfView, LoginView, LogoutView, MeView, SalaryPaymentExportView, SalaryPaymentView, StaffDetailView, StaffView
 from catalog.views import CategoryViewSet, DishViewSet, PublicMenuView
 from operations.views import (
     AssistantChatView, DashboardView, ExpenseViewSet, IngredientViewSet, KitchenStatusView,
-    KitchenView, OrderViewSet, PayView, RecipeViewSet, SalesReportExportView,
-    SalesReportView, StockView,
+    KitchenView, OrderLinesView, OrderViewSet, ReceiptPrintView, PayView, RecipeViewSet, SalesReportExportView,
+    SalesBoardView, SalesReportView, SalesSummaryView, StockView, TableViewSet,
 )
+from operations.daily_usage import DailyUsageView, UsageComparisonView
+from operations.finance import FinanceView
+from operations.stock_usage import StockUsageView
 
 router = DefaultRouter()
 router.register('categories', CategoryViewSet, basename='category')
@@ -18,6 +22,7 @@ router.register('orders', OrderViewSet, basename='order')
 router.register('expenses', ExpenseViewSet, basename='expense')
 router.register('ingredients', IngredientViewSet, basename='ingredient')
 router.register('recipes', RecipeViewSet, basename='recipe')
+router.register('tables', TableViewSet, basename='table')
 
 urlpatterns = [
     path('api/v1/', include(router.urls)),
@@ -30,14 +35,23 @@ urlpatterns = [
     path('api/v1/staff/<int:pk>/', StaffDetailView.as_view()),
     path('api/v1/staff/<int:pk>/salary-payments/', SalaryPaymentView.as_view()),
     path('api/v1/staff/salary-payments/export/', SalaryPaymentExportView.as_view()),
+    path('api/v1/payroll/', PayrollView.as_view()),
     path('api/v1/public/menu/<slug:slug>/', PublicMenuView.as_view()),
     path('api/v1/orders/<int:pk>/pay/', PayView.as_view()),
+    path('api/v1/orders/<int:pk>/lines/', OrderLinesView.as_view()),
+    path('api/v1/orders/<int:pk>/print/', ReceiptPrintView.as_view()),
     path('api/v1/kitchen/orders/', KitchenView.as_view()),
     path('api/v1/kitchen/orders/<int:pk>/status/', KitchenStatusView.as_view()),
+    path('api/v1/sales/summary/', SalesSummaryView.as_view()),
+    path('api/v1/sales/board/', SalesBoardView.as_view()),
     path('api/v1/reports/sales/', SalesReportView.as_view()),
     path('api/v1/reports/sales/export/', SalesReportExportView.as_view()),
     path('api/v1/stock/', StockView.as_view()),
+    path('api/v1/stock/usage/', StockUsageView.as_view()),
+    path('api/v1/daily-usage/', DailyUsageView.as_view()),
+    path('api/v1/daily-usage/compare/', UsageComparisonView.as_view()),
     path('api/v1/dashboard/', DashboardView.as_view()),
+    path('api/v1/finance/', FinanceView.as_view()),
     path('api/v1/assistant/chat/', AssistantChatView.as_view()),
 ]
 if settings.DEBUG:

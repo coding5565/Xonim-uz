@@ -1,18 +1,71 @@
+from decimal import Decimal
+
 from django.db import models
 from django.db.models import Q
 from users.models import Branch, User
+
+# Single source of truth for how a sale was settled. Adding a provider here is
+# enough for the till, the summary, the dashboard and the reports to pick it up.
+SALE_PAYMENT_METHODS = [
+    ('cash', 'Naqd'),
+    ('card', 'Karta'),
+    ('uzum', 'Uzum'),
+    ('click', 'Click'),
+    ('yandex', 'Yandex'),
+]
+SALE_PAYMENT_LABELS = dict(SALE_PAYMENT_METHODS)
+SALE_PAYMENT_CHOICES = [method for method, _ in SALE_PAYMENT_METHODS]
+
+
+class TableZone(models.TextChoices):
+    """Zaldagi joylashuv. Kassir ekrani shu bo'yicha chiziladi."""
+
+    HALL_LEFT = 'hall_left', 'Ichkari — chap tomon'
+    HALL_RIGHT = 'hall_right', 'Ichkari — o‘ng tomon'
+    OUTSIDE = 'outside', 'Tashqari'
+
+
+class TableSeating(models.TextChoices):
+    DIVAN = 'divan', 'Divan'
+    CHAIR = 'chair', 'Stulli'
+
+
+class Table(models.Model):
+    """Zaldagi stol. Kassir ekranining asosi: bo'sh yoki ochiq hisobi bor."""
+
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT, related_name='tables')
+    number = models.PositiveIntegerField()
+    name = models.CharField(max_length=40, blank=True)
+    seats = models.PositiveIntegerField(default=4)
+    zone = models.CharField(max_length=12, choices=TableZone.choices, default=TableZone.HALL_RIGHT)
+    seating = models.CharField(max_length=8, choices=TableSeating.choices, default=TableSeating.CHAIR)
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['zone', 'number', 'id']
+        constraints = [
+            models.UniqueConstraint(fields=['branch', 'number'], name='table_branch_number'),
+            models.CheckConstraint(condition=Q(number__gt=0), name='table_positive_number'),
+        ]
+
+    @property
+    def label(self):
+        return self.name or f'{self.number}-stol'
 
 
 class Order(models.Model):
     branch = models.ForeignKey(Branch, on_delete=models.PROTECT)
     cashier = models.ForeignKey(User, on_delete=models.PROTECT)
+    # Matnli `table` maydoni saqlanib qoldi: cheklar, talonlar va hisobotlar shunga
+    # tayanadi. table_ref esa stol xaritasi uchun, olib ketishda bo'sh bo'ladi.
+    table_ref = models.ForeignKey(Table, on_delete=models.PROTECT, null=True, blank=True, related_name='orders')
     key = models.UUIDField()
     request_hash = models.CharField(max_length=64)
     table = models.CharField(max_length=40, blank=True)
     waiter = models.CharField(max_length=100, blank=True)
     status = models.CharField(max_length=10, default='open', choices=[('open', 'Ochiq'), ('paid', 'To‘langan')])
     total = models.DecimalField(max_digits=14, decimal_places=2)
-    payment_method = models.CharField(max_length=10, blank=True)
+    payment_method = models.CharField(max_length=10, blank=True, choices=SALE_PAYMENT_METHODS)
     created_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(null=True)
     preparation_status = models.CharField(max_length=12, default='queued', choices=[('queued', 'Yangi'), ('preparing', 'Tayyorlanmoqda'), ('ready', 'Tayyor'), ('served', 'Topshirildi')])
@@ -32,10 +85,18 @@ class OrderLine(models.Model):
     price = models.DecimalField(max_digits=12, decimal_places=2)
     quantity = models.PositiveIntegerField()
     note = models.CharField(max_length=200, blank=True)
+    # Set when the guest ordered more after the bill was opened. Lines from the
+    # first order keep it empty, and the key makes a retried add a no-op.
+    batch_key = models.UUIDField(null=True, blank=True, db_index=True)
+    added_at = models.DateTimeField(null=True, blank=True)
     # Snapshot of recipe cost at the moment of sale. It keeps old reports correct
     # after ingredients or recipes are updated later.
     cost_per_unit = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     cost_total = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+
+    class Meta:
+        # Receipts and the kitchen ticket must show the first order before the additions.
+        ordering = ['id']
 
 
 class Expense(models.Model):
@@ -82,6 +143,13 @@ class Ingredient(models.Model):
     unit = models.CharField(max_length=10, choices=[('kg', 'kg'), ('l', 'l'), ('dona', 'dona')])
     quantity = models.DecimalField(max_digits=14, decimal_places=3, default=0)
     minimum = models.DecimalField(max_digits=14, decimal_places=3, default=0)
+    # O'rtacha tortilgan tannarx: har kirimda qayta hisoblanadi. Sarf shu narxda
+    # baholanadi, shuning uchun eski partiya narxi keyingi sarfga ta'sir qiladi.
+    unit_cost = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+
+    @property
+    def stock_value(self):
+        return (self.quantity * self.unit_cost).quantize(Decimal('0.01'))
 
     class Meta:
         ordering = ['name']
@@ -96,13 +164,54 @@ class StockMovement(models.Model):
     request_hash = models.CharField(max_length=64)
     kind = models.CharField(max_length=18, choices=[('receipt', 'Kirim'), ('consumption', 'Kunlik sarf'), ('sale_consumption', 'Sotuv bo‘yicha sarf')])
     quantity = models.DecimalField(max_digits=14, decimal_places=3)
+    # Narx harakat paytida muzlatiladi: keyin tannarx o'zgarsa ham tarix buzilmaydi.
+    # Kirimda foydalanuvchi kiritadi, sarfda o'sha paytdagi o'rtacha tannarxdan olinadi.
+    unit_cost = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    cost_total = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     date = models.DateField()
     note = models.CharField(max_length=250)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['-created_at']
-        constraints = [models.UniqueConstraint(fields=['branch', 'key'], name='stock_idempotency'), models.CheckConstraint(condition=Q(quantity__gt=0), name='stock_positive_movement')]
+        constraints = [
+            models.UniqueConstraint(fields=['branch', 'key'], name='stock_idempotency'),
+            models.CheckConstraint(condition=Q(quantity__gt=0), name='stock_positive_movement'),
+            models.CheckConstraint(condition=Q(cost_total__gte=0), name='stock_nonnegative_cost'),
+        ]
+        indexes = [models.Index(fields=['branch', 'ingredient', 'date'], name='stock_branch_item_date_idx')]
+
+
+class DailyUsage(models.Model):
+    """Admin kechqurun kiritadigan HAQIQIY sarf.
+
+    Bu yozuv ombordan hech narsa ayirmaydi. Sabab: taom sotilganda retsept
+    bo'yicha allaqachon ayriladi, shuning uchun bu yerda ham ayirilsa bitta
+    mahsulot ikki marta chiqib ketardi.
+
+    Uning vazifasi boshqa: tizim hisoblagan (nazariy) sarf bilan haqiqatda
+    ketgan miqdorni solishtirish. Farq kattalashsa — ortiqcha solinyapti,
+    isrof bo'lyapti yoki yo'qolyapti.
+    """
+
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT)
+    actor = models.ForeignKey(User, on_delete=models.PROTECT)
+    ingredient = models.ForeignKey(Ingredient, on_delete=models.PROTECT, related_name='daily_usage')
+    date = models.DateField()
+    quantity = models.DecimalField(max_digits=14, decimal_places=3)
+    note = models.CharField(max_length=250, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-date', 'ingredient__name']
+        constraints = [
+            # Bir kunda bir mahsulot uchun bitta yozuv: qayta kiritilsa
+            # ustiga yoziladi, qo'shilmaydi.
+            models.UniqueConstraint(fields=['branch', 'ingredient', 'date'], name='daily_usage_once_per_day'),
+            models.CheckConstraint(condition=Q(quantity__gt=0), name='daily_usage_positive'),
+        ]
+        indexes = [models.Index(fields=['branch', 'date'], name='daily_usage_branch_date_idx')]
 
 
 class Recipe(models.Model):

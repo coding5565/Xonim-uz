@@ -5,11 +5,13 @@ from html import escape
 from io import BytesIO
 from zipfile import ZIP_DEFLATED, ZipFile
 
+from django.db.models import Count, DecimalField, F, Sum
+from django.db.models.functions import ExtractHour, TruncDate
 from django.utils import timezone
 from rest_framework import serializers
 
 from catalog.models import Category, Dish
-from .models import Order, OrderLine
+from .models import SALE_PAYMENT_LABELS, Order, OrderLine
 
 
 class ReportFilters(serializers.Serializer):
@@ -69,8 +71,8 @@ def build_sales_report(user, filters):
     cost = sum((line.cost_total for line in line_rows), Decimal('0'))
     items_sold = sum(line.quantity for line in line_rows)
     order_count = len(included_orders)
-    cash = sum((sum(line.price * line.quantity for line in line_rows if line.order_id == order.id) for order in included_orders if order.payment_method == 'cash'), Decimal('0'))
-    card = revenue - cash
+    order_method = {order.id: order.payment_method for order in included_orders}
+    method_map = defaultdict(Decimal)
 
     trend_map = defaultdict(lambda: {'revenue': Decimal('0'), 'cost': Decimal('0'), 'orders': set(), 'items': 0})
     category_map = defaultdict(lambda: {'category_id': 0, 'category': '', 'quantity': 0, 'revenue': Decimal('0'), 'cost': Decimal('0'), 'orders': set()})
@@ -95,6 +97,7 @@ def build_sales_report(user, filters):
         item['revenue'] += amount
         item['cost'] += line.cost_total
         item['orders'].add(line.order_id)
+        method_map[order_method.get(line.order_id, '')] += amount
 
     trend = []
     cursor = filters['start'].replace(day=1) if filters['group'] == 'month' else filters['start']
@@ -121,7 +124,10 @@ def build_sales_report(user, filters):
             'revenue': str(revenue), 'cost': str(cost), 'gross_profit': str(revenue - cost),
             'gross_margin': str((revenue - cost) / revenue * 100 if revenue else 0), 'orders': order_count, 'items': items_sold,
             'average_check': str(revenue / order_count if order_count else 0),
-            'cash': str(cash), 'card': str(card),
+            'by_method': [
+                {'method': method, 'label': SALE_PAYMENT_LABELS.get(method, method or '—'), 'revenue': str(total)}
+                for method, total in sorted(method_map.items(), key=lambda row: row[1], reverse=True)
+            ],
         },
         'trend': trend,
         'categories': categories,
@@ -162,7 +168,7 @@ def sales_report_xlsx(report):
         ['Ko‘rsatkich', 'Qiymat'], ['Hisobot boshi', start.isoformat()], ['Hisobot oxiri', end.isoformat()],
         ['Jami tushum', Decimal(report['summary']['revenue'])], ['Buyurtmalar', report['summary']['orders']],
         ['Sotilgan porsiya', report['summary']['items']], ['Tannarx', Decimal(report['summary']['cost'])], ['Yalpi foyda', Decimal(report['summary']['gross_profit'])], ['Yalpi marja, %', Decimal(report['summary']['gross_margin'])], ['O‘rtacha chek', Decimal(report['summary']['average_check'])],
-        ['Naqd', Decimal(report['summary']['cash'])], ['Karta', Decimal(report['summary']['card'])],
+        *[[row['label'], Decimal(row['revenue'])] for row in report['summary']['by_method']],
     ]
     daily = [['Sana', 'Tushum', 'Tannarx', 'Yalpi foyda', 'Buyurtmalar', 'Porsiyalar']] + [[row['date'], Decimal(row['revenue']), Decimal(row['cost']), Decimal(row['gross_profit']), row['orders'], row['items']] for row in report['trend']]
     categories = [['Kategoriya', 'Tushum', 'Tannarx', 'Yalpi foyda', 'Porsiyalar', 'Buyurtmalar']] + [[row['category'], Decimal(row['revenue']), Decimal(row['cost']), Decimal(row['gross_profit']), row['quantity'], row['orders']] for row in report['categories']]
@@ -178,3 +184,147 @@ def sales_report_xlsx(report):
         for index, (_, rows, widths) in enumerate(sheets, 1):
             archive.writestr(f'xl/worksheets/sheet{index}.xml', _sheet(rows, widths))
     return output.getvalue()
+
+
+class SalesBoardFilters(serializers.Serializer):
+    """Filters for the till-facing sales board. Defaults to today."""
+
+    start = serializers.DateField(required=False)
+    end = serializers.DateField(required=False)
+    category = serializers.IntegerField(min_value=1, required=False)
+    dish = serializers.IntegerField(min_value=1, required=False)
+    mine = serializers.BooleanField(default=False)
+
+    def validate(self, attrs):
+        today = timezone.localdate()
+        attrs['end'] = attrs.get('end', today)
+        attrs['start'] = attrs.get('start', attrs['end'])
+        if attrs['start'] > attrs['end']:
+            raise serializers.ValidationError('Boshlanish sanasi tugash sanasidan keyin bo‘lishi mumkin emas.')
+        if attrs['end'] > today:
+            raise serializers.ValidationError('Kelajakdagi sana uchun savdo ko‘rsatilmaydi.')
+        if (attrs['end'] - attrs['start']).days > 366:
+            raise serializers.ValidationError('Bir ko‘rinishda ko‘pi bilan 1 yil.')
+        branch = self.context['request'].user.branch
+        category = None
+        if attrs.get('category'):
+            category = Category.objects.filter(branch=branch, pk=attrs['category']).first()
+            if not category:
+                raise serializers.ValidationError({'category': 'Kategoriya topilmadi.'})
+        if attrs.get('dish'):
+            dish = Dish.objects.filter(branch=branch, pk=attrs['dish']).first()
+            if not dish or (category and dish.category_id != category.id):
+                raise serializers.ValidationError({'dish': 'Taom tanlangan kategoriyaga tegishli emas.'})
+        return attrs
+
+
+def build_sales_board(user, filters):
+    """What the till actually sold: totals, busiest hours, dishes and who rang them up.
+
+    Every figure is grouped in the database, so a wide date range stays one query
+    per section instead of one per row. Recipe cost and margin are deliberately
+    left out: this board is for the people selling, not for costing.
+    """
+    branch = user.branch
+    money = DecimalField(max_digits=18, decimal_places=2)
+    revenue_sum = Sum(F('price') * F('quantity'), output_field=money)
+
+    lines = OrderLine.objects.filter(
+        order__branch=branch,
+        order__status='paid',
+        order__paid_at__date__gte=filters['start'],
+        order__paid_at__date__lte=filters['end'],
+    )
+    if filters.get('mine'):
+        lines = lines.filter(order__cashier=user)
+    if filters.get('category'):
+        lines = lines.filter(dish__category_id=filters['category'])
+    if filters.get('dish'):
+        lines = lines.filter(dish_id=filters['dish'])
+
+    totals = lines.aggregate(revenue=revenue_sum, items=Sum('quantity'), orders=Count('order_id', distinct=True))
+    revenue = totals['revenue'] or Decimal('0')
+    order_count = totals['orders'] or 0
+
+    def cash(value):
+        return str(value or Decimal('0'))
+
+    def grouped(*fields, sort='-revenue'):
+        return list(
+            lines.values(*fields)
+            .annotate(revenue=revenue_sum, quantity=Sum('quantity'), orders=Count('order_id', distinct=True))
+            .order_by(sort)
+        )
+
+    dishes = [
+        {'dish_id': row['dish_id'], 'dish': row['name'], 'category': row['dish__category__name'],
+         'quantity': row['quantity'], 'orders': row['orders'], 'revenue': cash(row['revenue'])}
+        for row in grouped('dish_id', 'name', 'dish__category__name')
+    ]
+    categories = [
+        {'category_id': row['dish__category_id'], 'category': row['dish__category__name'],
+         'quantity': row['quantity'], 'orders': row['orders'], 'revenue': cash(row['revenue'])}
+        for row in grouped('dish__category_id', 'dish__category__name')
+    ]
+    cashiers = [
+        {'name': row['order__cashier__first_name'] or row['order__cashier__username'],
+         'orders': row['orders'], 'quantity': row['quantity'], 'revenue': cash(row['revenue'])}
+        for row in grouped('order__cashier_id', 'order__cashier__first_name', 'order__cashier__username')
+    ]
+    methods = [
+        {'method': row['order__payment_method'],
+         'label': SALE_PAYMENT_LABELS.get(row['order__payment_method'], row['order__payment_method'] or '—'),
+         'orders': row['orders'], 'revenue': cash(row['revenue'])}
+        for row in grouped('order__payment_method')
+    ]
+    hours = [
+        {'hour': row['hour'], 'orders': row['orders'], 'revenue': cash(row['revenue'])}
+        for row in lines.annotate(hour=ExtractHour('order__paid_at')).values('hour')
+        .annotate(revenue=revenue_sum, orders=Count('order_id', distinct=True)).order_by('hour')
+    ]
+    days = [
+        {'date': row['day'].isoformat(), 'orders': row['orders'], 'revenue': cash(row['revenue'])}
+        for row in lines.annotate(day=TruncDate('order__paid_at')).values('day')
+        .annotate(revenue=revenue_sum, orders=Count('order_id', distinct=True)).order_by('day')
+    ]
+
+    checks = Order.objects.filter(
+        branch=branch, status='paid',
+        paid_at__date__gte=filters['start'], paid_at__date__lte=filters['end'],
+    )
+    if filters.get('mine'):
+        checks = checks.filter(cashier=user)
+    if filters.get('category') or filters.get('dish'):
+        checks = checks.filter(id__in=lines.values('order_id'))
+
+    busiest = max(hours, key=lambda row: Decimal(row['revenue'])) if hours else None
+    return {
+        'filters': {
+            'start': filters['start'], 'end': filters['end'],
+            'category': filters.get('category'), 'dish': filters.get('dish'), 'mine': filters.get('mine', False),
+        },
+        'summary': {
+            'revenue': cash(revenue),
+            'orders': order_count,
+            'items': totals['items'] or 0,
+            'average_check': cash((revenue / order_count).quantize(Decimal('0.01')) if order_count else Decimal('0')),
+            'top_dish': dishes[0]['dish'] if dishes else None,
+            'peak_hour': busiest['hour'] if busiest else None,
+            'peak_hour_revenue': busiest['revenue'] if busiest else None,
+        },
+        'methods': methods,
+        'hours': hours,
+        'days': days,
+        'dishes': dishes,
+        'categories': categories,
+        'cashiers': cashiers,
+        'checks': [
+            {'id': order.id, 'table': order.table, 'waiter': order.waiter, 'total': str(order.total),
+             'payment_method': order.payment_method,
+             'payment_label': SALE_PAYMENT_LABELS.get(order.payment_method, order.payment_method or '—'),
+             'paid_at': order.paid_at,
+             'cashier_name': order.cashier.first_name or order.cashier.username,
+             'items': sum(line.quantity for line in order.lines.all())}
+            for order in checks.select_related('cashier').prefetch_related('lines')[:20]
+        ],
+    }

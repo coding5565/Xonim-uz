@@ -1,5 +1,6 @@
 import os
 import secrets
+import sys
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -44,6 +45,19 @@ SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
 DATA_UPLOAD_MAX_MEMORY_SIZE = 6 * 1024 * 1024
+# Chek printeri. Bo'sh qoldirilsa chop etish o'chiq bo'ladi (CI va serverda shunday).
+# Windows navbati nomi ("POS80") yoki tarmoq manzili ("192.168.0.50:9100").
+RECEIPT_PRINTER = os.environ.get('RECEIPT_PRINTER', '')
+# Oshxona printeri. Odatda tarmoqda: "192.168.0.202:9100".
+KITCHEN_PRINTER = os.environ.get('KITCHEN_PRINTER', '')
+RECEIPT_AUTO_PRINT = os.environ.get('RECEIPT_AUTO_PRINT', '1') == '1'
+RECEIPT_OPEN_DRAWER = os.environ.get('RECEIPT_OPEN_DRAWER', '0') == '1'
+# Testlar hech qachon haqiqiy printerga yozmasligi kerak: qog'oz sarflanadi va
+# tarmoq printeri kutib turgani uchun to'plam sekinlashadi.
+if 'test' in sys.argv:
+    RECEIPT_PRINTER = ''
+    KITCHEN_PRINTER = ''
+    RECEIPT_AUTO_PRINT = False
 TIME_ZONE = 'Asia/Tashkent'
 USE_TZ = True
 LANGUAGE_CODE = 'uz'

@@ -9,7 +9,7 @@ from .models import Category, Dish
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
-        fields = ['id', 'name', 'position']
+        fields = ['id', 'name', 'position', 'station']
 
     def validate_name(self, name):
         query = Category.objects.filter(branch=self.context['request'].user.branch, name__iexact=name)
@@ -25,7 +25,8 @@ class DishSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Dish
-        fields = ['id', 'category', 'category_name', 'name', 'description', 'price', 'portion', 'image', 'available', 'archived']
+        fields = ['id', 'category', 'category_name', 'name', 'description', 'price', 'portion', 'image', 'available', 'archived', 'station', 'print_station']
+        read_only_fields = ['print_station']
         extra_kwargs = {'price': {'min_value': 1}}
 
     def validate_category(self, category):

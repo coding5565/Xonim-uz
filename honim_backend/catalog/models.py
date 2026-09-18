@@ -3,10 +3,18 @@ from django.db.models import Q
 from users.models import Branch
 
 
+class Station(models.TextChoices):
+    """Buyurtma berilganda talon qaysi printerdan chiqishini belgilaydi."""
+
+    KITCHEN = 'kitchen', 'Oshxona'
+    COUNTER = 'counter', 'Kassa'
+
+
 class Category(models.Model):
     branch = models.ForeignKey(Branch, on_delete=models.PROTECT)
     name = models.CharField(max_length=100)
     position = models.PositiveIntegerField(default=0)
+    station = models.CharField(max_length=10, choices=Station.choices, default=Station.KITCHEN)
 
     class Meta:
         ordering = ['position', 'id']
@@ -23,6 +31,13 @@ class Dish(models.Model):
     image = models.ImageField(upload_to='dishes/', blank=True)
     available = models.BooleanField(default=True)
     archived = models.BooleanField(default=False)
+    # Bo'sh qoldirilsa kategoriyadan meros oladi. Alohida qiymat faqat istisnolar
+    # uchun: masalan ichimliklar orasida oshxonada damlanadigan choy.
+    station = models.CharField(max_length=10, choices=Station.choices, blank=True)
+
+    @property
+    def print_station(self):
+        return self.station or self.category.station
 
     class Meta:
         ordering = ['category__position', 'id']

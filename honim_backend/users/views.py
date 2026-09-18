@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 from html import escape
 from io import BytesIO
@@ -8,6 +8,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.http import HttpResponse
 from django.contrib.auth import password_validation
 from django.db import transaction
+from django.db.models import Count
 from django.middleware.csrf import get_token
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -17,9 +18,9 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
-from operations.models import SalaryPayment
-from operations.services import Conflict, create_expense
-from .models import AuditEvent, User
+from operations.models import SALE_PAYMENT_METHODS, SalaryPayment
+from operations.services import Conflict, audit, create_expense
+from .models import AuditEvent, User, audit_group, audit_label
 from .permissions import OwnerOnly
 
 
@@ -61,7 +62,12 @@ def salary_register_xlsx(payments):
 
 
 def profile(user):
-    return {'id': user.id, 'username': user.username, 'name': user.first_name or user.username, 'role': user.role, 'branch': user.branch.name if user.branch else None}
+    return {
+        'id': user.id, 'username': user.username, 'name': user.first_name or user.username,
+        'role': user.role, 'branch': user.branch.name if user.branch else None,
+        # Session bootstrap config: the till and the reports render whatever is listed here.
+        'payment_methods': [{'method': method, 'label': label} for method, label in SALE_PAYMENT_METHODS],
+    }
 
 
 class CsrfView(APIView):
@@ -92,6 +98,7 @@ class LoginView(APIView):
         if not user or not user.branch_id:
             return Response({'detail': 'Login yoki parol noto‘g‘ri.'}, status=400)
         login(request, user)
+        audit(user, 'auth.login', f'{user.first_name or user.username} · {user.get_role_display()}')
         return Response(profile(user))
 
 
@@ -102,15 +109,100 @@ class MeView(APIView):
 
 class LogoutView(APIView):
     def post(self, request):
+        # Jurnal yozuvi sessiya yopilmasdan oldin yoziladi: keyin request.user
+        # anonim bo'lib qoladi.
+        audit(request.user, 'auth.logout', f'{request.user.first_name or request.user.username} · {request.user.get_role_display()}')
         logout(request)
         return Response({'detail': 'Sessiya yakunlandi.'})
 
 
+AUDIT_PAGE_SIZE = 100
+
+
+class AuditFilters(serializers.Serializer):
+    page = serializers.IntegerField(min_value=1, default=1)
+    start = serializers.DateField(required=False)
+    end = serializers.DateField(required=False)
+    action = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    actor = serializers.IntegerField(min_value=1, required=False)
+
+    def validate(self, attrs):
+        if attrs.get('start') and attrs.get('end') and attrs['start'] > attrs['end']:
+            raise serializers.ValidationError('Boshlanish sanasi tugash sanasidan keyin bo‘lishi mumkin emas.')
+        return attrs
+
+
+def _day_window(start, end):
+    """Mahalliy kunni server vaqt zonasidagi oraliqqa aylantiradi.
+
+    Filtr `created_at__date` emas, balki oraliq bo‘yicha ishlaydi — shunda
+    indeks ishlatiladi va jurnal o‘n minglab qator bo‘lsa ham tez qoladi.
+    """
+    bounds = {}
+    if start:
+        bounds['created_at__gte'] = timezone.make_aware(datetime.combine(start, time.min))
+    if end:
+        bounds['created_at__lt'] = timezone.make_aware(datetime.combine(end + timedelta(days=1), time.min))
+    return bounds
+
+
 class AuditView(APIView):
+    """Superadmin uchun harakatlar jurnali: hammasi saqlanadi, 100 tadan ko‘rsatiladi."""
+
     permission_classes = [OwnerOnly]
 
     def get(self, request):
-        return Response(list(AuditEvent.objects.filter(branch=request.user.branch).values('id', 'action', 'description', 'created_at', 'actor__username')[:100]))
+        filters = AuditFilters(data=request.query_params)
+        filters.is_valid(raise_exception=True)
+        data = filters.validated_data
+
+        scope = AuditEvent.objects.filter(branch=request.user.branch, **_day_window(data.get('start'), data.get('end')))
+        rows = scope
+        if data.get('action'):
+            rows = rows.filter(action=data['action'])
+        if data.get('actor'):
+            rows = rows.filter(actor_id=data['actor'])
+
+        count = rows.count()
+        pages = max(1, -(-count // AUDIT_PAGE_SIZE))
+        page = min(data['page'], pages)
+        start_index = (page - 1) * AUDIT_PAGE_SIZE
+        window = rows.values('id', 'action', 'description', 'created_at', 'actor_id', 'actor__first_name', 'actor__username')[start_index:start_index + AUDIT_PAGE_SIZE]
+
+        # Ro'yxatlar sana oralig'iga qarab tuziladi, lekin tanlangan harakat turi
+        # hisobga olinmaydi — aks holda filtr o'zini o'zi bir bandga qisqartirardi.
+        # .order_by() shart: modelning Meta.ordering'i GROUP BY'ni buzadi.
+        action_counts = scope.values('action').annotate(total=Count('id')).order_by('-total', 'action')
+        actor_counts = scope.values('actor_id', 'actor__first_name', 'actor__username').annotate(total=Count('id')).order_by('-total')
+
+        return Response({
+            'results': [{
+                'id': row['id'],
+                'action': row['action'],
+                'label': audit_label(row['action']),
+                'group': audit_group(row['action']),
+                'description': row['description'],
+                'created_at': row['created_at'],
+                'actor_id': row['actor_id'],
+                'actor': row['actor__first_name'] or row['actor__username'],
+            } for row in window],
+            'page': page,
+            'pages': pages,
+            'count': count,
+            'page_size': AUDIT_PAGE_SIZE,
+            'total': scope.count() if (data.get('action') or data.get('actor')) else count,
+            'actions': [{
+                'action': row['action'],
+                'label': audit_label(row['action']),
+                'group': audit_group(row['action']),
+                'count': row['total'],
+            } for row in action_counts],
+            'actors': [{
+                'id': row['actor_id'],
+                'name': row['actor__first_name'] or row['actor__username'],
+                'count': row['total'],
+            } for row in actor_counts],
+        })
 
 
 class StaffCreateInput(serializers.Serializer):

@@ -1,3 +1,11 @@
 import { defineConfig } from 'vite'
-import vue from '@vitejs/plugin-vue'
-export default defineConfig({ plugins: [vue()], server: { port: 5173, strictPort: true, proxy: { '/api': 'http://127.0.0.1:8000', '/media': 'http://127.0.0.1:8000' } } })
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    port: 5173,
+    strictPort: true,
+    proxy: { '/api': 'http://127.0.0.1:8000', '/media': 'http://127.0.0.1:8000' },
+  },
+})
