@@ -12,6 +12,7 @@ from rest_framework import serializers
 
 from catalog.models import Category, Dish
 from .models import SALE_PAYMENT_LABELS, Order, OrderLine
+from core.i18n import _
 
 
 class ReportFilters(serializers.Serializer):
@@ -26,21 +27,21 @@ class ReportFilters(serializers.Serializer):
         attrs['end'] = attrs.get('end', today)
         attrs['start'] = attrs.get('start', attrs['end'].replace(day=1))
         if attrs['start'] > attrs['end']:
-            raise serializers.ValidationError('Boshlanish sanasi tugash sanasidan keyin bo‘lishi mumkin emas.')
+            raise serializers.ValidationError(_('Boshlanish sanasi tugash sanasidan keyin bo‘lishi mumkin emas.'))
         if attrs['end'] > today:
-            raise serializers.ValidationError('Kelajakdagi sana uchun savdo hisoboti tuzilmaydi.')
+            raise serializers.ValidationError(_('Kelajakdagi sana uchun savdo hisoboti tuzilmaydi.'))
         if (attrs['end'] - attrs['start']).days > 1095:
-            raise serializers.ValidationError('Bir hisobot oralig‘i ko‘pi bilan 3 yil.')
+            raise serializers.ValidationError(_('Bir hisobot oralig‘i ko‘pi bilan 3 yil.'))
         request = self.context['request']
         category = None
         if attrs.get('category'):
             category = Category.objects.filter(branch=request.user.branch, pk=attrs['category']).first()
             if not category:
-                raise serializers.ValidationError({'category': 'Kategoriya topilmadi.'})
+                raise serializers.ValidationError({'category': _('Kategoriya topilmadi.')})
         if attrs.get('dish'):
             dish = Dish.objects.filter(branch=request.user.branch, pk=attrs['dish']).first()
             if not dish or (category and dish.category_id != category.id):
-                raise serializers.ValidationError({'dish': 'Taom tanlangan kategoriyaga tegishli emas.'})
+                raise serializers.ValidationError({'dish': _('Taom tanlangan kategoriyaga tegishli emas.')})
         if attrs['group'] == 'auto':
             attrs['group'] = 'month' if (attrs['end'] - attrs['start']).days > 62 else 'day'
         return attrs
@@ -200,21 +201,21 @@ class SalesBoardFilters(serializers.Serializer):
         attrs['end'] = attrs.get('end', today)
         attrs['start'] = attrs.get('start', attrs['end'])
         if attrs['start'] > attrs['end']:
-            raise serializers.ValidationError('Boshlanish sanasi tugash sanasidan keyin bo‘lishi mumkin emas.')
+            raise serializers.ValidationError(_('Boshlanish sanasi tugash sanasidan keyin bo‘lishi mumkin emas.'))
         if attrs['end'] > today:
-            raise serializers.ValidationError('Kelajakdagi sana uchun savdo ko‘rsatilmaydi.')
+            raise serializers.ValidationError(_('Kelajakdagi sana uchun savdo ko‘rsatilmaydi.'))
         if (attrs['end'] - attrs['start']).days > 366:
-            raise serializers.ValidationError('Bir ko‘rinishda ko‘pi bilan 1 yil.')
+            raise serializers.ValidationError(_('Bir ko‘rinishda ko‘pi bilan 1 yil.'))
         branch = self.context['request'].user.branch
         category = None
         if attrs.get('category'):
             category = Category.objects.filter(branch=branch, pk=attrs['category']).first()
             if not category:
-                raise serializers.ValidationError({'category': 'Kategoriya topilmadi.'})
+                raise serializers.ValidationError({'category': _('Kategoriya topilmadi.')})
         if attrs.get('dish'):
             dish = Dish.objects.filter(branch=branch, pk=attrs['dish']).first()
             if not dish or (category and dish.category_id != category.id):
-                raise serializers.ValidationError({'dish': 'Taom tanlangan kategoriyaga tegishli emas.'})
+                raise serializers.ValidationError({'dish': _('Taom tanlangan kategoriyaga tegishli emas.')})
         return attrs
 
 

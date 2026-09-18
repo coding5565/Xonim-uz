@@ -5,6 +5,7 @@ import {
 import { Link } from 'react-router-dom'
 import { api, download, money, today } from '../api'
 import AppModal from '../components/AppModal'
+import { useI18n } from '../i18n'
 
 interface Staff {
   id: number
@@ -64,6 +65,7 @@ const roleName = (role: string) =>
   role === 'owner' ? 'Superadmin' : role === 'admin' ? 'Admin' : role === 'kitchen' ? 'Oshxona' : 'Kassir'
 
 export default function StaffPage() {
+  const { t, tn } = useI18n()
   const currentMonth = today().slice(0, 7)
   const [staff, setStaff] = useState<Staff[]>([])
   const [payments, setPayments] = useState<SalaryPayment[]>([])
@@ -231,47 +233,51 @@ export default function StaffPage() {
     <>
       <div className="page-heading">
         <div>
-          <span className="eyebrow">JAMOA VA ISH HAQI</span>
-          <h1>Xodimlar<span className="heading-dot">.</span></h1>
-          <p>Hisoblar, lavozimlar va oylik to‘lovlari bir joyda.</p>
+          <span className="eyebrow">{t('JAMOA VA ISH HAQI')}</span>
+          <h1>{t('Xodimlar')}<span className="heading-dot">.</span></h1>
+          <p>{t('Hisoblar, lavozimlar va oylik to‘lovlari bir joyda.')}</p>
         </div>
         <div className="heading-actions">
-          <Link to="/payroll" className="button secondary"><Banknote size={17} />Oyliklar tahlili</Link>
-          <button className="button secondary" onClick={exportPayroll}><Download size={17} />Oyliklar Excel</button>
-          <button className="button primary" onClick={startCreate}><Plus size={18} />Xodim yaratish</button>
+          <Link to="/payroll" className="button secondary"><Banknote size={17} />{t('Oyliklar tahlili')}</Link>
+          <button className="button secondary" onClick={exportPayroll}><Download size={17} />{t('Oyliklar Excel')}</button>
+          <button className="button primary" onClick={startCreate}><Plus size={18} />{t('Xodim yaratish')}</button>
         </div>
       </div>
       {error && <p className="alert error">{error}</p>}
       <div className="staff-summary-grid">
         <article>
-          <Users /><span>Faol xodimlar</span><strong>{activeCount}</strong>
-          <small>{employees.length} ta xodim hisobidan</small>
+          <Users /><span>{t('Faol xodimlar')}</span><strong>{activeCount}</strong>
+          <small>{tn('{count} ta xodim hisobidan', employees.length)}</small>
         </article>
         <article>
-          <Banknote /><span>Oylik ish haqi fondi</span><strong>{money(monthlyPayroll)}</strong><small>so‘m / oy</small>
+          <Banknote /><span>{t('Oylik ish haqi fondi')}</span><strong>{money(monthlyPayroll)}</strong>
+          <small>{t('so‘m / oy')}</small>
         </article>
         <article>
-          <CalendarCheck /><span>{currentMonth} da to‘langan</span>
-          <strong>{paidThisMonth} / {activeCount}</strong><small>har xodimga oyiga bir marta</small>
+          <CalendarCheck /><span>{t('{month} da to‘langan', { month: currentMonth })}</span>
+          <strong>{paidThisMonth} / {activeCount}</strong><small>{t('har xodimga oyiga bir marta')}</small>
         </article>
       </div>
       <section className="panel">
         <header className="panel-heading">
-          <div><h2>Xodimlar ro‘yxati</h2><p>Rol, oylik va hisob holatini boshqaring</p></div>
+          <div><h2>{t('Xodimlar ro‘yxati')}</h2><p>{t('Rol, oylik va hisob holatini boshqaring')}</p></div>
           <div className="search-field">
             <Search size={17} />
             <input
               value={query}
               onChange={event => setQuery(event.target.value)}
-              placeholder="Ism, login yoki telefon…"
-              aria-label="Xodim qidirish"
+              placeholder={t('Ism, login yoki telefon…')}
+              aria-label={t('Xodim qidirish')}
             />
           </div>
         </header>
         <div className="table-wrap">
           <table>
             <thead>
-              <tr><th>XODIM</th><th>ROL</th><th>OYLIK</th><th>SO‘NGGI TO‘LOV</th><th>HOLAT</th><th>AMALLAR</th></tr>
+              <tr>
+                <th>{t('XODIM')}</th><th>{t('ROL')}</th><th>{t('OYLIK')}</th>
+                <th>{t('SO‘NGGI TO‘LOV')}</th><th>{t('HOLAT')}</th><th>{t('AMALLAR')}</th>
+              </tr>
             </thead>
             <tbody>
               {filtered.map(item => (
@@ -280,8 +286,8 @@ export default function StaffPage() {
                     <strong>{item.name}</strong>
                     <small>@{item.username}{item.phone ? ` · ${item.phone}` : ''}</small>
                   </td>
-                  <td><span className="pill subtle">{roleName(item.role)}</span></td>
-                  <td className="number">{item.role === 'owner' ? '—' : `${money(item.salary)} so‘m`}</td>
+                  <td><span className="pill subtle">{t(roleName(item.role))}</span></td>
+                  <td className="number">{item.role === 'owner' ? '—' : `${money(item.salary)} ${t('so‘m')}`}</td>
                   <td>
                     {item.role === 'owner' ? <span>—</span>
                       : item.last_salary_period ? (
@@ -289,25 +295,25 @@ export default function StaffPage() {
                           <strong>{item.last_salary_period}</strong>
                           <small>{item.last_salary_paid_on}</small>
                         </>
-                      ) : <span>To‘lov yo‘q</span>}
+                      ) : <span>{t('To‘lov yo‘q')}</span>}
                   </td>
                   <td>
                     <span className={`status ${item.active ? 'paid' : 'open'}`}>
-                      {item.active ? 'Faol' : 'Bloklangan'}
+                      {item.active ? t('Faol') : t('Bloklangan')}
                     </span>
                   </td>
                   <td>
                     {item.role !== 'owner' ? (
                       <div className="staff-actions">
-                        <button className="table-action" title="Tahrirlash" onClick={() => startEdit(item)}>
+                        <button className="table-action" title={t('Tahrirlash')} onClick={() => startEdit(item)}>
                           <Pencil size={15} />
                         </button>
                         <button className="table-action pay" onClick={() => startPay(item)}>
-                          <Banknote size={15} />Oylik
+                          <Banknote size={15} />{t('Oylik')}
                         </button>
-                        <button className="text-link" onClick={() => showHistory(item)}>Tarix</button>
+                        <button className="text-link" onClick={() => showHistory(item)}>{t('Tarix')}</button>
                       </div>
-                    ) : <small>Bosh hisob</small>}
+                    ) : <small>{t('Bosh hisob')}</small>}
                   </td>
                 </tr>
               ))}

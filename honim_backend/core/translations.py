@@ -97,7 +97,26 @@ RU = {
     'Mahsulot boshqa filialga tegishli.': 'Продукт принадлежит другому филиалу.',
     'Kategoriya tanlangan taomga tegishli emas.':
         'Категория не относится к выбранному блюду.',
+    # --- Qolganlari ---
+    '7 yoki 30 kunni tanlang, yoki oyni belgilang.':
+        'Выберите 7 или 30 дней либо укажите месяц.',
+    'Bir ko‘rinishda ko‘pi bilan 1 yil.': 'В одном представлении — не более 1 года.',
+    'Bir xil amal kaliti boshqa ma’lumot bilan yuborildi.':
+        'Тот же ключ операции отправлен с другими данными.',
+    'Bu kategoriya allaqachon mavjud.': 'Такая категория уже существует.',
+    'Davr noto‘g‘ri.': 'Неверный период.',
+    'Kamida bitta masalliq kiriting.': 'Укажите хотя бы один ингредиент.',
+    'Kategoriya ushbu filialga tegishli emas.': 'Категория не принадлежит этому филиалу.',
+    'Kelajakdagi sana uchun savdo ko‘rsatilmaydi.': 'Продажи за будущую дату не показываются.',
+    'Ombor yetarli emas. Kirimni tekshiring: ': 'Недостаточно на складе. Проверьте приход: ',
+    'Oy noto‘g‘ri.': 'Неверный месяц.',
+    'Rasm 5 MB dan kichik bo‘lishi kerak.': 'Изображение должно быть меньше 5 МБ.',
+    'Rasm formati noto‘g‘ri.': 'Неверный формат изображения.',
+    'Rasm o‘lchami juda katta.': 'Размер изображения слишком велик.',
+    'Savol kamida 2 belgidan iborat bo‘lsin.': 'Вопрос должен содержать хотя бы 2 символа.',
+    'Taom tanlangan kategoriyaga tegishli emas.': 'Блюдо не относится к выбранной категории.',
 }
+
 
 EN = {
     # --- Umumiy xatolar ---
@@ -190,4 +209,23 @@ EN = {
     'Mahsulot boshqa filialga tegishli.': 'That item belongs to another branch.',
     'Kategoriya tanlangan taomga tegishli emas.':
         'The category does not match the selected dish.',
+    # --- Qolganlari ---
+    '7 yoki 30 kunni tanlang, yoki oyni belgilang.':
+        'Choose 7 or 30 days, or pick a month.',
+    'Bir ko‘rinishda ko‘pi bilan 1 yil.': 'One view covers a year at most.',
+    'Bir xil amal kaliti boshqa ma’lumot bilan yuborildi.':
+        'The same request key arrived with different data.',
+    'Bu kategoriya allaqachon mavjud.': 'That category already exists.',
+    'Davr noto‘g‘ri.': 'Invalid period.',
+    'Kamida bitta masalliq kiriting.': 'Add at least one ingredient.',
+    'Kategoriya ushbu filialga tegishli emas.': 'That category belongs to another branch.',
+    'Kelajakdagi sana uchun savdo ko‘rsatilmaydi.': 'Sales are not shown for a future date.',
+    'Ombor yetarli emas. Kirimni tekshiring: ': 'Not enough stock. Check the receipts: ',
+    'Oy noto‘g‘ri.': 'Invalid month.',
+    'Rasm 5 MB dan kichik bo‘lishi kerak.': 'The image must be under 5 MB.',
+    'Rasm formati noto‘g‘ri.': 'Unsupported image format.',
+    'Rasm o‘lchami juda katta.': 'The image is too large.',
+    'Savol kamida 2 belgidan iborat bo‘lsin.': 'The question needs at least 2 characters.',
+    'Taom tanlangan kategoriyaga tegishli emas.': 'The dish does not belong to the selected category.',
 }
+

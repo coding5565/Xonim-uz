@@ -4,6 +4,7 @@ from PIL import Image, UnidentifiedImageError
 from django.core.files.base import ContentFile
 from rest_framework import serializers
 from .models import Category, Dish
+from core.i18n import _
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -16,7 +17,7 @@ class CategorySerializer(serializers.ModelSerializer):
         if self.instance:
             query = query.exclude(pk=self.instance.pk)
         if query.exists():
-            raise serializers.ValidationError('Bu kategoriya allaqachon mavjud.')
+            raise serializers.ValidationError(_('Bu kategoriya allaqachon mavjud.'))
         return name
 
 
@@ -31,22 +32,22 @@ class DishSerializer(serializers.ModelSerializer):
 
     def validate_category(self, category):
         if category.branch_id != self.context['request'].user.branch_id:
-            raise serializers.ValidationError('Kategoriya ushbu filialga tegishli emas.')
+            raise serializers.ValidationError(_('Kategoriya ushbu filialga tegishli emas.'))
         return category
 
     def validate_image(self, value):
         if not value:
             return value
         if value.size > 5 * 1024 * 1024:
-            raise serializers.ValidationError('Rasm 5 MB dan kichik bo‘lishi kerak.')
+            raise serializers.ValidationError(_('Rasm 5 MB dan kichik bo‘lishi kerak.'))
         try:
             source = Image.open(value)
             if source.width * source.height > 20_000_000:
-                raise serializers.ValidationError('Rasm o‘lchami juda katta.')
+                raise serializers.ValidationError(_('Rasm o‘lchami juda katta.'))
             source = source.convert('RGB')
             source.thumbnail((1200, 1200))
             output = BytesIO()
             source.save(output, 'JPEG', quality=85)
             return ContentFile(output.getvalue(), name=f'{uuid4().hex}.jpg')
         except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
-            raise serializers.ValidationError('Rasm formati noto‘g‘ri.')
+            raise serializers.ValidationError(_('Rasm formati noto‘g‘ri.'))

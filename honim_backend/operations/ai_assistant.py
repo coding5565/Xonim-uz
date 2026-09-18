@@ -13,6 +13,7 @@ from rest_framework import serializers
 from catalog.models import Dish
 from users.models import User
 from .models import Expense, Ingredient, Order, OrderLine
+from core.i18n import _
 
 
 class AssistantQuestion(serializers.Serializer):
@@ -20,7 +21,7 @@ class AssistantQuestion(serializers.Serializer):
 
     def validate_question(self, value):
         if len(value) < 2:
-            raise serializers.ValidationError('Savol kamida 2 belgidan iborat bo‘lsin.')
+            raise serializers.ValidationError(_('Savol kamida 2 belgidan iborat bo‘lsin.'))
         return value
 
 

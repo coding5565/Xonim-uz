@@ -27,7 +27,7 @@ def fingerprint(data):
 def existing(model, user, data):
     obj = model.objects.filter(branch=user.branch, key=data['key']).first()
     if obj and obj.request_hash != fingerprint(data):
-        raise Conflict('Bir xil amal kaliti boshqa ma’lumot bilan yuborildi.')
+        raise Conflict(_('Bir xil amal kaliti boshqa ma’lumot bilan yuborildi.'))
     return obj
 
 
@@ -114,7 +114,7 @@ def consume_order_stock(user, order):
             available = ingredient.quantity if ingredient else 0
             missing.append(f'{name}: kerak {quantity.normalize()} {ingredient.unit if ingredient else ""}, qoldiq {available}')
     if missing:
-        raise ValidationError({'stock': 'Ombor yetarli emas. Kirimni tekshiring: ' + '; '.join(missing)})
+        raise ValidationError({'stock': _('Ombor yetarli emas. Kirimni tekshiring: ') + '; '.join(missing)})
 
     for ingredient_id, quantity in required.items():
         ingredient = ingredients[ingredient_id]
@@ -223,7 +223,7 @@ def append_order_lines(user, order_id, data):
     if not order:
         raise ValidationError(_('Buyurtma topilmadi.'))
     if order.status != 'open':
-        raise Conflict('To‘langan hisobga taom qo‘shib bo‘lmaydi. Yangi hisob oching.')
+        raise Conflict(_('To‘langan hisobga taom qo‘shib bo‘lmaydi. Yangi hisob oching.'))
     if OrderLine.objects.filter(order=order, batch_key=data['key']).exists():
         order.refresh_from_db()
         return order
@@ -435,7 +435,7 @@ def pay_order(user, order_id, method):
         raise ValidationError(_('Buyurtma topilmadi.'))
     if order.status == 'paid':
         if order.payment_method != method:
-            raise Conflict('Buyurtma boshqa usul bilan to‘langan.')
+            raise Conflict(_('Buyurtma boshqa usul bilan to‘langan.'))
         return order
     consume_order_stock(user, order)
     changed = Order.objects.filter(pk=order.pk, status='open').update(status='paid', payment_method=method, paid_at=timezone.now())

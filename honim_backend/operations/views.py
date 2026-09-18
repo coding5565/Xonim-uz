@@ -17,13 +17,14 @@ from .printing import PrinterError, print_receipt
 from .services import append_order_lines, apply_discount, audit, cancel_order, create_order, pay_order, create_expense, move_stock, quantity_text, refund_order, remove_order_line, reprice_recipes, Conflict
 from .reports import ReportFilters, SalesBoardFilters, build_sales_board, build_sales_report, sales_report_xlsx
 from .ai_assistant import AssistantQuestion, ask_openai, business_snapshot, local_answer
+from core.i18n import _
 
 
 def safely(call, *args):
     try:
         return call(*args)
     except (IntegrityError, OperationalError):
-        raise Conflict('Amal boshqa so‘rov bilan to‘qnashdi. Shu amalni qayta tekshiring.')
+        raise Conflict(_('Amal boshqa so‘rov bilan to‘qnashdi. Shu amalni qayta tekshiring.'))
 
 
 class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
@@ -82,7 +83,7 @@ class TableViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Crea
     @transaction.atomic
     def perform_destroy(self, instance):
         if instance.orders.filter(status='open').exists():
-            raise Conflict('Bu stolda ochiq hisob bor. Avval to‘lovni yakunlang.')
+            raise Conflict(_('Bu stolda ochiq hisob bor. Avval to‘lovni yakunlang.'))
         # Yopilgan buyurtmalar tarixi saqlanishi kerak, shuning uchun o'chirish o'rniga
         # stol faolsizlantiriladi.
         instance.active = False
@@ -108,7 +109,7 @@ class VoidInput(serializers.Serializer):
 
     def validate_reason(self, value):
         if len(value.strip()) < 3:
-            raise serializers.ValidationError('Sababni yozing.')
+            raise serializers.ValidationError(_('Sababni yozing.'))
         return value.strip()
 
 
@@ -174,7 +175,7 @@ class ReceiptPrintView(APIView):
     def post(self, request, pk):
         order = Order.objects.filter(branch=request.user.branch, pk=pk).prefetch_related('lines').first()
         if not order:
-            raise serializers.ValidationError('Buyurtma topilmadi.')
+            raise serializers.ValidationError(_('Buyurtma topilmadi.'))
         try:
             print_receipt(order)
         except PrinterError as error:
@@ -206,7 +207,7 @@ class KitchenStatusView(APIView):
         requested = serializers.ChoiceField(choices=['preparing', 'ready', 'served']).run_validation(request.data.get('status'))
         order = Order.objects.select_for_update().filter(branch=request.user.branch, pk=pk).first()
         if not order:
-            raise serializers.ValidationError('Buyurtma topilmadi.')
+            raise serializers.ValidationError(_('Buyurtma topilmadi.'))
         transitions = {'queued': 'preparing', 'preparing': 'ready', 'ready': 'served'}
         expected = transitions.get(order.preparation_status)
         if order.preparation_status == requested:
@@ -310,17 +311,17 @@ def dashboard_period(params, today):
         try:
             first = datetime.strptime(month, '%Y-%m').date().replace(day=1)
         except ValueError:
-            raise serializers.ValidationError('Oy noto‘g‘ri. Format: YYYY-MM.')
+            raise serializers.ValidationError(_('Oy noto‘g‘ri. Format: YYYY-MM.'))
         if first > today.replace(day=1):
-            raise serializers.ValidationError('Kelajak oyi uchun hisobot tuzilmaydi.')
+            raise serializers.ValidationError(_('Kelajak oyi uchun hisobot tuzilmaydi.'))
         last = (first.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
         return first, min(last, today), (first - timedelta(days=1)).replace(day=1), first - timedelta(days=1)
     try:
         days = int(params.get('days', 7))
     except (TypeError, ValueError):
-        raise serializers.ValidationError('Davr noto‘g‘ri.')
+        raise serializers.ValidationError(_('Davr noto‘g‘ri.'))
     if days not in (7, 30):
-        raise serializers.ValidationError('7 yoki 30 kunni tanlang, yoki oyni belgilang.')
+        raise serializers.ValidationError(_('7 yoki 30 kunni tanlang, yoki oyni belgilang.'))
     start = today - timedelta(days=days - 1)
     return start, today, start - timedelta(days=days), start - timedelta(days=1)
 

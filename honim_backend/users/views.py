@@ -22,6 +22,7 @@ from operations.models import SALE_PAYMENT_METHODS, SalaryPayment
 from operations.services import Conflict, audit, create_expense
 from .models import AuditEvent, User, audit_group, audit_label
 from .permissions import OwnerOnly
+from core.i18n import _
 
 
 def salary_register_xlsx(payments):
@@ -128,7 +129,7 @@ class AuditFilters(serializers.Serializer):
 
     def validate(self, attrs):
         if attrs.get('start') and attrs.get('end') and attrs['start'] > attrs['end']:
-            raise serializers.ValidationError('Boshlanish sanasi tugash sanasidan keyin bo‘lishi mumkin emas.')
+            raise serializers.ValidationError(_('Boshlanish sanasi tugash sanasidan keyin bo‘lishi mumkin emas.'))
         return attrs
 
 
@@ -217,7 +218,7 @@ class StaffCreateInput(serializers.Serializer):
 
     def validate_username(self, value):
         if User.objects.filter(username__iexact=value).exists():
-            raise serializers.ValidationError('Bu login band.')
+            raise serializers.ValidationError(_('Bu login band.'))
         return value
 
     def validate_password(self, value):
@@ -246,14 +247,14 @@ class SalaryPaymentInput(serializers.Serializer):
         try:
             period = datetime.strptime(value, '%Y-%m').date().replace(day=1)
         except ValueError:
-            raise serializers.ValidationError('Oy noto‘g‘ri.')
+            raise serializers.ValidationError(_('Oy noto‘g‘ri.'))
         if period > timezone.localdate().replace(day=1):
-            raise serializers.ValidationError('Kelajak oyi uchun to‘lov kiritib bo‘lmaydi.')
+            raise serializers.ValidationError(_('Kelajak oyi uchun to‘lov kiritib bo‘lmaydi.'))
         return period
 
     def validate_paid_on(self, value):
         if value > timezone.localdate():
-            raise serializers.ValidationError('Kelajakdagi to‘lov sanasi mumkin emas.')
+            raise serializers.ValidationError(_('Kelajakdagi to‘lov sanasi mumkin emas.'))
         return value
 
 
@@ -278,7 +279,7 @@ def staff_payload(user):
 def branch_employee(request, pk):
     user = User.objects.filter(branch=request.user.branch, pk=pk).first()
     if not user:
-        raise serializers.ValidationError('Xodim topilmadi.')
+        raise serializers.ValidationError(_('Xodim topilmadi.'))
     return user
 
 
@@ -321,7 +322,7 @@ class StaffDetailView(APIView):
     def patch(self, request, pk):
         user = branch_employee(request, pk)
         if user.role == User.Role.OWNER:
-            raise serializers.ValidationError('Superadmin hisobini bu yerdan o‘zgartirib bo‘lmaydi.')
+            raise serializers.ValidationError(_('Superadmin hisobini bu yerdan o‘zgartirib bo‘lmaydi.'))
         serializer = StaffUpdateInput(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -358,14 +359,14 @@ class SalaryPaymentView(APIView):
     def post(self, request, pk):
         employee = User.objects.select_for_update().filter(branch=request.user.branch, pk=pk).first()
         if not employee:
-            raise serializers.ValidationError('Xodim topilmadi.')
+            raise serializers.ValidationError(_('Xodim topilmadi.'))
         if employee.role == User.Role.OWNER:
-            raise serializers.ValidationError('Superadmin oyligi bu bo‘limda yuritilmaydi.')
+            raise serializers.ValidationError(_('Superadmin oyligi bu bo‘limda yuritilmaydi.'))
         serializer = SalaryPaymentInput(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         if SalaryPayment.objects.select_for_update().filter(branch=request.user.branch, employee=employee, period=data['period']).exists():
-            raise Conflict('Bu xodim uchun tanlangan oy oyligi allaqachon to‘langan.')
+            raise Conflict(_('Bu xodim uchun tanlangan oy oyligi allaqachon to‘langan.'))
         expense = create_expense(request.user, {
             'key': uuid4(),
             'category': 'Ish haqi',

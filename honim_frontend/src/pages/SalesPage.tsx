@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { api, dateLabel, list, money, today } from '../api'
 import { useSession } from '../session'
+import { useI18n } from '../i18n'
 import ShiftClosePanel from '../components/ShiftClosePanel'
 import type { Category, Dish, SalesBoard, SalesSummary } from '../types'
 
@@ -33,6 +34,7 @@ const hourLabel = (hour: number) => `${String(hour).padStart(2, '0')}:00`
 
 export default function SalesPage() {
   const { user } = useSession()
+  const { t, tn } = useI18n()
   const [categories, setCategories] = useState<Category[]>([])
   const [dishes, setDishes] = useState<Dish[]>([])
   const [data, setData] = useState<SalesBoard>()

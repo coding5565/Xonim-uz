@@ -24,6 +24,7 @@ from users.permissions import ManagerOnly
 
 from .models import Ingredient, StockMovement
 from .money import money, quantity, share
+from core.i18n import _
 
 OUT_KINDS = ['consumption', 'sale_consumption']
 KIND_LABELS = {
@@ -42,13 +43,13 @@ class UsageFilters(serializers.Serializer):
         attrs['end'] = attrs.get('end', today)
         attrs['start'] = attrs.get('start', attrs['end'].replace(day=1))
         if attrs['start'] > attrs['end']:
-            raise serializers.ValidationError('Boshlanish sanasi tugash sanasidan keyin bo‘lishi mumkin emas.')
+            raise serializers.ValidationError(_('Boshlanish sanasi tugash sanasidan keyin bo‘lishi mumkin emas.'))
         if (attrs['end'] - attrs['start']).days > 1095:
-            raise serializers.ValidationError('Bir hisobot oralig‘i ko‘pi bilan 3 yil.')
+            raise serializers.ValidationError(_('Bir hisobot oralig‘i ko‘pi bilan 3 yil.'))
         if attrs.get('ingredient'):
             branch = self.context['request'].user.branch
             if not Ingredient.objects.filter(branch=branch, pk=attrs['ingredient']).exists():
-                raise serializers.ValidationError({'ingredient': 'Mahsulot topilmadi.'})
+                raise serializers.ValidationError({'ingredient': _('Mahsulot topilmadi.')})
         if attrs['group'] == 'auto':
             attrs['group'] = 'month' if (attrs['end'] - attrs['start']).days > 62 else 'day'
         return attrs

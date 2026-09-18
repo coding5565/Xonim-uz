@@ -26,6 +26,7 @@ from users.permissions import ManagerOnly, OwnerOnly
 from .models import DailyUsage, Ingredient, StockMovement
 from .money import CENT, money, quantity, share
 from .services import audit, audit_many, quantity_text
+from core.i18n import _
 
 # Shu foizdan katta farq e'tibor talab qiladi.
 ALERT_SHARE = Decimal('15')
@@ -49,16 +50,16 @@ class DailyUsageInput(serializers.Serializer):
     def validate_date(self, value):
         today = timezone.localdate()
         if value > today:
-            raise serializers.ValidationError('Kelajakdagi kun uchun sarf kiritilmaydi.')
+            raise serializers.ValidationError(_('Kelajakdagi kun uchun sarf kiritilmaydi.'))
         if (today - value).days > BACKDATE_DAYS:
             raise serializers.ValidationError(f'Faqat oxirgi {BACKDATE_DAYS} kun uchun kiritish mumkin.')
         return value
 
     def validate_lines(self, lines):
         if len({line['ingredient'] for line in lines}) != len(lines):
-            raise serializers.ValidationError('Bir mahsulotni faqat bir marta kiriting.')
+            raise serializers.ValidationError(_('Bir mahsulotni faqat bir marta kiriting.'))
         if len(lines) > 200:
-            raise serializers.ValidationError('Bir kunda ko‘pi bilan 200 qator.')
+            raise serializers.ValidationError(_('Bir kunda ko‘pi bilan 200 qator.'))
         return lines
 
 
@@ -75,9 +76,9 @@ class DailyUsageFilters(serializers.Serializer):
         attrs['end'] = attrs.get('end', today)
         attrs['start'] = attrs.get('start', attrs['end'] - timedelta(days=13))
         if attrs['start'] > attrs['end']:
-            raise serializers.ValidationError('Boshlanish sanasi tugash sanasidan keyin bo‘lishi mumkin emas.')
+            raise serializers.ValidationError(_('Boshlanish sanasi tugash sanasidan keyin bo‘lishi mumkin emas.'))
         if (attrs['end'] - attrs['start']).days > 366:
-            raise serializers.ValidationError('Bir oraliq ko‘pi bilan bir yil.')
+            raise serializers.ValidationError(_('Bir oraliq ko‘pi bilan bir yil.'))
         return attrs
 
 
@@ -91,7 +92,7 @@ def save_daily_usage(user, data):
         for item in Ingredient.objects.filter(branch=user.branch, id__in=wanted)
     }
     if len(stock) != len(wanted):
-        raise serializers.ValidationError({'lines': 'Ayrim mahsulotlar topilmadi.'})
+        raise serializers.ValidationError({'lines': _('Ayrim mahsulotlar topilmadi.')})
     for ingredient_id, line in wanted.items():
         item = stock[ingredient_id]
         if item.unit == 'dona' and line['quantity'] != line['quantity'].to_integral_value():

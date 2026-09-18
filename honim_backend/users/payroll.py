@@ -23,6 +23,7 @@ from operations.money import MONTH_NAMES, last_months, money, month_key, month_l
 
 from .models import User
 from .permissions import OwnerOnly
+from core.i18n import _
 
 METHOD_LABELS = {'cash': 'Naqd', 'card': 'Karta'}
 TREND_MONTHS = 12
@@ -47,7 +48,7 @@ class PayrollFilters(serializers.Serializer):
     def validate_month(self, value):
         year, month = value.split('-')
         if not 1 <= int(month) <= 12:
-            raise serializers.ValidationError('Oy 01 dan 12 gacha bo‘lishi kerak.')
+            raise serializers.ValidationError(_('Oy 01 dan 12 gacha bo‘lishi kerak.'))
         return date(int(year), int(month), 1)
 
 
@@ -195,5 +196,5 @@ class PayrollView(APIView):
         today = timezone.localdate()
         period = filters.validated_data.get('month') or today.replace(day=1)
         if period > today.replace(day=1):
-            raise serializers.ValidationError('Kelajak oyi uchun oylik hisoboti tuzilmaydi.')
+            raise serializers.ValidationError(_('Kelajak oyi uchun oylik hisoboti tuzilmaydi.'))
         return Response(build_payroll(request.user.branch, period, today))

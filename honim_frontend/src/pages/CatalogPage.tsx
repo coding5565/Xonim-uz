@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Eye, ImagePlus, Layers3, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { api, list, money } from '../api'
 import type { Category, Dish, Ingredient, Recipe, Station } from '../types'
+import { useI18n } from '../i18n'
 import AppModal from '../components/AppModal'
 import DishArt from '../components/DishArt'
 
@@ -21,6 +22,7 @@ const emptyDish: DishForm = {
 }
 
 export default function CatalogPage() {
+  const { t } = useI18n()
   const [categories, setCategories] = useState<Category[]>([])
   const [dishes, setDishes] = useState<Dish[]>([])
   const [query, setQuery] = useState('')
@@ -190,22 +192,22 @@ export default function CatalogPage() {
     <>
       <div className="page-heading">
         <div>
-          <span className="eyebrow">TAOMLARINGIZ KOLLEKSIYASI</span>
-          <h1>Menyu boshqaruvi<span className="heading-dot">.</span></h1>
-          <p>Kategoriyalar, taomlar va narxlar — bir joyda.</p>
+          <span className="eyebrow">{t('TAOMLARINGIZ KOLLEKSIYASI')}</span>
+          <h1>{t('Menyu boshqaruvi')}<span className="heading-dot">.</span></h1>
+          <p>{t('Kategoriyalar, taomlar va narxlar — bir joyda.')}</p>
         </div>
         <div className="heading-actions">
           <button className="button secondary" onClick={() => { setModal('category'); setFormError('') }}>
-            <Layers3 size={17} />Kategoriya
+            <Layers3 size={17} />{t('Kategoriya')}
           </button>
-          <button className="button primary" onClick={() => openDish()}><Plus size={18} />Taom qo‘shish</button>
+          <button className="button primary" onClick={() => openDish()}><Plus size={18} />{t('Taom qo‘shish')}</button>
         </div>
       </div>
       {error && <p className="alert error">{error}</p>}
       <div className="catalog-toolbar">
         <div className="tabs">
           <button className={category === 0 ? 'selected' : undefined} onClick={() => setCategory(0)}>
-            Barchasi <span>{dishes.filter(dish => !dish.archived).length}</span>
+            {t('Barchasi')} <span>{dishes.filter(dish => !dish.archived).length}</span>
           </button>
           {categories.map(item => (
             <button
@@ -222,13 +224,13 @@ export default function CatalogPage() {
           <input
             value={query}
             onChange={event => setQuery(event.target.value)}
-            placeholder="Taomni qidirish…"
-            aria-label="Taomni qidirish"
+            placeholder={t('Taomni qidirish…')}
+            aria-label={t('Taomni qidirish')}
           />
         </div>
       </div>
       {loading ? (
-        <div className="empty-state">Menyu yuklanmoqda…</div>
+        <div className="empty-state">{t('Menyu yuklanmoqda…')}</div>
       ) : (
         <div className="dish-grid">
           {filtered.map(dish => (
@@ -236,18 +238,22 @@ export default function CatalogPage() {
               <div className="dish-image-wrap">
                 <DishArt name={dish.name} category={dish.category_name} image={dish.image} />
                 <span className={`dish-state${dish.available ? '' : ' unavailable'}`}>
-                  <i />{dish.available ? 'Mavjud' : 'Tugagan'}
+                  <i />{dish.available ? t('Mavjud') : t('Tugagan')}
                 </span>
-                <button className="edit-dish" aria-label={`${dish.name} tahrirlash`} onClick={() => openDish(dish)}>
+                <button
+                  className="edit-dish"
+                  aria-label={t('{name} tahrirlash', { name: dish.name })}
+                  onClick={() => openDish(dish)}
+                >
                   <Pencil size={16} />
                 </button>
               </div>
               <div className="dish-details">
                 <span className="eyebrow">{dish.category_name}</span>
                 <h3>{dish.name}</h3>
-                <p>{dish.description || 'Tavsif kiritilmagan'}</p>
+                <p>{dish.description || t('Tavsif kiritilmagan')}</p>
                 <footer>
-                  <strong>{money(dish.price)} <small>so‘m</small></strong>
+                  <strong>{money(dish.price)} <small>{t('so‘m')}</small></strong>
                   <span>{dish.portion}</span>
                 </footer>
               </div>

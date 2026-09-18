@@ -22,6 +22,7 @@ from users.permissions import ManagerOnly, SalesOnly
 from .models import SALE_PAYMENT_LABELS, Expense, Order, ShiftClose
 from .money import day_window, money
 from .services import audit
+from core.i18n import _
 
 # Shu summadan katta farq e'tibor talab qiladi.
 ALERT_SOM = Decimal('20000')
@@ -68,7 +69,7 @@ class ShiftFilters(serializers.Serializer):
     def validate_date(self, value):
         today = timezone.localdate()
         if value > today:
-            raise serializers.ValidationError('Kelajakdagi kunni yopib bo‘lmaydi.')
+            raise serializers.ValidationError(_('Kelajakdagi kunni yopib bo‘lmaydi.'))
         if (today - value).days > BACKDATE_DAYS:
             raise serializers.ValidationError(f'Faqat oxirgi {BACKDATE_DAYS} kunni yopish mumkin.')
         return value
@@ -104,7 +105,7 @@ def close_payload(record):
 def close_shift(user, data):
     day = data['date']
     if ShiftClose.objects.select_for_update().filter(branch=user.branch, date=day).exists():
-        raise serializers.ValidationError({'date': 'Bu kun allaqachon yopilgan.'})
+        raise serializers.ValidationError({'date': _('Bu kun allaqachon yopilgan.')})
     figures = day_figures(user.branch, day)
     counted = data['counted_cash']
     difference = counted - figures['expected_cash']

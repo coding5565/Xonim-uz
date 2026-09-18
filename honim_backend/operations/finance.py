@@ -30,6 +30,7 @@ from users.permissions import OwnerOnly
 
 from .models import SALE_PAYMENT_LABELS, Expense, Ingredient, Order, OrderLine, SalaryPayment, StockMovement
 from .money import MONEY, day_window, money, month_key, month_label, next_month, percent, short_label
+from core.i18n import _
 
 SALARY_CATEGORY = 'Ish haqi'
 TREND_MONTHS = 12
@@ -45,19 +46,19 @@ class FinanceFilters(serializers.Serializer):
         if attrs.get('month'):
             year, month = attrs['month'].split('-')
             if not 1 <= int(month) <= 12:
-                raise serializers.ValidationError({'month': 'Oy 01 dan 12 gacha bo‘lishi kerak.'})
+                raise serializers.ValidationError({'month': _('Oy 01 dan 12 gacha bo‘lishi kerak.')})
             first = timezone.datetime(int(year), int(month), 1).date()
             if first > today.replace(day=1):
-                raise serializers.ValidationError({'month': 'Kelajak oyi uchun hisobot tuzilmaydi.'})
+                raise serializers.ValidationError({'month': _('Kelajak oyi uchun hisobot tuzilmaydi.')})
             attrs['start'] = first
             attrs['end'] = min(next_month(first) - timedelta(days=1), today)
             return attrs
         attrs['end'] = attrs.get('end', today)
         attrs['start'] = attrs.get('start', attrs['end'].replace(day=1))
         if attrs['start'] > attrs['end']:
-            raise serializers.ValidationError('Boshlanish sanasi tugash sanasidan keyin bo‘lishi mumkin emas.')
+            raise serializers.ValidationError(_('Boshlanish sanasi tugash sanasidan keyin bo‘lishi mumkin emas.'))
         if (attrs['end'] - attrs['start']).days > 1095:
-            raise serializers.ValidationError('Bir hisobot oralig‘i ko‘pi bilan 3 yil.')
+            raise serializers.ValidationError(_('Bir hisobot oralig‘i ko‘pi bilan 3 yil.'))
         return attrs
 
 

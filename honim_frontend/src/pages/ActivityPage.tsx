@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Filter, History, RefreshCw, ShieldCheck, X } from 'lucide-react'
 import { api, today } from '../api'
+import { useI18n } from '../i18n'
 import type { ActivityFacet, ActivityLog } from '../types'
 
 interface Filters {
@@ -18,8 +19,8 @@ function shiftDate(value: string, days: number) {
   return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10)
 }
 
-const stamp = (value: string) =>
-  new Intl.DateTimeFormat('uz-UZ', {
+const stamp = (value: string, locale: string) =>
+  new Intl.DateTimeFormat(locale, {
     day: '2-digit',
     month: 'short',
     hour: '2-digit',
@@ -42,6 +43,7 @@ function byGroup(actions: ActivityFacet[]) {
 export default function ActivityPage() {
   // Filtrlar manzil satrida saqlanadi: boshqa sahifalardan «shu xodimning
   // harakatlari» kabi havolalar to'g'ridan-to'g'ri ochilishi uchun.
+  const { t, tn, locale } = useI18n()
   const [params, setParams] = useSearchParams()
   const [data, setData] = useState<ActivityLog>()
   const [loading, setLoading] = useState(true)
@@ -107,12 +109,12 @@ export default function ActivityPage() {
     <>
       <div className="page-heading">
         <div>
-          <span className="eyebrow">TO‘LIQ NAZORAT</span>
-          <h1>Harakatlar<span className="heading-dot">.</span></h1>
-          <p>Kim, qachon va nima qilgani — barchasi saqlanadi va hech qachon o‘chirilmaydi.</p>
+          <span className="eyebrow">{t('TO‘LIQ NAZORAT')}</span>
+          <h1>{t('Harakatlar')}<span className="heading-dot">.</span></h1>
+          <p>{t('Kim, qachon va nima qilgani — barchasi saqlanadi va hech qachon o‘chirilmaydi.')}</p>
         </div>
         <button className="button secondary" disabled={loading} onClick={() => load(search)}>
-          <RefreshCw size={17} className={loading ? 'spin' : undefined} />Yangilash
+          <RefreshCw size={17} className={loading ? 'spin' : undefined} />{t('Yangilash')}
         </button>
       </div>
 

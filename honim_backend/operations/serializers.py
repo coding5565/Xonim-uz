@@ -2,6 +2,7 @@ from decimal import Decimal
 from django.utils import timezone
 from rest_framework import serializers
 from .models import SALE_PAYMENT_CHOICES, Order, OrderLine, Table, Expense, Ingredient, Recipe, RecipeLine, StockMovement
+from core.i18n import _
 
 
 class LineInput(serializers.Serializer):
@@ -37,7 +38,7 @@ class TableSerializer(serializers.ModelSerializer):
         if self.instance:
             query = query.exclude(pk=self.instance.pk)
         if query.exists():
-            raise serializers.ValidationError('Bu raqamli stol allaqachon bor.')
+            raise serializers.ValidationError(_('Bu raqamli stol allaqachon bor.'))
         return value
 
 
@@ -51,7 +52,7 @@ class OrderInput(serializers.Serializer):
 
     def validate_lines(self, lines):
         if len(lines) > 100 or len({line['dish'] for line in lines}) != len(lines):
-            raise serializers.ValidationError('Bir taomni takrorlamang; ko‘pi bilan 100 satr.')
+            raise serializers.ValidationError(_('Bir taomni takrorlamang; ko‘pi bilan 100 satr.'))
         return lines
 
 
@@ -61,7 +62,7 @@ class AppendLinesInput(serializers.Serializer):
 
     def validate_lines(self, lines):
         if len(lines) > 100 or len({line['dish'] for line in lines}) != len(lines):
-            raise serializers.ValidationError('Bir taomni takrorlamang; ko‘pi bilan 100 satr.')
+            raise serializers.ValidationError(_('Bir taomni takrorlamang; ko‘pi bilan 100 satr.'))
         return lines
 
 
@@ -102,7 +103,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
 
     def validate_date(self, value):
         if value > timezone.localdate():
-            raise serializers.ValidationError('Kelajakdagi xarajatni hisobga olish mumkin emas.')
+            raise serializers.ValidationError(_('Kelajakdagi xarajatni hisobga olish mumkin emas.'))
         return value
 
 
@@ -125,7 +126,7 @@ class IngredientSerializer(serializers.ModelSerializer):
 
     def validate_name(self, value):
         if Ingredient.objects.filter(branch=self.context['request'].user.branch, name__iexact=value).exists():
-            raise serializers.ValidationError('Bu mahsulot mavjud.')
+            raise serializers.ValidationError(_('Bu mahsulot mavjud.'))
         return value
 
 
@@ -142,12 +143,12 @@ class MovementInput(serializers.Serializer):
 
     def validate_date(self, value):
         if value != timezone.localdate():
-            raise serializers.ValidationError('Dastlabki versiyada ombor harakati faqat bugungi sana bilan.')
+            raise serializers.ValidationError(_('Dastlabki versiyada ombor harakati faqat bugungi sana bilan.'))
         return value
 
     def validate(self, attrs):
         if attrs['kind'] != 'receipt' and attrs.get('cost_total'):
-            raise serializers.ValidationError({'cost_total': 'Narx faqat kirimda kiritiladi.'})
+            raise serializers.ValidationError({'cost_total': _('Narx faqat kirimda kiritiladi.')})
         return attrs
 
 
@@ -209,16 +210,16 @@ class RecipeSerializer(serializers.ModelSerializer):
         request = self.context['request']
         dish = attrs.get('dish', getattr(self.instance, 'dish', None))
         if dish and dish.branch_id != request.user.branch_id:
-            raise serializers.ValidationError({'dish': 'Taom boshqa filialga tegishli.'})
+            raise serializers.ValidationError({'dish': _('Taom boshqa filialga tegishli.')})
         lines = attrs.get('lines')
         if lines is not None:
             if not lines:
-                raise serializers.ValidationError({'lines': 'Kamida bitta masalliq kiriting.'})
+                raise serializers.ValidationError({'lines': _('Kamida bitta masalliq kiriting.')})
             ids = [line['ingredient'].id for line in lines]
             if len(ids) != len(set(ids)):
-                raise serializers.ValidationError({'lines': 'Bir mahsulotni faqat bir marta kiriting.'})
+                raise serializers.ValidationError({'lines': _('Bir mahsulotni faqat bir marta kiriting.')})
             if any(line['ingredient'].branch_id != request.user.branch_id for line in lines):
-                raise serializers.ValidationError({'lines': 'Mahsulot boshqa filialga tegishli.'})
+                raise serializers.ValidationError({'lines': _('Mahsulot boshqa filialga tegishli.')})
         return attrs
 
     @staticmethod
