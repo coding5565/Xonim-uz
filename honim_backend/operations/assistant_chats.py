@@ -69,6 +69,15 @@ def remember(user, chat_id, question, answer, charts):
     return chat
 
 
+class ChatRename(serializers.Serializer):
+    title = serializers.CharField(max_length=TITLE_LENGTH, trim_whitespace=True)
+
+    def validate_title(self, value):
+        if not value.strip():
+            raise serializers.ValidationError(_('Nom bo‘sh bo‘lishi mumkin emas.'))
+        return value.strip()
+
+
 class AssistantChatListView(APIView):
     """Suhbatlar ro'yxati."""
 
@@ -94,6 +103,17 @@ class AssistantChatDetailView(APIView):
             raise serializers.ValidationError(_('Suhbat topilmadi.'))
         messages = chat.messages.all()[:HISTORY_LIMIT]
         return Response({**chat_row(chat), 'messages': [message_row(item) for item in messages]})
+
+    def patch(self, request, pk):
+        """Suhbat nomini o'zgartiradi."""
+        chat = own_chats(request.user).filter(pk=pk).first()
+        if not chat:
+            raise serializers.ValidationError(_('Suhbat topilmadi.'))
+        data = ChatRename(data=request.data)
+        data.is_valid(raise_exception=True)
+        chat.title = data.validated_data['title']
+        chat.save(update_fields=['title', 'updated_at'])
+        return Response(chat_row(chat))
 
     def delete(self, request, pk):
         chat = own_chats(request.user).filter(pk=pk).first()

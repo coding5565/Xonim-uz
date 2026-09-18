@@ -5,6 +5,7 @@ ishlayveradi: o'zbekchasi ko'rinadi.
 """
 
 RU = {
+    'Nom bo‘sh bo‘lishi mumkin emas.': 'Название не может быть пустым.',
     'Suhbat topilmadi.':
         'Диалог не найден.',
     'Suhbat o‘chirildi.':
@@ -125,6 +126,7 @@ RU = {
 
 
 EN = {
+    'Nom bo‘sh bo‘lishi mumkin emas.': 'The name cannot be empty.',
     'Suhbat topilmadi.':
         'Chat not found.',
     'Suhbat o‘chirildi.':

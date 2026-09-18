@@ -768,4 +768,10 @@ td.number strong{color:var(--ink)}
     box-shadow:var(--sh3);
   }
 }
+/* Suhbat nomini joyida tahrirlash */
+.chat-row-edit{border:0;background:transparent;color:var(--soft);padding:8px 6px;border-radius:var(--r1);opacity:0}
+.chat-row:hover .chat-row-edit{opacity:1}
+.chat-row-edit:hover{color:var(--green);background:var(--green-100)}
+.chat-row-name{width:100%;margin:2px;padding:8px 10px;font:600 var(--f-sm) 'DM Sans',sans-serif;border-radius:var(--r1);border-color:var(--green-200)}
+.theme-dark .chat-row-edit:hover{color:#bde4cf;background:var(--green-100)}
 

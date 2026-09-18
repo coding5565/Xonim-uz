@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { Bot, Check, Copy, MessageSquarePlus, PanelLeft, Send, Sparkles, Trash2 } from 'lucide-react'
+import { Bot, Check, Copy, MessageSquarePlus, PanelLeft, Pencil, Send, Sparkles, Trash2 } from 'lucide-react'
 import { api, money } from '../api'
 import { useI18n } from '../i18n'
 
@@ -53,6 +53,9 @@ export default function AssistantPage() {
   const [chatId, setChatId] = useState<number>()
   const [copied, setCopied] = useState<number>()
   const [listOpen, setListOpen] = useState(true)
+  // Qaysi suhbat nomi tahrirlanmoqda va yangi nom.
+  const [editing, setEditing] = useState<number>()
+  const [draftTitle, setDraftTitle] = useState('')
   const endOfThread = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLTextAreaElement>(null)
 
@@ -96,6 +99,26 @@ export default function AssistantPage() {
     try {
       await api(`assistant/chats/${id}/`, { method: 'DELETE' })
       if (id === chatId) startNew()
+      await loadChats()
+    } catch (exception) {
+      setError((exception as Error).message)
+    }
+  }
+
+  /** Nomni joyida tahrirlashni boshlaydi. */
+  function beginRename(row: ChatRow) {
+    setEditing(row.id)
+    setDraftTitle(row.title)
+  }
+
+  async function saveRename(id: number) {
+    const title = draftTitle.trim()
+    setEditing(undefined)
+    if (!title) return
+    const row = chats.find(item => item.id === id)
+    if (row && row.title === title) return
+    try {
+      await api(`assistant/chats/${id}/`, { method: 'PATCH', body: JSON.stringify({ title }) })
       await loadChats()
     } catch (exception) {
       setError((exception as Error).message)
@@ -163,13 +186,34 @@ export default function AssistantPage() {
         <div className="chat-list-rows">
           {chats.map(row => (
             <div key={row.id} className={`chat-row${row.id === chatId ? ' selected' : ''}`}>
-              <button className="chat-row-open" onClick={() => open(row.id)}>
-                <strong>{row.title}</strong>
-                <small>{when(row.updated_at)}</small>
-              </button>
-              <button className="chat-row-drop" aria-label={t('O‘chirish')} onClick={() => remove(row.id)}>
-                <Trash2 size={13} />
-              </button>
+              {editing === row.id ? (
+                <input
+                  className="chat-row-name"
+                  value={draftTitle}
+                  autoFocus
+                  maxLength={60}
+                  onChange={event => setDraftTitle(event.target.value)}
+                  onBlur={() => saveRename(row.id)}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter') saveRename(row.id)
+                    if (event.key === 'Escape') setEditing(undefined)
+                  }}
+                  aria-label={t('Suhbat nomi')}
+                />
+              ) : (
+                <>
+                  <button className="chat-row-open" onClick={() => open(row.id)} onDoubleClick={() => beginRename(row)}>
+                    <strong>{row.title}</strong>
+                    <small>{when(row.updated_at)}</small>
+                  </button>
+                  <button className="chat-row-edit" aria-label={t('Nomini o‘zgartirish')} onClick={() => beginRename(row)}>
+                    <Pencil size={12} />
+                  </button>
+                  <button className="chat-row-drop" aria-label={t('O‘chirish')} onClick={() => remove(row.id)}>
+                    <Trash2 size={13} />
+                  </button>
+                </>
+              )}
             </div>
           ))}
           {!chats.length && <p className="chat-list-empty">{t('Saqlangan suhbat yo‘q')}</p>}

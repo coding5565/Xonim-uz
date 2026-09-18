@@ -2024,6 +2024,32 @@ class AssistantChatTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(AssistantMessage.objects.filter(chat_id=mine).count(), 2)
 
+    def test_a_chat_can_be_renamed(self):
+        chat = self.ask('Bugun qanday o‘tdi?').data['chat']
+        response = self.client.patch(
+            f'/api/v1/assistant/chats/{chat}/', {'title': 'Sentabr tahlili'}, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['title'], 'Sentabr tahlili')
+        self.assertEqual(AssistantChat.objects.get(pk=chat).title, 'Sentabr tahlili')
+        # Gaplar tegilmaydi.
+        self.assertEqual(AssistantMessage.objects.filter(chat_id=chat).count(), 2)
+
+    def test_a_blank_name_is_refused_and_spaces_are_trimmed(self):
+        chat = self.ask('Bugun qanday o‘tdi?').data['chat']
+        self.assertEqual(
+            self.client.patch(f'/api/v1/assistant/chats/{chat}/', {'title': '   '}, format='json').status_code, 400)
+        self.client.patch(f'/api/v1/assistant/chats/{chat}/', {'title': '  Oylik  '}, format='json')
+        self.assertEqual(AssistantChat.objects.get(pk=chat).title, 'Oylik')
+
+    def test_renaming_someone_elses_chat_is_refused(self):
+        mine = self.ask('Bugun qanday o‘tdi?').data['chat']
+        stranger = User.objects.create_user('owner4', password='test-only-long-password', role='owner', branch=self.branch)
+        theirs = APIClient()
+        theirs.force_authenticate(stranger)
+        self.assertEqual(
+            theirs.patch(f'/api/v1/assistant/chats/{mine}/', {'title': 'Meniki'}, format='json').status_code, 400)
+        self.assertEqual(AssistantChat.objects.get(pk=mine).title, 'Bugun qanday o‘tdi?')
+
     def test_only_the_owner_role_reaches_the_assistant(self):
         client = APIClient()
         client.force_authenticate(self.admin)
