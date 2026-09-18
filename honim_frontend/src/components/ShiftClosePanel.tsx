@@ -2,10 +2,12 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { AlertTriangle, CheckCircle2, CreditCard, Lock, Scale, Wallet } from 'lucide-react'
 import { api, dateLabel, money, today } from '../api'
 import { useSession } from '../session'
+import { useI18n } from '../i18n'
 import type { ShiftDay, ShiftHistory } from '../types'
 
 export default function ShiftClosePanel() {
   const { user } = useSession()
+  const { t, tn } = useI18n()
   const manager = user?.role === 'owner' || user?.role === 'admin'
   const [day, setDay] = useState<ShiftDay>()
   const [history, setHistory] = useState<ShiftHistory>()
@@ -61,48 +63,53 @@ export default function ShiftClosePanel() {
         <header className="panel-heading">
           <div>
             <h2>
-              {day.closed ? <Lock size={17} /> : <Wallet size={17} />} Kun yakuni
+              {day.closed ? <Lock size={17} /> : <Wallet size={17} />} {t('Kun yakuni')}
             </h2>
             <p>
               {day.closed
-                ? `${day.date} yopilgan · ${day.actor}${day.closed_at ? ` · ${dateLabel(day.closed_at)}` : ''}`
-                : 'Kassadagi naqd pulni sanang va tizim hisobi bilan solishtiring'}
+                ? `${t('{date} yopilgan', { date: day.date })} · ${day.actor}${day.closed_at ? ` · ${dateLabel(day.closed_at)}` : ''}`
+                : t('Kassadagi naqd pulni sanang va tizim hisobi bilan solishtiring')}
             </p>
           </div>
-          <span className="pill subtle">{day.date === today() ? 'Bugun' : day.date}</span>
+          <span className="pill subtle">{day.date === today() ? t('Bugun') : day.date}</span>
         </header>
 
         <div className="shift-grid">
           <div>
-            <small>Kassada bo‘lishi kerak</small>
+            <small>{t('Kassada bo‘lishi kerak')}</small>
             <strong>{money(day.expected_cash)}</strong>
             <em>
               {day.closed
-                ? 'yopilish paytida muzlatilgan'
-                : `naqd savdo ${money(day.cash_in || 0)} − naqd xarajat ${money(day.cash_out || 0)}`}
+                ? t('yopilish paytida muzlatilgan')
+                : t('naqd savdo {income} − naqd xarajat {outcome}', {
+                  income: money(day.cash_in || 0),
+                  outcome: money(day.cash_out || 0),
+                })}
             </em>
           </div>
           <div>
-            <small>Kunlik savdo</small>
+            <small>{t('Kunlik savdo')}</small>
             <strong>{money(day.revenue)}</strong>
-            <em>{day.orders} ta chek</em>
+            <em>{tn('{count} ta chek', day.orders)}</em>
           </div>
           {day.closed ? (
             <div>
-              <small>Sanaldi</small>
+              <small>{t('Sanaldi')}</small>
               <strong>{money(day.counted_cash || 0)}</strong>
               <em className={day.alert ? 'owed' : undefined}>
-                farq {Number(day.difference) > 0 ? '+' : ''}{money(day.difference || 0)} so‘m
+                {t('farq {amount} so‘m', {
+                  amount: `${Number(day.difference) > 0 ? '+' : ''}${money(day.difference || 0)}`,
+                })}
               </em>
             </div>
           ) : (
             <div>
-              <small>Ochiq hisoblar</small>
+              <small>{t('Ochiq hisoblar')}</small>
               <strong>{day.open_orders ?? 0}</strong>
               <em>
                 {day.open_orders
-                  ? 'avval ularni yopish kerak — pul hali kassaga tushmagan'
-                  : 'hammasi yopilgan'}
+                  ? t('avval ularni yopish kerak — pul hali kassaga tushmagan')
+                  : t('hammasi yopilgan')}
               </em>
             </div>
           )}
@@ -111,39 +118,39 @@ export default function ShiftClosePanel() {
         {!!day.breakdown.length && (
           <div className="drawer-split">
             <div className="drawer-side counted">
-              <header><Wallet size={15} />Kassada — sanaladi</header>
+              <header><Wallet size={15} />{t('Kassada — sanaladi')}</header>
               {inDrawer.map(row => (
                 <p key={row.method}><span>{row.label}</span><b>{money(row.amount)}</b></p>
               ))}
-              {!inDrawer.length && <p className="muted">Naqd savdo bo‘lmagan</p>}
+              {!inDrawer.length && <p className="muted">{t('Naqd savdo bo‘lmagan')}</p>}
               {Number(day.cash_out || 0) > 0 && (
-                <p className="outflow"><span>Naqd xarajat</span><b>−{money(day.cash_out || 0)}</b></p>
+                <p className="outflow"><span>{t('Naqd xarajat')}</span><b>−{money(day.cash_out || 0)}</b></p>
               )}
             </div>
             <div className="drawer-side">
-              <header><CreditCard size={15} />Hisobga tushgan — sanalmaydi</header>
+              <header><CreditCard size={15} />{t('Hisobga tushgan — sanalmaydi')}</header>
               {toAccount.map(row => (
                 <p key={row.method}><span>{row.label}</span><b>{money(row.amount)}</b></p>
               ))}
-              {!toAccount.length && <p className="muted">Karta orqali savdo bo‘lmagan</p>}
-              <small>Bu pul kassada yotmaydi — provayder hisobiga tushadi.</small>
+              {!toAccount.length && <p className="muted">{t('Karta orqali savdo bo‘lmagan')}</p>}
+              <small>{t('Bu pul kassada yotmaydi — provayder hisobiga tushadi.')}</small>
             </div>
           </div>
         )}
 
         {day.closed ? (
           <>
-            {day.note && <p className="data-note">Izoh: {day.note}</p>}
+            {day.note && <p className="data-note">{t('Izoh')}: {day.note}</p>}
             <p className="alert success">
               <CheckCircle2 size={16} />
-              Bu kun yopilgan. Raqamlar muzlatilgan — keyingi savdolar bu hisobga ta’sir qilmaydi.
+              {t('Bu kun yopilgan. Raqamlar muzlatilgan — keyingi savdolar bu hisobga ta’sir qilmaydi.')}
             </p>
           </>
         ) : (
           <form onSubmit={close} className="shift-form">
             <label>
-              Kassadagi naqd pul, so‘m
-              <small className="field-hint">Faqat qutidagi naqd — karta puli hisobga kirmaydi</small>
+              {t('Kassadagi naqd pul, so‘m')}
+              <small className="field-hint">{t('Faqat qutidagi naqd — karta puli hisobga kirmaydi')}</small>
               <input
                 value={counted}
                 onChange={event => setCounted(event.target.value)}
@@ -151,33 +158,33 @@ export default function ShiftClosePanel() {
                 min="0"
                 step="1"
                 required
-                placeholder="Sanab chiqing"
+                placeholder={t('Sanab chiqing')}
               />
             </label>
             <label>
-              Izoh (ixtiyoriy)
+              {t('Izoh (ixtiyoriy)')}
               <input
                 value={note}
                 onChange={event => setNote(event.target.value)}
                 maxLength={250}
-                placeholder="Masalan, kechqurun avans berildi"
+                placeholder={t('Masalan, kechqurun avans berildi')}
               />
             </label>
             <div className="shift-gap">
               {gap === null
-                ? <span className="muted">Raqamni yozing — farq shu yerda chiqadi</span>
+                ? <span className="muted">{t('Raqamni yozing — farq shu yerda chiqadi')}</span>
                 : (
                   <>
-                    <span>Farq</span>
+                    <span>{t('Farq')}</span>
                     <strong className={big ? 'owed' : undefined}>
-                      {gap > 0 ? '+' : ''}{money(gap)} so‘m
+                      {gap > 0 ? '+' : ''}{money(gap)} {t('so‘m')}
                     </strong>
-                    {big && <small className="owed">Farq katta — qayta sanang</small>}
+                    {big && <small className="owed">{t('Farq katta — qayta sanang')}</small>}
                   </>
                 )}
             </div>
             <button className="button primary" disabled={busy}>
-              <Lock size={16} />{busy ? 'Yopilmoqda…' : 'Kunni yopish'}
+              <Lock size={16} />{busy ? t('Yopilmoqda…') : t('Kunni yopish')}
             </button>
           </form>
         )}
@@ -188,11 +195,11 @@ export default function ShiftClosePanel() {
         <section className="panel spaced">
           <header className="panel-heading">
             <div>
-              <h2><Scale size={17} /> Yopilgan kunlar</h2>
+              <h2><Scale size={17} /> {t('Yopilgan kunlar')}</h2>
               <p>
-                {history.summary.closed_days} kun · umumiy farq{' '}
-                <strong>{money(history.summary.total_difference)} so‘m</strong>
-                {history.summary.alerts > 0 && ` · ${history.summary.alerts} kunda katta farq`}
+                {tn('{count} kun', history.summary.closed_days)} · {t('umumiy farq')}{' '}
+                <strong>{money(history.summary.total_difference)} {t('so‘m')}</strong>
+                {history.summary.alerts > 0 && ` · ${tn('{count} kunda katta farq', history.summary.alerts)}`}
               </p>
             </div>
             {history.summary.alerts > 0 && <AlertTriangle size={18} />}
@@ -200,7 +207,10 @@ export default function ShiftClosePanel() {
           <div className="table-wrap">
             <table>
               <thead>
-                <tr><th>KUN</th><th>SAVDO</th><th>KUTILGAN NAQD</th><th>SANALDI</th><th>FARQ</th><th>YOPGAN</th></tr>
+                <tr>
+                  <th>{t('KUN')}</th><th>{t('SAVDO')}</th><th>{t('KUTILGAN NAQD')}</th>
+                  <th>{t('SANALDI')}</th><th>{t('FARQ')}</th><th>{t('YOPGAN')}</th>
+                </tr>
               </thead>
               <tbody>
                 {history.days.map(row => (

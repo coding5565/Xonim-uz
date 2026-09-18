@@ -320,32 +320,32 @@ export default function StaffPage() {
             </tbody>
           </table>
           {!filtered.length && (
-            <div className="empty-state"><UserRoundCog size={38} strokeWidth={1.3} /><h3>Xodim topilmadi</h3></div>
+            <div className="empty-state"><UserRoundCog size={38} strokeWidth={1.3} /><h3>{t('Xodim topilmadi')}</h3></div>
           )}
         </div>
       </section>
       <div className="inline-tip">
         <ShieldCheck size={20} />
         <span>
-          Oylik to‘lovi saqlanganda “Ish haqi” kategoriyasida xarajat yaratiladi va superadmin dashboardida darhol hisoblanadi.
+          {t('Oylik to‘lovi saqlanganda “Ish haqi” kategoriyasida xarajat yaratiladi va superadmin dashboardida darhol hisoblanadi.')}
         </span>
       </div>
 
-      <AppModal open={createOpen} title="Yangi xodim hisobi" onClose={() => { if (!busy) setCreateOpen(false) }}>
+      <AppModal open={createOpen} title={t('Yangi xodim hisobi')} onClose={() => { if (!busy) setCreateOpen(false) }}>
         <form onSubmit={createStaff}>
           <div className="form-row">
             <label>
-              Xodim ismi
+              {t('Xodim ismi')}
               <input
                 value={createForm.name}
                 onChange={event => updateCreate({ name: event.target.value })}
                 required
                 maxLength={150}
-                placeholder="Masalan, Azizbek"
+                placeholder={t('Masalan, Azizbek')}
               />
             </label>
             <label>
-              Telefon
+              {t('Telefon')}
               <input
                 value={createForm.phone}
                 onChange={event => updateCreate({ phone: event.target.value })}
@@ -356,7 +356,7 @@ export default function StaffPage() {
           </div>
           <div className="form-row">
             <label>
-              Login
+              {t('Login')}
               <input
                 value={createForm.username}
                 onChange={event => updateCreate({ username: event.target.value })}
@@ -369,17 +369,17 @@ export default function StaffPage() {
               />
             </label>
             <label>
-              Rol
+              {t('Rol')}
               <select value={createForm.role} onChange={event => updateCreate({ role: event.target.value })}>
-                <option value="admin">Admin</option>
-                <option value="cashier">Kassir</option>
-                <option value="kitchen">Oshxona</option>
+                <option value="admin">{t('Admin')}</option>
+                <option value="cashier">{t('Kassir')}</option>
+                <option value="kitchen">{t('Oshxona')}</option>
               </select>
             </label>
           </div>
           <div className="form-row">
             <label>
-              Oylik, so‘m
+              {t('Oylik, so‘m')}
               <input
                 value={createForm.salary}
                 onChange={event => updateCreate({ salary: event.target.value })}
@@ -390,7 +390,7 @@ export default function StaffPage() {
               />
             </label>
             <label>
-              Ishga kirgan sana
+              {t('Ishga kirgan sana')}
               <input
                 value={createForm.hired_at}
                 onChange={event => updateCreate({ hired_at: event.target.value })}
@@ -400,7 +400,7 @@ export default function StaffPage() {
             </label>
           </div>
           <label>
-            Vaqtinchalik parol
+            {t('Vaqtinchalik parol')}
             <input
               value={createForm.password}
               onChange={event => updateCreate({ password: event.target.value })}
@@ -409,50 +409,50 @@ export default function StaffPage() {
               minLength={12}
               maxLength={128}
               autoComplete="new-password"
-              placeholder="Kamida 12 belgi"
+              placeholder={t('Kamida 12 belgi')}
             />
           </label>
           <label>
-            Izoh
+            {t('Izoh')}
             <textarea
               value={createForm.notes}
               onChange={event => updateCreate({ notes: event.target.value })}
               maxLength={300}
               rows={2}
-              placeholder="Lavozim yoki qo‘shimcha ma’lumot"
+              placeholder={t('Lavozim yoki qo‘shimcha ma’lumot')}
             />
           </label>
-          <p className="alert">Login va parolni xodimga xavfsiz yetkazing. Tizim parolni keyin qayta ko‘rsatmaydi.</p>
+          <p className="alert">{t('Login va parolni xodimga xavfsiz yetkazing. Tizim parolni keyin qayta ko‘rsatmaydi.')}</p>
           {formError && <p className="alert error">{formError}</p>}
           <button className="button primary full" disabled={busy}>
-            {busy ? 'Yaratilmoqda…' : 'Hisobni yaratish'}
+            {busy ? t('Yaratilmoqda…') : t('Hisobni yaratish')}
           </button>
         </form>
       </AppModal>
 
-      <AppModal open={editOpen} title="Xodim ma’lumotlari" onClose={() => { if (!busy) setEditOpen(false) }}>
+      <AppModal open={editOpen} title={t('Xodim ma’lumotlari')} onClose={() => { if (!busy) setEditOpen(false) }}>
         <form onSubmit={updateStaff}>
           <div className="form-row">
             <label>
-              Ism
+              {t('Ism')}
               <input value={editForm.name} onChange={event => updateEdit({ name: event.target.value })} required maxLength={150} />
             </label>
             <label>
-              Telefon
+              {t('Telefon')}
               <input value={editForm.phone} onChange={event => updateEdit({ phone: event.target.value })} maxLength={30} />
             </label>
           </div>
           <div className="form-row">
             <label>
-              Rol
+              {t('Rol')}
               <select value={editForm.role} onChange={event => updateEdit({ role: event.target.value })}>
-                <option value="admin">Admin</option>
-                <option value="cashier">Kassir</option>
-                <option value="kitchen">Oshxona</option>
+                <option value="admin">{t('Admin')}</option>
+                <option value="cashier">{t('Kassir')}</option>
+                <option value="kitchen">{t('Oshxona')}</option>
               </select>
             </label>
             <label>
-              Oylik, so‘m
+              {t('Oylik, so‘m')}
               <input
                 value={editForm.salary}
                 onChange={event => updateEdit({ salary: event.target.value })}
@@ -464,7 +464,7 @@ export default function StaffPage() {
             </label>
           </div>
           <label>
-            Ishga kirgan sana
+            {t('Ishga kirgan sana')}
             <input
               value={editForm.hired_at}
               onChange={event => updateEdit({ hired_at: event.target.value })}
@@ -473,7 +473,7 @@ export default function StaffPage() {
             />
           </label>
           <label>
-            Izoh
+            {t('Izoh')}
             <textarea
               value={editForm.notes}
               onChange={event => updateEdit({ notes: event.target.value })}
@@ -483,25 +483,25 @@ export default function StaffPage() {
           </label>
           <label className="checkbox">
             <input type="checkbox" checked={editForm.active} onChange={event => updateEdit({ active: event.target.checked })} />
-            Hisob faol, tizimga kira oladi
+            {t('Hisob faol, tizimga kira oladi')}
           </label>
           {formError && <p className="alert error">{formError}</p>}
           <button className="button primary full" disabled={busy}>
-            {busy ? 'Saqlanmoqda…' : 'O‘zgarishlarni saqlash'}
+            {busy ? t('Saqlanmoqda…') : t('O‘zgarishlarni saqlash')}
           </button>
         </form>
       </AppModal>
 
       <AppModal
         open={payOpen}
-        title={`${selected?.name || ''} · oylik to‘lovi`}
+        title={t('{name} · oylik to‘lovi', { name: selected?.name || '' })}
         onClose={() => { if (!busy) setPayOpen(false) }}
       >
         <form onSubmit={paySalary}>
-          <div className="salary-amount">{money(payForm.amount || 0)} <small>so‘m</small></div>
+          <div className="salary-amount">{money(payForm.amount || 0)} <small>{t('so‘m')}</small></div>
           <div className="form-row">
             <label>
-              Qaysi oy uchun?
+              {t('Qaysi oy uchun?')}
               <input
                 value={payForm.period}
                 onChange={event => updatePay({ period: event.target.value })}
@@ -511,7 +511,7 @@ export default function StaffPage() {
               />
             </label>
             <label>
-              To‘lov sanasi
+              {t('To‘lov sanasi')}
               <input
                 value={payForm.paid_on}
                 onChange={event => updatePay({ paid_on: event.target.value })}
@@ -523,7 +523,7 @@ export default function StaffPage() {
           </div>
           <div className="form-row">
             <label>
-              Summa
+              {t('Summa')}
               <input
                 value={payForm.amount}
                 onChange={event => updatePay({ amount: event.target.value })}
@@ -534,36 +534,36 @@ export default function StaffPage() {
               />
             </label>
             <label>
-              To‘lov usuli
+              {t('To‘lov usuli')}
               <select value={payForm.payment_method} onChange={event => updatePay({ payment_method: event.target.value })}>
-                <option value="cash">Naqd</option>
-                <option value="card">Karta</option>
+                <option value="cash">{t('Naqd')}</option>
+                <option value="card">{t('Karta')}</option>
               </select>
             </label>
           </div>
           <label>
-            Izoh
+            {t('Izoh')}
             <textarea
               value={payForm.note}
               onChange={event => updatePay({ note: event.target.value })}
               maxLength={250}
               rows={2}
-              placeholder="Avans, bonus yoki boshqa izoh"
+              placeholder={t('Avans, bonus yoki boshqa izoh')}
             />
           </label>
           <p className="alert">
-            Bir xodimga bir oy uchun faqat bitta oylik to‘lovi yoziladi. To‘lov xarajatlarda ham aks etadi.
+            {t('Bir xodimga bir oy uchun faqat bitta oylik to‘lovi yoziladi. To‘lov xarajatlarda ham aks etadi.')}
           </p>
           {formError && <p className="alert error">{formError}</p>}
           <button className="button primary full" disabled={busy}>
-            {busy ? 'Saqlanmoqda…' : 'Oylikni to‘langan deb belgilash'}
+            {busy ? t('Saqlanmoqda…') : t('Oylikni to‘langan deb belgilash')}
           </button>
         </form>
       </AppModal>
 
       <AppModal
         open={historyOpen}
-        title={`${selected?.name || ''} · to‘lovlar tarixi`}
+        title={t('{name} · to‘lovlar tarixi', { name: selected?.name || '' })}
         onClose={() => setHistoryOpen(false)}
       >
         <div className="salary-history">
@@ -571,14 +571,16 @@ export default function StaffPage() {
             <div key={item.id}>
               <span>
                 <strong>{item.period}</strong>
-                <small>{item.paid_on} · {item.payment_method === 'cash' ? 'Naqd' : 'Karta'} · {item.actor_name}</small>
+                <small>
+                  {item.paid_on} · {item.payment_method === 'cash' ? t('Naqd') : t('Karta')} · {item.actor_name}
+                </small>
               </span>
-              <strong>{money(item.amount)} so‘m</strong>
+              <strong>{money(item.amount)} {t('so‘m')}</strong>
               {item.note && <p>{item.note}</p>}
             </div>
           ))}
           {!payments.length && (
-            <div className="empty-state compact"><Banknote size={32} /><p>Hali oylik to‘lovi kiritilmagan.</p></div>
+            <div className="empty-state compact"><Banknote size={32} /><p>{t('Hali oylik to‘lovi kiritilmagan.')}</p></div>
           )}
         </div>
       </AppModal>

@@ -2,10 +2,12 @@ import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight, ShieldCheck, UtensilsCrossed } from 'lucide-react'
 import { api, refreshCsrf } from '../api'
+import { useI18n } from '../i18n'
 import { homeFor, session } from '../session'
 import type { User } from '../types'
 
 export default function LoginPage() {
+  const { t } = useI18n()
   const navigate = useNavigate()
   const [username, setUsername] = useState('owner')
   const [password, setPassword] = useState('')
@@ -40,49 +42,49 @@ export default function LoginPage() {
           <span className="brand-text">honim<span>RESTAURANT WORKSPACE</span></span>
         </div>
         <div className="login-headline">
-          <span className="eyebrow">MEHMONDO‘STLIK. TARTIB. NAZORAT.</span>
-          <h1>Restoraningiz.<br />Bir butun<br /><em>ish maydoni.</em></h1>
-          <p>Buyurtmadan kun yakunigacha — har bir tafsilot o‘z o‘rnida.</p>
+          <span className="eyebrow">{t('MEHMONDO‘STLIK. TARTIB. NAZORAT.')}</span>
+          <h1>{t('Restoraningiz.')}<br />{t('Bir butun')}<br /><em>{t('ish maydoni.')}</em></h1>
+          <p>{t('Buyurtmadan kun yakunigacha — har bir tafsilot o‘z o‘rnida.')}</p>
           <div className="login-orbit"><div><UtensilsCrossed size={60} strokeWidth={1} /></div></div>
         </div>
-        <small>Honim · Restoran boshqaruv tizimi</small>
+        <small>{t('Honim · Restoran boshqaruv tizimi')}</small>
       </section>
       <section className="login-form">
-        <span className="pill">Xush kelibsiz</span>
-        <h2>Ish kunini boshlaymiz.</h2>
-        <p className="muted">Hisobingizga kirib, restoranni boshqaring.</p>
+        <span className="pill">{t('Xush kelibsiz')}</span>
+        <h2>{t('Ish kunini boshlaymiz.')}</h2>
+        <p className="muted">{t('Hisobingizga kirib, restoranni boshqaring.')}</p>
         <form onSubmit={login}>
           <label>
-            Login
+            {t('Login')}
             <input
               value={username}
               onChange={event => setUsername(event.target.value)}
               autoComplete="username"
               required
-              placeholder="Loginingiz"
+              placeholder={t('Loginingiz')}
             />
           </label>
           <label>
-            Parol
+            {t('Parol')}
             <input
               value={password}
               onChange={event => setPassword(event.target.value)}
               type="password"
               autoComplete="current-password"
               required
-              placeholder="Parolingizni kiriting"
+              placeholder={t('Parolingizni kiriting')}
             />
           </label>
           {error && <p className="alert error" role="alert">{error}</p>}
           <button className="button primary" disabled={busy}>
-            {busy ? 'Tekshirilmoqda…' : 'Tizimga kirish'}<ArrowRight size={18} />
+            {busy ? t('Tekshirilmoqda…') : t('Tizimga kirish')}<ArrowRight size={18} />
           </button>
         </form>
-        <p className="security-note"><ShieldCheck size={18} />Himoyalangan sessiya orqali kirish</p>
+        <p className="security-note"><ShieldCheck size={18} />{t('Himoyalangan sessiya orqali kirish')}</p>
         <div className="login-help">
-          Mahalliy sinov hisobi uchun login va parol loyiha ichidagi <strong>.local-access.txt</strong> faylida.
+          {t('Mahalliy sinov hisobi uchun login va parol loyiha ichidagi')} <strong>.local-access.txt</strong> {t('faylida.')}
         </div>
-        <Link to="/menu" className="text-link">Mijoz menyusini ko‘rish →</Link>
+        <Link to="/menu" className="text-link">{t('Mijoz menyusini ko‘rish')} →</Link>
       </section>
     </div>
   )

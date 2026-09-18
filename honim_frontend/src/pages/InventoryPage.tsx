@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ArrowDownToLine, ClipboardList, Coins, Package, Plus } from 'lucide-react'
 import { api, list, money, today } from '../api'
+import { useI18n } from '../i18n'
 import type { Ingredient, Movement } from '../types'
 import AppModal from '../components/AppModal'
 import StockUsagePanel from '../components/StockUsagePanel'
@@ -31,6 +32,7 @@ const modalTitle = (modal: Modal) =>
   modal === 'item' ? 'Yangi mahsulot' : modal === 'receipt' ? 'Omborga kirim' : 'Kunlik haqiqiy sarf'
 
 export default function InventoryPage() {
+  const { t, tn } = useI18n()
   // Ko'rinish ham, sarf filtrlari ham manzil satrida turadi, shunda boshqa
   // sahifadan «shu mahsulotning sarfi» havolasi to'g'ridan-to'g'ri ochiladi.
   const [params, setParams] = useSearchParams()
@@ -100,7 +102,7 @@ export default function InventoryPage() {
       ingredient: ingredients[0]?.id || 0,
       quantity: '',
       cost_total: '',
-      note: kind === 'consumption' ? 'Kunlik haqiqiy sarf' : '',
+      note: kind === 'consumption' ? t('Kunlik haqiqiy sarf') : '',
       kind,
       date: today(),
     })
@@ -135,19 +137,19 @@ export default function InventoryPage() {
     <>
       <div className="page-heading">
         <div>
-          <span className="eyebrow">MAHSULOTLAR NAZORATI</span>
-          <h1>Ombor va sarf<span className="heading-dot">.</span></h1>
-          <p>Retseptli taom sotilganda xomashyo avtomatik ayriladi.</p>
+          <span className="eyebrow">{t('MAHSULOTLAR NAZORATI')}</span>
+          <h1>{t('Ombor va sarf')}<span className="heading-dot">.</span></h1>
+          <p>{t('Retseptli taom sotilganda xomashyo avtomatik ayriladi.')}</p>
         </div>
         <div className="heading-actions">
           <button className="button secondary" disabled={!!pending} onClick={() => start('item')}>
-            <Plus size={17} />Mahsulot
+            <Plus size={17} />{t('Mahsulot')}
           </button>
           <button className="button secondary" disabled={!!pending || !ingredients.length} onClick={() => start('receipt')}>
-            <ArrowDownToLine size={17} />Kirim
+            <ArrowDownToLine size={17} />{t('Kirim')}
           </button>
           <button className="button primary" disabled={!ingredients.length} onClick={() => start('consumption')}>
-            <ClipboardList size={17} />{pending ? 'Amalni tekshirish' : 'Sarf kiritish'}
+            <ClipboardList size={17} />{pending ? t('Amalni tekshirish') : t('Sarf kiritish')}
           </button>
         </div>
       </div>
@@ -158,19 +160,19 @@ export default function InventoryPage() {
           className={view === 'stock' ? 'selected' : undefined}
           onClick={() => setParams({}, { replace: true })}
         >
-          Qoldiq va harakatlar
+          {t('Qoldiq va harakatlar')}
         </button>
         <button
           className={view === 'usage' ? 'selected' : undefined}
           onClick={() => applyUsage({})}
         >
-          Sarf tahlili
+          {t('Sarf tahlili')}
         </button>
         <button
           className={view === 'daily' ? 'selected' : undefined}
           onClick={() => setParams({ view: 'daily' }, { replace: true })}
         >
-          Kunlik hisobot
+          {t('Kunlik hisobot')}
         </button>
       </div>
 
@@ -181,22 +183,21 @@ export default function InventoryPage() {
       ) : (
       <>
       <div className="inventory-summary">
-        <div><Package size={21} /><span><strong>{ingredients.length}</strong> xil mahsulot</span></div>
-        <div><span className="warning-dot" /><span><strong>{low}</strong> ta kam qolgan</span></div>
-        <div><Coins size={21} /><span><strong>{money(stockValue)}</strong> so‘mlik qoldiq</span></div>
+        <div><Package size={21} /><span><strong>{ingredients.length}</strong> {tn('xil mahsulot', ingredients.length)}</span></div>
+        <div><span className="warning-dot" /><span><strong>{low}</strong> {t('ta kam qolgan')}</span></div>
+        <div><Coins size={21} /><span><strong>{money(stockValue)}</strong> {t('so‘mlik qoldiq')}</span></div>
         <p>
-          Kirimda narx yozilsa, ombor tannarxi o‘rtacha tortilgan usulda hisoblanadi va sotuvdagi sarf ham
-          so‘mda ko‘rinadi.
+          {t('Kirimda narx yozilsa, ombor tannarxi o‘rtacha tortilgan usulda hisoblanadi va sotuvdagi sarf ham so‘mda ko‘rinadi.')}
         </p>
       </div>
       <section className="panel">
         <header className="panel-heading">
-          <div><h2>Xomashyo qoldig‘i</h2><p>Registrdagi miqdor · sotuv va sarf harakatlari bilan yangilanadi</p></div>
-          <span className="pill subtle">Asosiy ombor</span>
+          <div><h2>{t('Xomashyo qoldig‘i')}</h2><p>{t('Registrdagi miqdor · sotuv va sarf harakatlari bilan yangilanadi')}</p></div>
+          <span className="pill subtle">{t('Asosiy ombor')}</span>
         </header>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>MAHSULOT</th><th>QOLDIQ</th><th>TANNARX</th><th>QOLDIQ QIYMATI</th><th>MINIMAL ME’YOR</th><th>HOLAT</th></tr></thead>
+            <thead><tr><th>{t('MAHSULOT')}</th><th>{t('QOLDIQ')}</th><th>{t('TANNARX')}</th><th>{t('QOLDIQ QIYMATI')}</th><th>{t('MINIMAL ME’YOR')}</th><th>{t('HOLAT')}</th></tr></thead>
             <tbody>
               {ingredients.map(row => {
                 const isLow = Number(row.quantity) <= Number(row.minimum)
@@ -206,38 +207,38 @@ export default function InventoryPage() {
                     <td className="number">{money(row.quantity)} {row.unit}</td>
                     <td className="number">
                       {Number(row.unit_cost)
-                        ? <>{money(row.unit_cost)} <small>so‘m/{row.unit}</small></>
-                        : <span className="muted">narx yo‘q</span>}
+                        ? <>{money(row.unit_cost)} <small>{t('so‘m')}/{row.unit}</small></>
+                        : <span className="muted">{t('narx yo‘q')}</span>}
                     </td>
-                    <td className="number">{Number(row.stock_value) ? `${money(row.stock_value)} so‘m` : '—'}</td>
+                    <td className="number">{Number(row.stock_value) ? `${money(row.stock_value)} ${t('so‘m')}` : '—'}</td>
                     <td>{money(row.minimum)} {row.unit}</td>
-                    <td><span className={`status ${isLow ? 'open' : 'paid'}`}>{isLow ? 'Kam qolgan' : 'Yetarli'}</span></td>
+                    <td><span className={`status ${isLow ? 'open' : 'paid'}`}>{isLow ? t('Kam qolgan') : t('Yetarli')}</span></td>
                   </tr>
                 )
               })}
             </tbody>
           </table>
-          {!ingredients.length && <div className="empty-state">Xomashyo ro‘yxatiga mahsulot qo‘shing.</div>}
+          {!ingredients.length && <div className="empty-state">{t('Xomashyo ro‘yxatiga mahsulot qo‘shing.')}</div>}
         </div>
       </section>
       <section className="panel spaced">
         <header className="panel-heading">
-          <div><h2>Ombor harakatlari</h2><p>So‘nggi 100 ta kirim, sarf va sotuv bo‘yicha yozuv</p></div>
+          <div><h2>{t('Ombor harakatlari')}</h2><p>{t('So‘nggi 100 ta kirim, sarf va sotuv bo‘yicha yozuv')}</p></div>
         </header>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>MAHSULOT</th><th>AMAL</th><th>MIQDOR</th><th>SUMMA</th><th>SANA</th><th>IZOH</th></tr></thead>
+            <thead><tr><th>{t('MAHSULOT')}</th><th>{t('AMAL')}</th><th>{t('MIQDOR')}</th><th>{t('SUMMA')}</th><th>{t('SANA')}</th><th>{t('IZOH')}</th></tr></thead>
             <tbody>
               {movements.map(row => (
                 <tr key={row.id}>
                   <td>{row.ingredient_name}</td>
                   <td>
                     <span className={`status ${row.kind === 'receipt' ? 'paid' : 'open'}`}>
-                      {row.kind === 'receipt' ? 'Kirim' : row.kind === 'sale_consumption' ? 'Sotuv sarfi' : 'Sarf'}
+                      {row.kind === 'receipt' ? t('Kirim') : row.kind === 'sale_consumption' ? t('Sotuv sarfi') : t('Sarf')}
                     </span>
                   </td>
                   <td className="number">{row.kind === 'receipt' ? '+' : '−'}{money(row.quantity)} {row.unit}</td>
-                  <td className="number">{Number(row.cost_total) ? `${money(row.cost_total)} so‘m` : '—'}</td>
+                  <td className="number">{Number(row.cost_total) ? `${money(row.cost_total)} ${t('so‘m')}` : '—'}</td>
                   <td>{row.date}</td>
                   <td>{row.note}</td>
                 </tr>
@@ -245,34 +246,34 @@ export default function InventoryPage() {
             </tbody>
           </table>
           {!movements.length && (
-            <div className="empty-state compact">Boshlang‘ich qoldiqni «Kirim» orqali kiriting.</div>
+            <div className="empty-state compact">{t('Boshlang‘ich qoldiqni «Kirim» orqali kiriting.')}</div>
           )}
         </div>
       </section>
       <p className="data-note">
-        Retsept, batch tannarxi va foyda «Retsept va foyda» bo‘limida. Sotuvdan oldin xomashyo qoldig‘ini Kirim orqali kiriting.
+        {t('Retsept, batch tannarxi va foyda «Retsept va foyda» bo‘limida. Sotuvdan oldin xomashyo qoldig‘ini Kirim orqali kiriting.')}
       </p>
       </>
       )}
 
-      <AppModal open={!!modal} title={modalTitle(modal)} onClose={() => { if (!busy) setModal('') }}>
+      <AppModal open={!!modal} title={t(modalTitle(modal))} onClose={() => { if (!busy) setModal('') }}>
         <form onSubmit={save}>
           <fieldset disabled={busy || !!pending}>
             {modal === 'item' ? (
               <>
                 <label>
-                  Mahsulot nomi
+                  {t('Mahsulot nomi')}
                   <input value={item.name} onChange={event => updateItem({ name: event.target.value })} required maxLength={100} />
                 </label>
                 <div className="form-row">
                   <label>
-                    Birlik
+                    {t('Birlik')}
                     <select value={item.unit} onChange={event => updateItem({ unit: event.target.value })}>
                       <option>kg</option><option>l</option><option>dona</option>
                     </select>
                   </label>
                   <label>
-                    Minimal qoldiq
+                    {t('Minimal qoldiq')}
                     <input
                       value={item.minimum}
                       onChange={event => updateItem({ minimum: event.target.value })}
@@ -284,25 +285,24 @@ export default function InventoryPage() {
                   </label>
                 </div>
                 <label>
-                  1 {item.unit} narxi, so‘m
+                  {t('1 {unit} narxi, so‘m', { unit: item.unit })}
                   <input
                     value={item.unit_cost}
                     onChange={event => updateItem({ unit_cost: event.target.value })}
                     type="number"
                     min="0"
                     step="1"
-                    placeholder="Masalan, 5000"
+                    placeholder={t('Masalan, 5000')}
                   />
                   <small className="field-hint">
-                    Retsept tannarxi shu narxdan hisoblanadi. Kirimda summa yozilsa,
-                    narx o‘rtacha bo‘yicha o‘zi yangilanadi.
+                    {t('Retsept tannarxi shu narxdan hisoblanadi. Kirimda summa yozilsa, narx o‘rtacha bo‘yicha o‘zi yangilanadi.')}
                   </small>
                 </label>
               </>
             ) : (
               <>
                 <label>
-                  Mahsulot
+                  {t('Mahsulot')}
                   <select
                     value={form.ingredient}
                     onChange={event => updateForm({ ingredient: Number(event.target.value) })}
@@ -315,7 +315,7 @@ export default function InventoryPage() {
                 </label>
                 <div className="form-row">
                   <label>
-                    Miqdor
+                    {t('Miqdor')}
                     <input
                       value={form.quantity}
                       onChange={event => updateForm({ quantity: event.target.value })}
@@ -326,7 +326,7 @@ export default function InventoryPage() {
                     />
                   </label>
                   <label>
-                    Sana
+                    {t('Sana')}
                     <input
                       value={form.date}
                       onChange={event => updateForm({ date: event.target.value })}
@@ -339,24 +339,24 @@ export default function InventoryPage() {
                 </div>
                 {modal === 'receipt' && (
                   <label>
-                    Qancha so‘mga olindi
+                    {t('Qancha so‘mga olindi')}
                     <input
                       value={form.cost_total}
                       onChange={event => updateForm({ cost_total: event.target.value })}
                       type="number"
                       min="0"
                       step="1"
-                      placeholder="Masalan, 300000"
+                      placeholder={t('Masalan, 300000')}
                     />
                     <small className="field-hint">
                       {unitPrice
-                        ? `Birlik narxi: ${money(unitPrice)} so‘m / ${selected?.unit || ''}`
-                        : 'Bo‘sh qoldirilsa, avvalgi tannarx saqlanadi'}
+                        ? t('Birlik narxi: {price} so‘m / {unit}', { price: money(unitPrice), unit: selected?.unit || '' })
+                        : t('Bo‘sh qoldirilsa, avvalgi tannarx saqlanadi')}
                     </small>
                   </label>
                 )}
                 <label>
-                  Izoh / sabab
+                  {t('Izoh / sabab')}
                   <textarea
                     value={form.note}
                     onChange={event => updateForm({ note: event.target.value })}
@@ -369,11 +369,11 @@ export default function InventoryPage() {
             )}
           </fieldset>
           {modal === 'consumption' && (
-            <p className="alert">Kiritilgan miqdor ombor qoldig‘idan ayriladi. Bir sarfni qayta kiritmang.</p>
+            <p className="alert">{t('Kiritilgan miqdor ombor qoldig‘idan ayriladi. Bir sarfni qayta kiritmang.')}</p>
           )}
           {formError && <p className="alert error">{formError}</p>}
           <button className="button primary full" disabled={busy}>
-            {busy ? 'Saqlanmoqda…' : pending ? 'Oldingi amalni tekshirish' : 'Hisobga olish'}
+            {busy ? t('Saqlanmoqda…') : pending ? t('Oldingi amalni tekshirish') : t('Hisobga olish')}
           </button>
         </form>
       </AppModal>

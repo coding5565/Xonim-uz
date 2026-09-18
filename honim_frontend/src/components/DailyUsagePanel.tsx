@@ -4,6 +4,7 @@ import {
   AlertTriangle, CalendarDays, CheckCircle2, ClipboardList, Save, Scale, TriangleAlert,
 } from 'lucide-react'
 import { api, money, today } from '../api'
+import { useI18n } from '../i18n'
 import { useSession } from '../session'
 import type { DailyUsageLog, Ingredient, UsageComparison, UsageCompareRow } from '../types'
 
@@ -20,6 +21,7 @@ function shiftDate(value: string, days: number) {
 }
 
 export default function DailyUsagePanel({ ingredients }: { ingredients: Ingredient[] }) {
+  const { t, tn } = useI18n()
   const { user } = useSession()
   const [log, setLog] = useState<DailyUsageLog>()
   const [compare, setCompare] = useState<UsageComparison>()
@@ -70,12 +72,13 @@ export default function DailyUsagePanel({ ingredients }: { ingredients: Ingredie
       const lines = Object.entries(draft)
         .filter(([, value]) => value !== '')
         .map(([id, value]) => ({ ingredient: Number(id), quantity: value || '0', note }))
-      if (!lines.length) throw new Error('Hech bo‘lmasa bitta mahsulot kiriting.')
+      if (!lines.length) throw new Error(t('Hech bo‘lmasa bitta mahsulot kiriting.'))
       const result = await api<{ saved: number; removed: number }>('daily-usage/', {
         method: 'POST',
         body: JSON.stringify({ date: day, lines }),
       })
-      setSaved(`${day}: ${result.saved} ta qator saqlandi${result.removed ? `, ${result.removed} tasi o‘chirildi` : ''}.`)
+      const removed = result.removed ? tn(', {count} tasi o‘chirildi', result.removed) : ''
+      setSaved(`${tn('{day}: {count} ta qator saqlandi', result.saved, { day })}${removed}.`)
       await load()
     } catch (exception) {
       setError((exception as Error).message)
@@ -97,39 +100,38 @@ export default function DailyUsagePanel({ ingredients }: { ingredients: Ingredie
             <div>
               <h2>
                 {compare.summary.alerts ? <TriangleAlert size={17} /> : <Scale size={17} />}
-                {' '}Tizim hisobi va haqiqiy sarf
+                {' '}{t('Tizim hisobi va haqiqiy sarf')}
               </h2>
               <p>
-                Tizim retsept bo‘yicha hisoblaydi, admin haqiqatda ketganini yozadi —
-                farq {compare.summary.alert_threshold}% dan oshsa belgilanadi
+                {t('Tizim retsept bo‘yicha hisoblaydi, admin haqiqatda ketganini yozadi — farq {threshold}% dan oshsa belgilanadi', { threshold: compare.summary.alert_threshold })}
               </p>
             </div>
-            <span className="pill subtle">{compare.filters.days} kun</span>
+            <span className="pill subtle">{tn('{count} kun', compare.filters.days)}</span>
           </header>
           <div className="warn-grid">
             <div>
-              <small>Tizim hisoblagan</small>
+              <small>{t('Tizim hisoblagan')}</small>
               <strong>{money(compare.summary.system_value)}</strong>
-              <em>so‘m · retsept bo‘yicha</em>
+              <em>{t('so‘m · retsept bo‘yicha')}</em>
             </div>
             <div>
-              <small>Admin yozgan</small>
+              <small>{t('Admin yozgan')}</small>
               <strong>{money(compare.summary.actual_value)}</strong>
               <em>
-                so‘m · {compare.summary.reported_days} kun yozilgan
-                {compare.summary.missing_days > 0 && `, ${compare.summary.missing_days} kun yo‘q`}
+                {tn('so‘m · {count} kun yozilgan', compare.summary.reported_days)}
+                {compare.summary.missing_days > 0 && tn(', {count} kun yo‘q', compare.summary.missing_days)}
               </em>
             </div>
             <div>
-              <small>Farq</small>
+              <small>{t('Farq')}</small>
               <strong className={Number(compare.summary.gap_value) > 0 ? 'owed' : undefined}>
                 {Number(compare.summary.gap_value) > 0 ? '+' : ''}{money(compare.summary.gap_value)}
               </strong>
               <em>
                 {compare.summary.gap_share ? `${compare.summary.gap_share}% · ` : ''}
                 {compare.summary.alerts
-                  ? `${compare.summary.alerts} ta mahsulotda e'tibor talab`
-                  : 'jiddiy farq yo‘q'}
+                  ? tn("{count} ta mahsulotda e'tibor talab", compare.summary.alerts)
+                  : t('jiddiy farq yo‘q')}
               </em>
             </div>
           </div>
@@ -137,8 +139,8 @@ export default function DailyUsagePanel({ ingredients }: { ingredients: Ingredie
             <table>
               <thead>
                 <tr>
-                  <th>MAHSULOT</th><th>TIZIM HISOBI</th><th>ADMIN YOZGAN</th>
-                  <th>FARQ</th><th>FARQ SUMMASI</th><th>HOLAT</th>
+                  <th>{t('MAHSULOT')}</th><th>{t('TIZIM HISOBI')}</th><th>{t('ADMIN YOZGAN')}</th>
+                  <th>{t('FARQ')}</th><th>{t('FARQ SUMMASI')}</th><th>{t('HOLAT')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -156,21 +158,20 @@ export default function DailyUsagePanel({ ingredients }: { ingredients: Ingredie
                         : '—'}
                     </td>
                     <td className="number">
-                      {Number(row.gap_value) ? `${money(row.gap_value)} so‘m` : '—'}
+                      {Number(row.gap_value) ? `${money(row.gap_value)} ${t('so‘m')}` : '—'}
                     </td>
-                    <td><span className={`status ${STATUS[row.status].tone}`}>{STATUS[row.status].label}</span></td>
+                    <td><span className={`status ${STATUS[row.status].tone}`}>{t(STATUS[row.status].label)}</span></td>
                   </tr>
                 ))}
               </tbody>
             </table>
             {!compare.rows.length && (
-              <div className="empty-state compact">Bu davrda na sotuv, na kunlik hisobot bor.</div>
+              <div className="empty-state compact">{t('Bu davrda na sotuv, na kunlik hisobot bor.')}</div>
             )}
           </div>
           <p className="data-note">
-            Farq musbat bo‘lsa — retseptdagidan ko‘proq ketyapti (ortiqcha solinyapti, isrof yoki yo‘qotish).
-            Manfiy bo‘lsa — retseptda ko‘rsatilgan miqdor haqiqatdan yuqori.
-            Retseptni <Link to="/recipes" className="text-link">shu yerdan</Link> tuzating.
+            {t('Farq musbat bo‘lsa — retseptdagidan ko‘proq ketyapti (ortiqcha solinyapti, isrof yoki yo‘qotish). Manfiy bo‘lsa — retseptda ko‘rsatilgan miqdor haqiqatdan yuqori.')}{' '}
+            {t('Retseptni')} <Link to="/recipes" className="text-link">{t('shu yerdan')}</Link>{t(' tuzating.')}
           </p>
         </section>
       )}
@@ -178,8 +179,8 @@ export default function DailyUsagePanel({ ingredients }: { ingredients: Ingredie
       <section className="panel spaced">
         <header className="panel-heading">
           <div>
-            <h2>Kunlik hisobot kiritish</h2>
-            <p>Kechqurun qaysi mahsulotdan qancha ketganini yozing — ombordan ayirmaydi</p>
+            <h2>{t('Kunlik hisobot kiritish')}</h2>
+            <p>{t('Kechqurun qaysi mahsulotdan qancha ketganini yozing — ombordan ayirmaydi')}</p>
           </div>
           <label className="inline-date">
             <CalendarDays size={16} />
@@ -194,7 +195,7 @@ export default function DailyUsagePanel({ ingredients }: { ingredients: Ingredie
                   {item.name}
                   <small>
                     {item.unit}
-                    {Number(item.unit_cost) ? ` · ${money(item.unit_cost)} so‘m` : ' · narx yo‘q'}
+                    {Number(item.unit_cost) ? ` · ${money(item.unit_cost)} ${t('so‘m')}` : ` · ${t('narx yo‘q')}`}
                   </small>
                 </span>
                 <input
@@ -208,22 +209,22 @@ export default function DailyUsagePanel({ ingredients }: { ingredients: Ingredie
               </label>
             ))}
           </div>
-          {!ingredients.length && <div className="empty-state compact">Avval ombor ro‘yxatiga mahsulot qo‘shing.</div>}
+          {!ingredients.length && <div className="empty-state compact">{t('Avval ombor ro‘yxatiga mahsulot qo‘shing.')}</div>}
           <div className="usage-footer">
             <input
               value={note}
               onChange={event => setNote(event.target.value)}
               maxLength={250}
-              placeholder="Izoh (ixtiyoriy) — masalan, banket bo‘ldi"
+              placeholder={t('Izoh (ixtiyoriy) — masalan, banket bo‘ldi')}
             />
-            <span>{filled.length} ta mahsulot · <strong>{money(draftValue)} so‘m</strong></span>
+            <span>{tn('{count} ta mahsulot', filled.length)} · <strong>{money(draftValue)} {t('so‘m')}</strong></span>
             <button className="button primary" disabled={busy || !ingredients.length}>
-              <Save size={16} />{busy ? 'Saqlanmoqda…' : 'Saqlash'}
+              <Save size={16} />{busy ? t('Saqlanmoqda…') : t('Saqlash')}
             </button>
           </div>
           <p className="data-note">
-            Bo‘sh qoldirilgan mahsulot yozilmaydi. Noldan katta yozilsa saqlanadi, nol yozilsa
-            o‘sha kungi yozuv o‘chiriladi. Oxirgi {log?.filters.backdate_days ?? 7} kun uchun kiritish mumkin.
+            {t('Bo‘sh qoldirilgan mahsulot yozilmaydi. Noldan katta yozilsa saqlanadi, nol yozilsa o‘sha kungi yozuv o‘chiriladi.')}{' '}
+            {tn('Oxirgi {count} kun uchun kiritish mumkin.', log?.filters.backdate_days ?? 7)}
           </p>
         </form>
       </section>
@@ -231,8 +232,8 @@ export default function DailyUsagePanel({ ingredients }: { ingredients: Ingredie
       <section className="panel spaced">
         <header className="panel-heading">
           <div>
-            <h2>Kiritilgan kunlar</h2>
-            <p>Oxirgi kunlar bo‘yicha nima yozilgani</p>
+            <h2>{t('Kiritilgan kunlar')}</h2>
+            <p>{t('Oxirgi kunlar bo‘yicha nima yozilgani')}</p>
           </div>
           <ClipboardList size={18} />
         </header>
@@ -246,9 +247,9 @@ export default function DailyUsagePanel({ ingredients }: { ingredients: Ingredie
             >
               <div>
                 <strong>{row.date}</strong>
-                <small>{row.items} ta mahsulot · {row.actors.join(', ')}</small>
+                <small>{tn('{count} ta mahsulot', row.items)} · {row.actors.join(', ')}</small>
               </div>
-              <b>{money(row.value)} <span>so‘m</span></b>
+              <b>{money(row.value)} <span>{t('so‘m')}</span></b>
               <p>{row.lines.map(line => `${line.name} ${money(line.quantity)} ${line.unit}`).join(' · ')}</p>
             </button>
           ))}
@@ -256,8 +257,8 @@ export default function DailyUsagePanel({ ingredients }: { ingredients: Ingredie
         {!log?.days.length && (
           <div className="empty-state">
             <CheckCircle2 size={22} />
-            <strong>Hali kunlik hisobot kiritilmagan</strong>
-            Yuqoridagi formadan bugungi sarfni yozing.
+            <strong>{t('Hali kunlik hisobot kiritilmagan')}</strong>
+            {t('Yuqoridagi formadan bugungi sarfni yozing.')}
           </div>
         )}
       </section>
@@ -265,7 +266,7 @@ export default function DailyUsagePanel({ ingredients }: { ingredients: Ingredie
       {!owner && (
         <p className="data-note">
           <AlertTriangle size={14} />
-          Siz kiritgan raqamlar tizim hisobi bilan solishtiriladi — bu farqni faqat superadmin ko‘radi.
+          {t('Siz kiritgan raqamlar tizim hisobi bilan solishtiriladi — bu farqni faqat superadmin ko‘radi.')}
         </p>
       )}
     </>

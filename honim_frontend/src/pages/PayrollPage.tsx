@@ -4,6 +4,7 @@ import {
   AlertTriangle, Banknote, CalendarDays, History, RefreshCw, Users, Wallet,
 } from 'lucide-react'
 import { api, money } from '../api'
+import { useI18n } from '../i18n'
 import type { Payroll, PayrollEmployee } from '../types'
 
 const STATUS_LABELS: Record<PayrollEmployee['status'], string> = {
@@ -19,12 +20,14 @@ const MONTHS = [
   'yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
   'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr',
 ]
-const monthName = (key: string) => {
+type Translate = (text: string, vars?: Record<string, string | number>) => string
+const monthName = (key: string, t: Translate) => {
   const [year, month] = key.split('-')
-  return `${year}-yil ${MONTHS[Number(month) - 1]}`
+  return t('{year}-yil {month}', { year, month: t(MONTHS[Number(month) - 1]) })
 }
 
 export default function PayrollPage() {
+  const { t, tn } = useI18n()
   // Oy manzil satrida turadi: «shu oyning oyliklari» havolasi ishlashi uchun.
   const [params, setParams] = useSearchParams()
   const [data, setData] = useState<Payroll>()
@@ -60,19 +63,19 @@ export default function PayrollPage() {
     <>
       <div className="page-heading">
         <div>
-          <span className="eyebrow">ISH HAQI NAZORATI</span>
-          <h1>Oyliklar<span className="heading-dot">.</span></h1>
-          <p>Kimga qancha kelishilgan, kimga qancha berilgan va oyiga qancha pul ketyapti.</p>
+          <span className="eyebrow">{t('ISH HAQI NAZORATI')}</span>
+          <h1>{t('Oyliklar')}<span className="heading-dot">.</span></h1>
+          <p>{t('Kimga qancha kelishilgan, kimga qancha berilgan va oyiga qancha pul ketyapti.')}</p>
         </div>
         <div className="heading-actions">
-          <select value={month} onChange={event => pick(event.target.value)} aria-label="Oyni tanlash">
-            <option value="">Shu oy</option>
+          <select value={month} onChange={event => pick(event.target.value)} aria-label={t('Oyni tanlash')}>
+            <option value="">{t('Shu oy')}</option>
             {(data?.months || []).map(item => (
-              <option key={item} value={item}>{monthName(item)}</option>
+              <option key={item} value={item}>{monthName(item, t)}</option>
             ))}
           </select>
           <button className="button secondary" disabled={loading} onClick={() => load(month)}>
-            <RefreshCw size={17} className={loading ? 'spin' : undefined} />Yangilash
+            <RefreshCw size={17} className={loading ? 'spin' : undefined} />{t('Yangilash')}
           </button>
         </div>
       </div>
@@ -85,20 +88,25 @@ export default function PayrollPage() {
             <article>
               <span className="metric-icon blue"><Wallet /></span>
               <div>
-                <small>Kelishilgan fond</small>
-                <strong>{money(data.summary.agreed)} <em>so‘m</em></strong>
+                <small>{t('Kelishilgan fond')}</small>
+                <strong>{money(data.summary.agreed)} <em>{t('so‘m')}</em></strong>
                 <em>
-                  {data.summary.staff_count} ta faol xodim
-                  {data.summary.without_agreement > 0 && ` · ${data.summary.without_agreement} tasida oylik kiritilmagan`}
+                  {tn('{count} ta faol xodim', data.summary.staff_count)}
+                  {data.summary.without_agreement > 0
+                    && ` · ${t('{count} tasida oylik kiritilmagan', { count: data.summary.without_agreement })}`}
                 </em>
               </div>
             </article>
             <article>
               <span className="metric-icon green"><Banknote /></span>
               <div>
-                <small>To‘langan</small>
-                <strong>{money(data.summary.paid)} <em>so‘m</em></strong>
-                <em>{data.summary.covered} / {data.summary.expected} xodimga berilgan</em>
+                <small>{t('To‘langan')}</small>
+                <strong>{money(data.summary.paid)} <em>{t('so‘m')}</em></strong>
+                <em>
+                  {t('{covered} / {expected} xodimga berilgan', {
+                    covered: data.summary.covered, expected: data.summary.expected,
+                  })}
+                </em>
               </div>
             </article>
             <article>
@@ -106,21 +114,23 @@ export default function PayrollPage() {
                 <AlertTriangle />
               </span>
               <div>
-                <small>Qolgan qarz</small>
-                <strong>{money(data.summary.remaining)} <em>so‘m</em></strong>
+                <small>{t('Qolgan qarz')}</small>
+                <strong>{money(data.summary.remaining)} <em>{t('so‘m')}</em></strong>
                 <em>
                   {unpaid.length
-                    ? `${unpaid.length} ta xodim kutmoqda`
-                    : data.summary.expected ? 'Hamma bilan hisob-kitob qilingan' : 'Hali oylik kelishilmagan'}
+                    ? tn('{count} ta xodim kutmoqda', unpaid.length)
+                    : data.summary.expected
+                      ? t('Hamma bilan hisob-kitob qilingan')
+                      : t('Hali oylik kelishilmagan')}
                 </em>
               </div>
             </article>
             <article>
               <span className="metric-icon violet"><History /></span>
               <div>
-                <small>Boshidan beri to‘langan</small>
-                <strong>{money(data.all_time.total)} <em>so‘m</em></strong>
-                <em>{data.all_time.payments} ta to‘lov</em>
+                <small>{t('Boshidan beri to‘langan')}</small>
+                <strong>{money(data.all_time.total)} <em>{t('so‘m')}</em></strong>
+                <em>{tn('{count} ta to‘lov', data.all_time.payments)}</em>
               </div>
             </article>
           </div>
@@ -129,16 +139,17 @@ export default function PayrollPage() {
             <header className="panel-heading">
               <div>
                 <h2>{data.month_label}</h2>
-                <p>Kelishilgan summa xodim kartasidan, to‘langan summa haqiqiy to‘lovlardan olinadi</p>
+                <p>{t('Kelishilgan summa xodim kartasidan, to‘langan summa haqiqiy to‘lovlardan olinadi')}</p>
               </div>
-              <Link to="/staff" className="text-link">Xodimlar bo‘limi →</Link>
+              <Link to="/staff" className="text-link">{t('Xodimlar bo‘limi')} →</Link>
             </header>
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th>XODIM</th><th>LAVOZIM</th><th>KELISHILGAN</th><th>TO‘LANGAN</th>
-                    <th>FARQ</th><th>HOLAT</th><th>TO‘LOV</th><th>HARAKATLARI</th>
+                    <th>{t('XODIM')}</th><th>{t('LAVOZIM')}</th><th>{t('KELISHILGAN')}</th>
+                    <th>{t('TO‘LANGAN')}</th><th>{t('FARQ')}</th><th>{t('HOLAT')}</th>
+                    <th>{t('TO‘LOV')}</th><th>{t('HARAKATLARI')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -146,21 +157,23 @@ export default function PayrollPage() {
                     <tr key={row.id} className={row.active ? undefined : 'row-muted'}>
                       <td>
                         <strong>{row.name}</strong>
-                        <small>{row.username}{row.active ? '' : ' · ishdan bo‘shagan'}</small>
+                        <small>{row.username}{row.active ? '' : ` · ${t('ishdan bo‘shagan')}`}</small>
                       </td>
                       <td><span className="pill subtle">{row.role_label}</span></td>
                       <td className="number">
-                        {Number(row.agreed) ? `${money(row.agreed)} so‘m` : <span className="muted">kiritilmagan</span>}
+                        {Number(row.agreed)
+                          ? `${money(row.agreed)} ${t('so‘m')}`
+                          : <span className="muted">{t('kiritilmagan')}</span>}
                       </td>
-                      <td className="number">{Number(row.paid) ? `${money(row.paid)} so‘m` : '—'}</td>
+                      <td className="number">{Number(row.paid) ? `${money(row.paid)} ${t('so‘m')}` : '—'}</td>
                       <td className="number">
                         {Number(row.difference) > 0
-                          ? <span className="owed">{money(row.difference)} so‘m</span>
+                          ? <span className="owed">{money(row.difference)} {t('so‘m')}</span>
                           : '—'}
                       </td>
                       <td>
                         <span className={`status ${row.status === 'paid' ? 'paid' : row.status === 'no_agreement' ? 'neutral' : 'open'}`}>
-                          {STATUS_LABELS[row.status]}
+                          {t(STATUS_LABELS[row.status])}
                         </span>
                       </td>
                       <td>
@@ -169,28 +182,31 @@ export default function PayrollPage() {
                           : <span className="muted">—</span>}
                       </td>
                       <td>
-                        <Link to={`/activity?actor=${row.id}`} className="text-link">Jurnal →</Link>
+                        <Link to={`/activity?actor=${row.id}`} className="text-link">{t('Jurnal')} →</Link>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {!rows.length && <div className="empty-state">Bu filialda xodim yo‘q.</div>}
+              {!rows.length && <div className="empty-state">{t('Bu filialda xodim yo‘q.')}</div>}
             </div>
           </section>
 
           <div className="payroll-grid">
             <section className="panel">
               <header className="panel-heading">
-                <div><h2>Oylik fond tarixi</h2><p>Oxirgi 12 oyda ish haqiga qancha pul ketgan</p></div>
+                <div>
+                  <h2>{t('Oylik fond tarixi')}</h2>
+                  <p>{t('Oxirgi 12 oyda ish haqiga qancha pul ketgan')}</p>
+                </div>
                 <CalendarDays size={18} />
               </header>
-              <div className="report-chart" role="img" aria-label="Oylik ish haqi grafigi">
+              <div className="report-chart" role="img" aria-label={t('Oylik ish haqi grafigi')}>
                 {data.trend.map(point => (
                   <button
                     key={point.period}
                     className="report-bar"
-                    title={`${point.label}: ${money(point.total)} so‘m · ${point.count} ta to‘lov`}
+                    title={`${point.label}: ${money(point.total)} ${t('so‘m')} · ${tn('{count} ta to‘lov', point.count)}`}
                     onClick={() => pick(point.period)}
                   >
                     <div><span style={{ height: `${Number(point.total) / maxTrend * 100}%` }} /></div>
@@ -198,36 +214,40 @@ export default function PayrollPage() {
                   </button>
                 ))}
                 {!Number(data.all_time.total) && (
-                  <p className="chart-empty">Hali oylik to‘lovi kiritilmagan</p>
+                  <p className="chart-empty">{t('Hali oylik to‘lovi kiritilmagan')}</p>
                 )}
               </div>
               <footer className="chart-footer">
-                <span>Ustunni bosing — o‘sha oy ochiladi</span>
-                <Link to="/expenses" className="text-link">Xarajatlarda ko‘rish →</Link>
+                <span>{t('Ustunni bosing — o‘sha oy ochiladi')}</span>
+                <Link to="/expenses" className="text-link">{t('Xarajatlarda ko‘rish')} →</Link>
               </footer>
             </section>
 
             <section className="panel">
               <header className="panel-heading">
-                <div><h2>Kim jami qancha olgan</h2><p>Butun davr bo‘yicha</p></div>
+                <div><h2>{t('Kim jami qancha olgan')}</h2><p>{t('Butun davr bo‘yicha')}</p></div>
                 <Users size={18} />
               </header>
               <div className="table-wrap">
                 <table>
-                  <thead><tr><th>XODIM</th><th>JAMI</th><th>OYLAR</th><th>DAVR</th></tr></thead>
+                  <thead>
+                    <tr>
+                      <th>{t('XODIM')}</th><th>{t('JAMI')}</th><th>{t('OYLAR')}</th><th>{t('DAVR')}</th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {data.lifetime.map(row => (
                       <tr key={row.id}>
                         <td><strong>{row.name}</strong></td>
-                        <td className="number">{money(row.total)} so‘m</td>
-                        <td>{row.months} oy</td>
+                        <td className="number">{money(row.total)} {t('so‘m')}</td>
+                        <td>{tn('{count} oy', row.months)}</td>
                         <td><small>{row.first} — {row.last}</small></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
                 {!data.lifetime.length && (
-                  <div className="empty-state compact">Hali birorta oylik to‘lanmagan.</div>
+                  <div className="empty-state compact">{t('Hali birorta oylik to‘lanmagan.')}</div>
                 )}
               </div>
             </section>
@@ -235,10 +255,11 @@ export default function PayrollPage() {
 
           {!!data.summary.by_method.length && (
             <p className="data-note">
-              Bu oyda:&nbsp;
-              {data.summary.by_method.map(row => `${row.label} ${money(row.amount)} so‘m (${row.count} ta)`).join(' · ')}.
-              Har bir oylik to‘lovi «Ish haqi» kategoriyasida xarajat ham yaratadi, shuning uchun umumiy
-              moliyada u xarajatlar ichida turadi — ustiga qo‘shilmaydi.
+              {t('Bu oyda:')}&nbsp;
+              {data.summary.by_method
+                .map(row => `${row.label} ${money(row.amount)} ${t('so‘m')} (${t('{count} ta', { count: row.count })})`)
+                .join(' · ')}.
+              {t('Har bir oylik to‘lovi «Ish haqi» kategoriyasida xarajat ham yaratadi, shuning uchun umumiy moliyada u xarajatlar ichida turadi — ustiga qo‘shilmaydi.')}
             </p>
           )}
         </>

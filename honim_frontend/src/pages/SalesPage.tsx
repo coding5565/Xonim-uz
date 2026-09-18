@@ -124,12 +124,12 @@ export default function SalesPage() {
     <>
       <div className="page-heading">
         <div>
-          <span className="eyebrow">SAVDO NAZORATI</span>
-          <h1>Sotuv<span className="heading-dot">.</span></h1>
-          <p>Nima sotildi, qaysi soatda va qaysi kassa orqali — hammasi shu yerda.</p>
+          <span className="eyebrow">{t('SAVDO NAZORATI')}</span>
+          <h1>{t('Sotuv')}<span className="heading-dot">.</span></h1>
+          <p>{t('Nima sotildi, qaysi soatda va qaysi kassa orqali — hammasi shu yerda.')}</p>
         </div>
         <button className="button secondary" disabled={loading} onClick={() => { load(); loadSummary() }}>
-          <RefreshCw size={17} className={loading ? 'spin' : undefined} />Yangilash
+          <RefreshCw size={17} className={loading ? 'spin' : undefined} />{t('Yangilash')}
         </button>
       </div>
 
@@ -139,42 +139,45 @@ export default function SalesPage() {
             <article>
               <Wallet size={21} />
               <div>
-                <small>BUGUN</small>
-                <strong>{money(summary.today.revenue)} so‘m</strong>
-                <span>{summary.today.orders} ta chek</span>
+                <small>{t('BUGUN')}</small>
+                <strong>{money(summary.today.revenue)} {t('so‘m')}</strong>
+                <span>{tn('{count} ta chek', summary.today.orders)}</span>
               </div>
             </article>
             <article>
               <CalendarDays size={21} />
               <div>
-                <small>KECHA</small>
-                <strong>{money(summary.yesterday.revenue)} so‘m</strong>
-                <span>{summary.yesterday.orders} ta chek</span>
+                <small>{t('KECHA')}</small>
+                <strong>{money(summary.yesterday.revenue)} {t('so‘m')}</strong>
+                <span>{tn('{count} ta chek', summary.yesterday.orders)}</span>
               </div>
             </article>
             <article>
               <TrendingUp size={21} />
               <div>
-                <small>OXIRGI 7 KUN</small>
-                <strong>{money(summary.last_7_days.revenue)} so‘m</strong>
-                <span>{summary.last_7_days.orders} ta chek</span>
+                <small>{t('OXIRGI 7 KUN')}</small>
+                <strong>{money(summary.last_7_days.revenue)} {t('so‘m')}</strong>
+                <span>{tn('{count} ta chek', summary.last_7_days.orders)}</span>
               </div>
             </article>
             <article className="open">
               <ReceiptText size={21} />
               <div>
-                <small>TO‘LOV KUTILMOQDA</small>
-                <strong>{money(summary.open.revenue)} so‘m</strong>
-                <span>{summary.open.orders} ta ochiq hisob</span>
+                <small>{t('TO‘LOV KUTILMOQDA')}</small>
+                <strong>{money(summary.open.revenue)} {t('so‘m')}</strong>
+                <span>{tn('{count} ta ochiq hisob', summary.open.orders)}</span>
               </div>
             </article>
           </div>
           <p className="sales-note">
             {summary.today_by_method.map(row => (
-              <span key={row.method}>Bugun {row.label.toLocaleLowerCase()}: <b>{money(row.revenue)} so‘m</b></span>
+              <span key={row.method}>
+                {t('Bugun {method}', { method: row.label.toLocaleLowerCase() })}: <b>{money(row.revenue)} {t('so‘m')}</b>
+              </span>
             ))}
             <span>
-              Sizning bugungi savdongiz: <b>{money(summary.mine_today.revenue)} so‘m</b> ({summary.mine_today.orders} ta chek)
+              {t('Sizning bugungi savdongiz')}: <b>{money(summary.mine_today.revenue)} {t('so‘m')}</b>{' '}
+              ({tn('{count} ta chek', summary.mine_today.orders)})
             </span>
           </p>
         </>
@@ -185,17 +188,17 @@ export default function SalesPage() {
       <section className="panel report-filters">
         <header>
           <Filter size={19} />
-          <div><h2>Filtrlar</h2><p>Natija faqat to‘langan cheklar asosida hisoblanadi</p></div>
+          <div><h2>{t('Filtrlar')}</h2><p>{t('Natija faqat to‘langan cheklar asosida hisoblanadi')}</p></div>
           <div className="report-presets">
-            <button onClick={() => preset('today')}>Bugun</button>
-            <button onClick={() => preset('yesterday')}>Kecha</button>
-            <button onClick={() => preset('week')}>7 kun</button>
-            <button onClick={() => preset('month')}>Shu oy</button>
+            <button onClick={() => preset('today')}>{t('Bugun')}</button>
+            <button onClick={() => preset('yesterday')}>{t('Kecha')}</button>
+            <button onClick={() => preset('week')}>{t('7 kun')}</button>
+            <button onClick={() => preset('month')}>{t('Shu oy')}</button>
           </div>
         </header>
         <div className="report-filter-grid">
           <label>
-            Boshlanish
+            {t('Boshlanish')}
             <input
               value={filters.start}
               onChange={event => apply({ start: event.target.value })}
@@ -205,7 +208,7 @@ export default function SalesPage() {
             />
           </label>
           <label>
-            Tugash
+            {t('Tugash')}
             <input
               value={filters.end}
               onChange={event => apply({ end: event.target.value })}
@@ -216,16 +219,16 @@ export default function SalesPage() {
             />
           </label>
           <label>
-            Kategoriya
+            {t('Kategoriya')}
             <select value={filters.category} onChange={event => apply({ category: event.target.value, dish: '' }, true)}>
-              <option value="">Barcha kategoriyalar</option>
+              <option value="">{t('Barcha kategoriyalar')}</option>
               {categories.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
           </label>
           <label>
-            Taom
+            {t('Taom')}
             <select value={filters.dish} onChange={event => apply({ dish: event.target.value }, true)}>
-              <option value="">Barcha taomlar</option>
+              <option value="">{t('Barcha taomlar')}</option>
               {visibleDishes.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
           </label>
@@ -235,59 +238,62 @@ export default function SalesPage() {
               checked={filters.mine}
               onChange={event => apply({ mine: event.target.checked }, true)}
             />
-            Faqat mening savdolarim
+            {t('Faqat mening savdolarim')}
           </label>
           <button className="button secondary" disabled={loading} onClick={() => load()}>
-            <RefreshCw size={17} className={loading ? 'spin' : undefined} />Ko‘rsatish
+            <RefreshCw size={17} className={loading ? 'spin' : undefined} />{t('Ko‘rsatish')}
           </button>
         </div>
       </section>
 
       {error && <p className="alert error" role="alert">{error}</p>}
-      {!data && loading && <div className="empty-state">Savdo hisoblanmoqda…</div>}
+      {!data && loading && <div className="empty-state">{t('Savdo hisoblanmoqda…')}</div>}
 
       {data && (
         <>
           <div className="report-metrics">
             <article>
               <span className="metric-icon green"><Banknote /></span>
-              <div><small>Tushum</small><strong>{money(data.summary.revenue)} <em>so‘m</em></strong></div>
+              <div><small>{t('Tushum')}</small><strong>{money(data.summary.revenue)} <em>{t('so‘m')}</em></strong></div>
             </article>
             <article>
               <span className="metric-icon violet"><ReceiptText /></span>
-              <div><small>To‘langan cheklar</small><strong>{data.summary.orders} <em>ta</em></strong></div>
+              <div><small>{t('To‘langan cheklar')}</small><strong>{data.summary.orders} <em>{t('ta')}</em></strong></div>
             </article>
             <article>
               <span className="metric-icon orange"><PackageCheck /></span>
-              <div><small>Sotilgan porsiya</small><strong>{data.summary.items} <em>ta</em></strong></div>
+              <div><small>{t('Sotilgan porsiya')}</small><strong>{data.summary.items} <em>{t('ta')}</em></strong></div>
             </article>
             <article>
               <span className="metric-icon blue"><TrendingUp /></span>
-              <div><small>O‘rtacha chek</small><strong>{money(data.summary.average_check)} <em>so‘m</em></strong></div>
+              <div><small>{t('O‘rtacha chek')}</small><strong>{money(data.summary.average_check)} <em>{t('so‘m')}</em></strong></div>
             </article>
           </div>
 
           <p className="sales-note">
-            {data.summary.top_dish && <span>Eng ko‘p sotilgan: <b>{data.summary.top_dish}</b></span>}
+            {data.summary.top_dish && <span>{t('Eng ko‘p sotilgan')}: <b>{data.summary.top_dish}</b></span>}
             {data.summary.peak_hour !== null && (
-              <span>Eng gavjum soat: <b>{hourLabel(data.summary.peak_hour)}</b> ({money(data.summary.peak_hour_revenue || 0)} so‘m)</span>
+              <span>
+                {t('Eng gavjum soat')}: <b>{hourLabel(data.summary.peak_hour)}</b>{' '}
+                ({money(data.summary.peak_hour_revenue || 0)} {t('so‘m')})
+              </span>
             )}
             {data.methods.map(row => (
-              <span key={row.method}>{row.label}: <b>{money(row.revenue)} so‘m</b></span>
+              <span key={row.method}>{row.label}: <b>{money(row.revenue)} {t('so‘m')}</b></span>
             ))}
-            {filters.mine && <span><b>Faqat {user?.name} savdolari</b></span>}
+            {filters.mine && <span><b>{t('Faqat {name} savdolari', { name: user?.name || '' })}</b></span>}
           </p>
 
           <div className="report-grid">
             <section className="panel report-trend">
               <header className="panel-heading">
                 <div>
-                  <h2>{multiDay ? 'Kunlar bo‘yicha' : 'Soatlar bo‘yicha'}</h2>
+                  <h2>{multiDay ? t('Kunlar bo‘yicha') : t('Soatlar bo‘yicha')}</h2>
                   <p>{data.filters.start}{multiDay ? ` — ${data.filters.end}` : ''}</p>
                 </div>
                 {multiDay ? <CalendarDays size={20} /> : <Clock3 size={20} />}
               </header>
-              <div className="report-chart" role="img" aria-label="Savdo taqsimoti">
+              <div className="report-chart" role="img" aria-label={t('Savdo taqsimoti')}>
                 {(multiDay ? data.days : data.hours).map(row => {
                   const point = row as { hour?: number; date?: string; revenue: string; orders: number }
                   const key = multiDay ? point.date! : String(point.hour)
@@ -297,27 +303,27 @@ export default function SalesPage() {
                     <div
                       key={key}
                       className="report-bar"
-                      title={`${caption}: ${money(point.revenue)} so‘m, ${point.orders} chek`}
+                      title={`${caption}: ${money(point.revenue)} ${t('so‘m')}, ${tn('{count} chek', point.orders)}`}
                     >
                       <div><span style={{ height: `${height}%` }} /></div>
                       <small>{caption}</small>
                     </div>
                   )
                 })}
-                {!data.summary.orders && <p className="chart-empty">Tanlangan davrda to‘langan savdo yo‘q</p>}
+                {!data.summary.orders && <p className="chart-empty">{t('Tanlangan davrda to‘langan savdo yo‘q')}</p>}
               </div>
               <footer>
                 {data.methods.length
                   ? data.methods.map(row => (
                     <span key={row.method}>{row.label}: <strong>{money(row.revenue)}</strong></span>
                   ))
-                  : <span>To‘lov qayd etilmagan</span>}
+                  : <span>{t('To‘lov qayd etilmagan')}</span>}
               </footer>
             </section>
 
             <section className="panel report-categories">
               <header className="panel-heading">
-                <div><h2>Kategoriya bo‘yicha</h2><p>Qaysi yo‘nalish ko‘proq sotildi?</p></div>
+                <div><h2>{t('Kategoriya bo‘yicha')}</h2><p>{t('Qaysi yo‘nalish ko‘proq sotildi?')}</p></div>
               </header>
               {data.categories.length ? (
                 <div className="category-ranking">
@@ -325,7 +331,7 @@ export default function SalesPage() {
                     <div key={row.category_id}>
                       <div>
                         <strong>{row.category}</strong>
-                        <span>{row.quantity} porsiya · {row.orders} chek</span>
+                        <span>{tn('{count} porsiya', row.quantity)} · {tn('{count} chek', row.orders)}</span>
                         <b>{money(row.revenue)}</b>
                       </div>
                       <div className="progress-track">
@@ -335,28 +341,31 @@ export default function SalesPage() {
                   ))}
                 </div>
               ) : (
-                <div className="empty-state compact">Kategoriya bo‘yicha ma’lumot yo‘q.</div>
+                <div className="empty-state compact">{t('Kategoriya bo‘yicha ma’lumot yo‘q.')}</div>
               )}
             </section>
           </div>
 
           <section className="panel spaced">
             <header className="panel-heading">
-              <div><h2>Nima sotildi</h2><p>Har bir taom bo‘yicha miqdor va tushum</p></div>
+              <div><h2>{t('Nima sotildi')}</h2><p>{t('Har bir taom bo‘yicha miqdor va tushum')}</p></div>
               <div className="search-field">
                 <Search size={17} />
                 <input
                   value={dishQuery}
                   onChange={event => setDishQuery(event.target.value)}
-                  placeholder="Taom yoki kategoriya…"
-                  aria-label="Sotilgan taomni qidirish"
+                  placeholder={t('Taom yoki kategoriya…')}
+                  aria-label={t('Sotilgan taomni qidirish')}
                 />
               </div>
             </header>
             <div className="table-wrap">
               <table>
                 <thead>
-                  <tr><th>TAOM</th><th>KATEGORIYA</th><th>PORSIYA</th><th>CHEKLAR</th><th>TUSHUM</th><th>ULUSH</th></tr>
+                  <tr>
+                    <th>{t('TAOM')}</th><th>{t('KATEGORIYA')}</th><th>{t('PORSIYA')}</th>
+                    <th>{t('CHEKLAR')}</th><th>{t('TUSHUM')}</th><th>{t('ULUSH')}</th>
+                  </tr>
                 </thead>
                 <tbody>
                   {soldRows.map(row => (
@@ -365,7 +374,7 @@ export default function SalesPage() {
                       <td><span className="pill subtle">{row.category}</span></td>
                       <td>{row.quantity}</td>
                       <td>{row.orders}</td>
-                      <td className="number">{money(row.revenue)} so‘m</td>
+                      <td className="number">{money(row.revenue)} {t('so‘m')}</td>
                       <td>
                         <div className="share-cell">
                           <span
@@ -383,7 +392,9 @@ export default function SalesPage() {
               </table>
               {!soldRows.length && (
                 <div className="empty-state compact">
-                  {data.dishes.length ? 'Qidiruv bo‘yicha taom topilmadi.' : 'Tanlangan davrda sotilgan taom yo‘q.'}
+                  {data.dishes.length
+                    ? t('Qidiruv bo‘yicha taom topilmadi.')
+                    : t('Tanlangan davrda sotilgan taom yo‘q.')}
                 </div>
               )}
             </div>
@@ -392,7 +403,7 @@ export default function SalesPage() {
           {data.cashiers.length > 1 && (
             <section className="panel spaced">
               <header className="panel-heading">
-                <div><h2>Kassirlar kesimida</h2><p>Kim qancha chek yopdi</p></div>
+                <div><h2>{t('Kassirlar kesimida')}</h2><p>{t('Kim qancha chek yopdi')}</p></div>
                 <UserRound size={20} />
               </header>
               <div className="category-ranking">
@@ -400,7 +411,7 @@ export default function SalesPage() {
                   <div key={row.name}>
                     <div>
                       <strong>{row.name}</strong>
-                      <span>{row.orders} chek · {row.quantity} porsiya</span>
+                      <span>{tn('{count} chek', row.orders)} · {tn('{count} porsiya', row.quantity)}</span>
                       <b>{money(row.revenue)}</b>
                     </div>
                     <div className="progress-track">
@@ -414,35 +425,44 @@ export default function SalesPage() {
 
           <section className="panel spaced">
             <header className="panel-heading">
-              <div><h2>So‘nggi cheklar</h2><p>Tanlangan davrdagi oxirgi 20 ta to‘lov</p></div>
-              <span className="pill">{data.checks.length} ta</span>
+              <div><h2>{t('So‘nggi cheklar')}</h2><p>{t('Tanlangan davrdagi oxirgi 20 ta to‘lov')}</p></div>
+              <span className="pill">{t('{count} ta', { count: data.checks.length })}</span>
             </header>
             <div className="table-wrap">
               <table>
                 <thead>
-                  <tr><th>HISOB</th><th>STOL / OFITSIANT</th><th>VAQT</th><th>TO‘LOV</th><th>KASSIR</th><th>SUMMA</th></tr>
+                  <tr>
+                    <th>{t('HISOB')}</th><th>{t('STOL / OFITSIANT')}</th><th>{t('VAQT')}</th>
+                    <th>{t('TO‘LOV')}</th><th>{t('KASSIR')}</th><th>{t('SUMMA')}</th>
+                  </tr>
                 </thead>
                 <tbody>
                   {data.checks.map(check => (
                     <tr key={check.id}>
-                      <td><strong>#{String(check.id).padStart(4, '0')}</strong><small>{check.items} ta porsiya</small></td>
-                      <td>{check.table ? `${check.table}-stol` : 'Tezkor savdo'}<small>{check.waiter || '—'}</small></td>
+                      <td>
+                        <strong>#{String(check.id).padStart(4, '0')}</strong>
+                        <small>{tn('{count} ta porsiya', check.items)}</small>
+                      </td>
+                      <td>
+                        {check.table ? t('{table}-stol', { table: check.table }) : t('Tezkor savdo')}
+                        <small>{check.waiter || '—'}</small>
+                      </td>
                       <td>{dateLabel(check.paid_at)}</td>
                       <td><span className="pill subtle">{check.payment_label}</span></td>
                       <td>{check.cashier_name}</td>
-                      <td className="number">{money(check.total)} so‘m</td>
+                      <td className="number">{money(check.total)} {t('so‘m')}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
               {!data.checks.length && (
-                <div className="empty-state compact">Tanlangan davrda to‘langan chek yo‘q.</div>
+                <div className="empty-state compact">{t('Tanlangan davrda to‘langan chek yo‘q.')}</div>
               )}
             </div>
           </section>
 
           <p className="data-note">
-            Bu bo‘limda faqat to‘langan cheklar ko‘rsatiladi. To‘lov kutilayotgan hisoblar «Buyurtmalar» bo‘limida.
+            {t('Bu bo‘limda faqat to‘langan cheklar ko‘rsatiladi. To‘lov kutilayotgan hisoblar «Buyurtmalar» bo‘limida.')}
           </p>
         </>
       )}

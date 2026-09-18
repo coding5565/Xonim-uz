@@ -121,33 +121,39 @@ export default function ActivityPage() {
       {error && <p className="alert error">{error}</p>}
 
       <div className="inventory-summary">
-        <div><History size={21} /><span><strong>{data?.count ?? 0}</strong> ta harakat tanlovda</span></div>
+        <div>
+          <History size={21} />
+          <span><strong>{data?.count ?? 0}</strong> {tn('ta harakat tanlovda', data?.count ?? 0)}</span>
+        </div>
         <div>
           <ShieldCheck size={21} />
-          <span><strong>{data?.pages ?? 1}</strong> sahifa · har birida {data?.page_size ?? 100} tadan</span>
+          <span>
+            <strong>{data?.pages ?? 1}</strong>{' '}
+            {tn('sahifa · har birida {size} tadan', data?.pages ?? 1, { size: data?.page_size ?? 100 })}
+          </span>
         </div>
         <p>
           {filtered && data
-            ? `Tanlangan sana oralig‘ida jami ${data.total} ta yozuv bor.`
-            : 'Jurnal to‘liq saqlanadi — eski yozuvlar hech qachon tozalanmaydi.'}
+            ? tn('Tanlangan sana oralig‘ida jami {count} ta yozuv bor.', data.total)
+            : t('Jurnal to‘liq saqlanadi — eski yozuvlar hech qachon tozalanmaydi.')}
         </p>
       </div>
 
       <section className="panel report-filters log-filters">
         <header>
           <Filter size={19} />
-          <div><h2>Filtrlar</h2><p>Kun bo‘yicha va harakat turi bo‘yicha saralang</p></div>
+          <div><h2>{t('Filtrlar')}</h2><p>{t('Kun bo‘yicha va harakat turi bo‘yicha saralang')}</p></div>
           <div className="report-presets">
-            <button onClick={() => preset('today')}>Bugun</button>
-            <button onClick={() => preset('yesterday')}>Kecha</button>
-            <button onClick={() => preset('week')}>7 kun</button>
-            <button onClick={() => preset('month')}>Shu oy</button>
-            <button onClick={() => preset('all')}>Hammasi</button>
+            <button onClick={() => preset('today')}>{t('Bugun')}</button>
+            <button onClick={() => preset('yesterday')}>{t('Kecha')}</button>
+            <button onClick={() => preset('week')}>{t('7 kun')}</button>
+            <button onClick={() => preset('month')}>{t('Shu oy')}</button>
+            <button onClick={() => preset('all')}>{t('Hammasi')}</button>
           </div>
         </header>
         <div className="report-filter-grid">
           <label>
-            Boshlanish
+            {t('Boshlanish')}
             <input
               value={filters.start}
               onChange={event => apply({ start: event.target.value })}
@@ -156,7 +162,7 @@ export default function ActivityPage() {
             />
           </label>
           <label>
-            Tugash
+            {t('Tugash')}
             <input
               value={filters.end}
               onChange={event => apply({ end: event.target.value })}
@@ -166,9 +172,9 @@ export default function ActivityPage() {
             />
           </label>
           <label>
-            Harakat turi
+            {t('Harakat turi')}
             <select value={filters.action} onChange={event => apply({ action: event.target.value })}>
-              <option value="">Barcha harakatlar</option>
+              <option value="">{t('Barcha harakatlar')}</option>
               {byGroup(data?.actions || []).map(([group, items]) => (
                 <optgroup key={group} label={group}>
                   {items.map(item => (
@@ -179,9 +185,9 @@ export default function ActivityPage() {
             </select>
           </label>
           <label>
-            Xodim
+            {t('Xodim')}
             <select value={filters.actor} onChange={event => apply({ actor: event.target.value })}>
-              <option value="">Barcha xodimlar</option>
+              <option value="">{t('Barcha xodimlar')}</option>
               {(data?.actors || []).map(item => (
                 <option key={item.id} value={item.id}>{item.name} ({item.count})</option>
               ))}
@@ -190,7 +196,7 @@ export default function ActivityPage() {
         </div>
         {active && (
           <button className="button secondary filter-reset" onClick={() => write(NO_FILTER, 1)}>
-            <X size={16} />Filtrlarni tozalash
+            <X size={16} />{t('Filtrlarni tozalash')}
           </button>
         )}
       </section>
@@ -198,19 +204,19 @@ export default function ActivityPage() {
       <section className="panel">
         <header className="panel-heading">
           <div>
-            <h2>Harakatlar jurnali</h2>
-            <p>{data?.count ? `${firstRow}–${lastRow} / ${data.count}` : 'Yozuv topilmadi'}</p>
+            <h2>{t('Harakatlar jurnali')}</h2>
+            <p>{data?.count ? `${firstRow}–${lastRow} / ${data.count}` : t('Yozuv topilmadi')}</p>
           </div>
         </header>
         <div className="table-wrap">
           <table className="log-table">
             <thead>
-              <tr><th>VAQT</th><th>HARAKAT</th><th>TAFSILOT</th><th>XODIM</th></tr>
+              <tr><th>{t('VAQT')}</th><th>{t('HARAKAT')}</th><th>{t('TAFSILOT')}</th><th>{t('XODIM')}</th></tr>
             </thead>
             <tbody>
               {rows.map(row => (
                 <tr key={row.id}>
-                  <td className="log-time">{stamp(row.created_at)}</td>
+                  <td className="log-time">{stamp(row.created_at, locale)}</td>
                   <td>
                     <span className="log-action" data-group={row.group}>{row.label}</span>
                     <small>{row.group}</small>
@@ -221,15 +227,15 @@ export default function ActivityPage() {
               ))}
             </tbody>
           </table>
-          {!loading && !rows.length && <div className="empty-state">Bu tanlov bo‘yicha harakat topilmadi.</div>}
+          {!loading && !rows.length && <div className="empty-state">{t('Bu tanlov bo‘yicha harakat topilmadi.')}</div>}
         </div>
         {!!data && data.pages > 1 && (
           <div className="log-pager">
             <button className="button secondary" disabled={loading || data.page <= 1} onClick={() => setPage(data.page - 1)}>
-              <ChevronLeft size={16} />Oldingi
+              <ChevronLeft size={16} />{t('Oldingi')}
             </button>
             <label>
-              Sahifa
+              {t('Sahifa')}
               <select value={data.page} onChange={event => setPage(Number(event.target.value))}>
                 {Array.from({ length: data.pages }, (_, index) => index + 1).map(number => (
                   <option key={number} value={number}>{number}</option>
@@ -238,7 +244,7 @@ export default function ActivityPage() {
               <span>/ {data.pages}</span>
             </label>
             <button className="button secondary" disabled={loading || data.page >= data.pages} onClick={() => setPage(data.page + 1)}>
-              Keyingi<ChevronRight size={16} />
+              {t('Keyingi')}<ChevronRight size={16} />
             </button>
           </div>
         )}

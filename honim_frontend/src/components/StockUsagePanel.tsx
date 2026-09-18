@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, CalendarDays, Coins, Filter, PackageSearch, TrendingDown } from 'lucide-react'
 import { api, money, today } from '../api'
+import { useI18n } from '../i18n'
 import type { Ingredient, StockUsage } from '../types'
 
 interface Props {
@@ -17,6 +18,7 @@ function shiftDate(value: string, days: number) {
 }
 
 export default function StockUsagePanel({ ingredients, filters, onChange }: Props) {
+  const { t, tn } = useI18n()
   const [data, setData] = useState<StockUsage>()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -58,17 +60,17 @@ export default function StockUsagePanel({ ingredients, filters, onChange }: Prop
       <section className="panel report-filters">
         <header>
           <Filter size={19} />
-          <div><h2>Davr</h2><p>Qaysi kundan qaysi kungacha qancha masalliq ketgani</p></div>
+          <div><h2>{t('Davr')}</h2><p>{t('Qaysi kundan qaysi kungacha qancha masalliq ketgani')}</p></div>
           <div className="report-presets">
-            <button onClick={() => preset('today')}>Bugun</button>
-            <button onClick={() => preset('week')}>7 kun</button>
-            <button onClick={() => preset('month')}>Shu oy</button>
-            <button onClick={() => preset('quarter')}>90 kun</button>
+            <button onClick={() => preset('today')}>{t('Bugun')}</button>
+            <button onClick={() => preset('week')}>{t('7 kun')}</button>
+            <button onClick={() => preset('month')}>{t('Shu oy')}</button>
+            <button onClick={() => preset('quarter')}>{t('90 kun')}</button>
           </div>
         </header>
         <div className="report-filter-grid">
           <label>
-            Boshlanish
+            {t('Boshlanish')}
             <input
               value={filters.start}
               onChange={event => onChange({ start: event.target.value })}
@@ -77,7 +79,7 @@ export default function StockUsagePanel({ ingredients, filters, onChange }: Prop
             />
           </label>
           <label>
-            Tugash
+            {t('Tugash')}
             <input
               value={filters.end}
               onChange={event => onChange({ end: event.target.value })}
@@ -87,9 +89,9 @@ export default function StockUsagePanel({ ingredients, filters, onChange }: Prop
             />
           </label>
           <label>
-            Mahsulot
+            {t('Mahsulot')}
             <select value={filters.ingredient} onChange={event => onChange({ ingredient: event.target.value })}>
-              <option value="">Barcha mahsulotlar</option>
+              <option value="">{t('Barcha mahsulotlar')}</option>
               {ingredients.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
           </label>
@@ -104,10 +106,10 @@ export default function StockUsagePanel({ ingredients, filters, onChange }: Prop
             <article>
               <span className="metric-icon orange"><TrendingDown /></span>
               <div>
-                <small>Davrda sarflangan</small>
-                <strong>{money(data.summary.used_value)} <em>so‘m</em></strong>
+                <small>{t('Davrda sarflangan')}</small>
+                <strong>{money(data.summary.used_value)} <em>{t('so‘m')}</em></strong>
                 <em>
-                  {data.summary.days} kun · kuniga {money(data.summary.per_day_value)} so‘m
+                  {tn('{count} kun', data.summary.days)} · {t('kuniga {value} so‘m', { value: money(data.summary.per_day_value) })}
                   {data.summary.unit && ` · ${money(data.summary.used)} ${data.summary.unit}`}
                 </em>
               </div>
@@ -115,17 +117,17 @@ export default function StockUsagePanel({ ingredients, filters, onChange }: Prop
             <article>
               <span className="metric-icon blue"><PackageSearch /></span>
               <div>
-                <small>Kirim qilingan</small>
-                <strong>{money(data.summary.received_value)} <em>so‘m</em></strong>
-                <em>{data.summary.moves} ta harakat</em>
+                <small>{t('Kirim qilingan')}</small>
+                <strong>{money(data.summary.received_value)} <em>{t('so‘m')}</em></strong>
+                <em>{tn('{count} ta harakat', data.summary.moves)}</em>
               </div>
             </article>
             <article>
               <span className="metric-icon green"><Coins /></span>
               <div>
-                <small>Hozirgi ombor qiymati</small>
-                <strong>{money(data.summary.stock_value)} <em>so‘m</em></strong>
-                <em>{data.summary.items_moved} ta mahsulot harakatda</em>
+                <small>{t('Hozirgi ombor qiymati')}</small>
+                <strong>{money(data.summary.stock_value)} <em>{t('so‘m')}</em></strong>
+                <em>{tn('{count} ta mahsulot harakatda', data.summary.items_moved)}</em>
               </div>
             </article>
             <article>
@@ -133,9 +135,9 @@ export default function StockUsagePanel({ ingredients, filters, onChange }: Prop
                 <AlertTriangle />
               </span>
               <div>
-                <small>Narxsiz harakatlar</small>
-                <strong>{data.summary.unpriced_moves} <em>ta</em></strong>
-                <em>{data.summary.unpriced_moves ? 'Bular so‘m hisobiga kirmaydi' : 'Hammasi narx bilan yozilgan'}</em>
+                <small>{t('Narxsiz harakatlar')}</small>
+                <strong>{data.summary.unpriced_moves} <em>{t('ta')}</em></strong>
+                <em>{data.summary.unpriced_moves ? t('Bular so‘m hisobiga kirmaydi') : t('Hammasi narx bilan yozilgan')}</em>
               </div>
             </article>
           </div>
@@ -143,22 +145,26 @@ export default function StockUsagePanel({ ingredients, filters, onChange }: Prop
           <section className="panel">
             <header className="panel-heading">
               <div>
-                <h2>Kunlik sarf</h2>
+                <h2>{t('Kunlik sarf')}</h2>
                 <p>
-                  {data.filters.group === 'month' ? 'Oylar bo‘yicha' : 'Kunlar bo‘yicha'} ·{' '}
-                  {useValue ? 'so‘m hisobida' : `miqdor hisobida (${data.summary.unit})`}
+                  {data.filters.group === 'month' ? t('Oylar bo‘yicha') : t('Kunlar bo‘yicha')} ·{' '}
+                  {useValue ? t('so‘m hisobida') : t('miqdor hisobida ({unit})', { unit: data.summary.unit })}
                 </p>
               </div>
               <CalendarDays size={18} />
             </header>
-            <div className="report-chart" role="img" aria-label="Masalliq sarfi grafigi">
+            <div className="report-chart" role="img" aria-label={t('Masalliq sarfi grafigi')}>
               {data.series.map(point => (
                 <div
                   key={point.date}
                   className="report-bar"
                   title={point.used
-                    ? `${point.label}: ${money(point.used_value)} so‘m · ${point.used} sarflandi, ${point.received} kirim`
-                    : `${point.label}: ${money(point.used_value)} so‘m sarflandi, ${money(point.received_value)} so‘m kirim`}
+                    ? t('{label}: {value} so‘m · {used} sarflandi, {received} kirim', {
+                      label: point.label, value: money(point.used_value), used: point.used, received: point.received,
+                    })
+                    : t('{label}: {value} so‘m sarflandi, {received} so‘m kirim', {
+                      label: point.label, value: money(point.used_value), received: money(point.received_value),
+                    })}
                 >
                   <div>
                     <span style={{ height: `${(Number(useValue ? point.used_value : point.used) / maxUsed) * 100}%` }} />
@@ -166,24 +172,24 @@ export default function StockUsagePanel({ ingredients, filters, onChange }: Prop
                   <small>{point.label}</small>
                 </div>
               ))}
-              {!data.summary.moves && <p className="chart-empty">Bu davrda ombor harakati bo‘lmagan</p>}
+              {!data.summary.moves && <p className="chart-empty">{t('Bu davrda ombor harakati bo‘lmagan')}</p>}
             </div>
           </section>
 
           <section className="panel spaced">
             <header className="panel-heading">
               <div>
-                <h2>Mahsulot bo‘yicha</h2>
-                <p>Ochilish qoldig‘i, kirim, sarf va yopilish — eng ko‘p pul ketgani yuqorida</p>
+                <h2>{t('Mahsulot bo‘yicha')}</h2>
+                <p>{t('Ochilish qoldig‘i, kirim, sarf va yopilish — eng ko‘p pul ketgani yuqorida')}</p>
               </div>
-              <span className="pill subtle">{data.summary.items_moved} ta</span>
+              <span className="pill subtle">{data.summary.items_moved} {t('ta')}</span>
             </header>
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th>MAHSULOT</th><th>OCHILISH</th><th>KIRIM</th><th>SARF</th><th>SARF SUMMASI</th>
-                    <th>PUL ULUSHI</th><th>KUNIGA</th><th>YETADI</th><th>YOPILISH</th>
+                    <th>{t('MAHSULOT')}</th><th>{t('OCHILISH')}</th><th>{t('KIRIM')}</th><th>{t('SARF')}</th><th>{t('SARF SUMMASI')}</th>
+                    <th>{t('PUL ULUSHI')}</th><th>{t('KUNIGA')}</th><th>{t('YETADI')}</th><th>{t('YOPILISH')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -192,29 +198,33 @@ export default function StockUsagePanel({ ingredients, filters, onChange }: Prop
                       <td>
                         <strong>{row.name}</strong>
                         <small>
-                          {Number(row.unit_cost) ? `${money(row.unit_cost)} so‘m/${row.unit}` : 'narx yo‘q'}
-                          {row.low ? ' · kam qolgan' : ''}
+                          {Number(row.unit_cost)
+                            ? t('{price} so‘m/{unit}', { price: money(row.unit_cost), unit: row.unit })
+                            : t('narx yo‘q')}
+                          {row.low ? ` · ${t('kam qolgan')}` : ''}
                         </small>
                       </td>
                       <td className="number">{money(row.opening)} {row.unit}</td>
                       <td className="number">{Number(row.received) ? `+${money(row.received)}` : '—'}</td>
                       <td className="number">
                         −{money(row.used)} {row.unit}
-                        {Number(row.sold) > 0 && <small>sotuvdan {money(row.sold)}</small>}
+                        {Number(row.sold) > 0 && <small>{t('sotuvdan {value}', { value: money(row.sold) })}</small>}
                       </td>
-                      <td className="number">{Number(row.used_value) ? `${money(row.used_value)} so‘m` : '—'}</td>
+                      <td className="number">{Number(row.used_value) ? `${money(row.used_value)} ${t('so‘m')}` : '—'}</td>
                       <td>
                         {row.share ? (
                           <>
                             <div className="share-cell"><span style={{ width: `${Math.min(100, Number(row.share))}%` }} /></div>
                             <small>{row.share}%</small>
                           </>
-                        ) : <span className="muted">narxsiz</span>}
+                        ) : <span className="muted">{t('narxsiz')}</span>}
                       </td>
                       <td className="number">{money(row.per_day)} {row.unit}</td>
                       <td className="number">
                         {row.days_left
-                          ? <span className={Number(row.days_left) <= 3 ? 'owed' : undefined}>{row.days_left} kun</span>
+                          ? <span className={Number(row.days_left) <= 3 ? 'owed' : undefined}>
+                            {tn('{count} kun', Number(row.days_left), { count: row.days_left })}
+                          </span>
                           : '—'}
                       </td>
                       <td className="number">{money(row.closing)} {row.unit}</td>
@@ -223,7 +233,7 @@ export default function StockUsagePanel({ ingredients, filters, onChange }: Prop
                 </tbody>
               </table>
               {!data.ingredients.length && (
-                <div className="empty-state">Bu davrda hech bir mahsulot harakat qilmagan.</div>
+                <div className="empty-state">{t('Bu davrda hech bir mahsulot harakat qilmagan.')}</div>
               )}
             </div>
           </section>
@@ -232,21 +242,21 @@ export default function StockUsagePanel({ ingredients, filters, onChange }: Prop
             <section className="panel spaced">
               <header className="panel-heading">
                 <div>
-                  <h2>Harakatsiz mahsulotlar</h2>
-                  <p>Bu davrda na kirim, na sarf bo‘lgan — retseptga ulanmagan bo‘lishi mumkin</p>
+                  <h2>{t('Harakatsiz mahsulotlar')}</h2>
+                  <p>{t('Bu davrda na kirim, na sarf bo‘lgan — retseptga ulanmagan bo‘lishi mumkin')}</p>
                 </div>
-                <Link to="/recipes" className="text-link">Retseptlarni ko‘rish →</Link>
+                <Link to="/recipes" className="text-link">{t('Retseptlarni ko‘rish')} →</Link>
               </header>
               <div className="table-wrap">
                 <table>
-                  <thead><tr><th>MAHSULOT</th><th>QOLDIQ</th><th>TANNARX</th><th>QOLDIQ QIYMATI</th></tr></thead>
+                  <thead><tr><th>{t('MAHSULOT')}</th><th>{t('QOLDIQ')}</th><th>{t('TANNARX')}</th><th>{t('QOLDIQ QIYMATI')}</th></tr></thead>
                   <tbody>
                     {data.idle.map(row => (
                       <tr key={row.id}>
                         <td><strong>{row.name}</strong></td>
                         <td className="number">{money(row.quantity)} {row.unit}</td>
-                        <td className="number">{Number(row.unit_cost) ? `${money(row.unit_cost)} so‘m` : '—'}</td>
-                        <td className="number">{Number(row.stock_value) ? `${money(row.stock_value)} so‘m` : '—'}</td>
+                        <td className="number">{Number(row.unit_cost) ? `${money(row.unit_cost)} ${t('so‘m')}` : '—'}</td>
+                        <td className="number">{Number(row.stock_value) ? `${money(row.stock_value)} ${t('so‘m')}` : '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -256,13 +266,11 @@ export default function StockUsagePanel({ ingredients, filters, onChange }: Prop
           )}
 
           <p className="data-note">
-            Sarf summasi harakat yozilgan paytdagi ombor tannarxida hisoblanadi, shuning uchun narx keyin
-            o‘zgarsa ham eski hisobot o‘zgarmaydi. Kirimda narx yozilmagan bo‘lsa, o‘sha harakat so‘m
-            hisobiga kirmaydi.
+            {t('Sarf summasi harakat yozilgan paytdagi ombor tannarxida hisoblanadi, shuning uchun narx keyin o‘zgarsa ham eski hisobot o‘zgarmaydi. Kirimda narx yozilmagan bo‘lsa, o‘sha harakat so‘m hisobiga kirmaydi.')}
           </p>
         </>
       )}
-      {loading && !data && <div className="empty-state">Hisoblanmoqda…</div>}
+      {loading && !data && <div className="empty-state">{t('Hisoblanmoqda…')}</div>}
     </>
   )
 }

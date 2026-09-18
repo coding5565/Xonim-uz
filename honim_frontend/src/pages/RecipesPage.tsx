@@ -4,6 +4,7 @@ import {
 } from 'lucide-react'
 import { api, list, money } from '../api'
 import type { Dish, Ingredient, Recipe } from '../types'
+import { useI18n } from '../i18n'
 import AppModal from '../components/AppModal'
 
 interface FormLine {
@@ -34,6 +35,7 @@ const wholeMoney = (value: string | number) => money(Math.round(Number(value)))
 const yieldLabel = (value: string) => Number(value).toLocaleString('uz-UZ', { maximumFractionDigits: 3 })
 
 export default function RecipesPage() {
+  const { t } = useI18n()
   const [recipes, setRecipes] = useState<Recipe[]>([])
   const [dishes, setDishes] = useState<Dish[]>([])
   const [ingredients, setIngredients] = useState<Ingredient[]>([])
@@ -194,66 +196,96 @@ export default function RecipesPage() {
     <>
       <div className="page-heading">
         <div>
-          <span className="eyebrow">TANNARX VA MARJA</span>
-          <h1>Retseptlar va foyda<span className="heading-dot">.</span></h1>
-          <p>Har taomning batch tannarxi, porsiya tannarxi va yalpi foydasi.</p>
+          <span className="eyebrow">{t('TANNARX VA MARJA')}</span>
+          <h1>{t('Retseptlar va foyda')}<span className="heading-dot">.</span></h1>
+          <p>{t('Har taomning batch tannarxi, porsiya tannarxi va yalpi foydasi.')}</p>
         </div>
         <div className="heading-actions">
           <button
             className="button secondary"
             onClick={() => { setItemModal(true); setFormError(''); setItem(emptyItem) }}
           >
-            <Plus size={17} />Mahsulot
+            <Plus size={17} />{t('Mahsulot')}
           </button>
           <button className="button primary" disabled={!ingredients.length} onClick={() => openRecipe()}>
-            <Plus size={17} />Retsept
+            <Plus size={17} />{t('Retsept')}
           </button>
-          <button className="button secondary icon-button" disabled={loading} aria-label="Yangilash" onClick={load}>
+          <button
+            className="button secondary icon-button"
+            disabled={loading}
+            aria-label={t('Yangilash')}
+            onClick={load}
+          >
             <RefreshCw size={17} className={loading ? 'spin' : undefined} />
           </button>
         </div>
       </div>
       {error && <p className="alert error">{error}</p>}
       <div className="recipe-summary">
-        <article><ChefHat size={21} /><div><small>Retseptlar</small><strong>{recipes.length} ta</strong></div></article>
-        <article><PackageCheck size={21} /><div><small>Menyuga bog‘langan</small><strong>{linked} ta</strong></div></article>
+        <article>
+          <ChefHat size={21} />
+          <div><small>{t('Retseptlar')}</small><strong>{t('{count} ta', { count: recipes.length })}</strong></div>
+        </article>
+        <article>
+          <PackageCheck size={21} />
+          <div><small>{t('Menyuga bog‘langan')}</small><strong>{t('{count} ta', { count: linked })}</strong></div>
+        </article>
         <article>
           <Coins size={21} />
-          <div><small>Batchlardagi yalpi foyda</small><strong>{wholeMoney(batchProfit)} so‘m</strong></div>
+          <div>
+            <small>{t('Batchlardagi yalpi foyda')}</small>
+            <strong>{wholeMoney(batchProfit)} {t('so‘m')}</strong>
+          </div>
         </article>
       </div>
-      {loading && !recipes.length && <div className="empty-state">Retseptlar yuklanmoqda…</div>}
+      {loading && !recipes.length && <div className="empty-state">{t('Retseptlar yuklanmoqda…')}</div>}
       {recipes.map(recipe => (
         <section key={recipe.id} className="panel recipe-card">
           <header>
             <div>
-              <span className="eyebrow">{recipe.dish_name || 'MENYUGA HALI BOG‘LANMAGAN'}</span>
+              <span className="eyebrow">{recipe.dish_name || t('MENYUGA HALI BOG‘LANMAGAN')}</span>
               <h2>{recipe.name}</h2>
               <p>
-                {yieldLabel(recipe.yield_quantity)} {recipe.yield_unit} · sotuv narxi {wholeMoney(recipe.selling_price)} so‘m
+                {yieldLabel(recipe.yield_quantity)} {recipe.yield_unit} · {t('sotuv narxi')}{' '}
+                {wholeMoney(recipe.selling_price)} {t('so‘m')}
               </p>
             </div>
             <div className="recipe-card-actions">
-              <span className={`status ${recipe.dish ? 'paid' : 'open'}`}>{recipe.dish ? 'Faol' : 'Draft'}</span>
-              <button className="icon-button" aria-label={`${recipe.name} tahrirlash`} onClick={() => openRecipe(recipe)}>
+              <span className={`status ${recipe.dish ? 'paid' : 'open'}`}>
+                {recipe.dish ? t('Faol') : t('Draft')}
+              </span>
+              <button
+                className="icon-button"
+                aria-label={t('{name} tahrirlash', { name: recipe.name })}
+                onClick={() => openRecipe(recipe)}
+              >
                 <Pencil size={17} />
               </button>
             </div>
           </header>
           <div className="recipe-metrics">
-            <div><small>Batch tannarxi</small><strong>{wholeMoney(recipe.batch_cost)} so‘m</strong></div>
-            <div><small>1 {recipe.yield_unit} tannarxi</small><strong>{wholeMoney(recipe.unit_cost)} so‘m</strong></div>
-            <div><small>1 birlik yalpi foyda</small><strong className="profit">{wholeMoney(recipe.gross_profit)} so‘m</strong></div>
+            <div>
+              <small>{t('Batch tannarxi')}</small>
+              <strong>{wholeMoney(recipe.batch_cost)} {t('so‘m')}</strong>
+            </div>
+            <div>
+              <small>{t('1 {unit} tannarxi', { unit: recipe.yield_unit })}</small>
+              <strong>{wholeMoney(recipe.unit_cost)} {t('so‘m')}</strong>
+            </div>
+            <div>
+              <small>{t('1 birlik yalpi foyda')}</small>
+              <strong className="profit">{wholeMoney(recipe.gross_profit)} {t('so‘m')}</strong>
+            </div>
           </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>MASALLIQ</th><th>MIQDOR</th><th>BATCH XARAJATI</th></tr></thead>
+              <thead><tr><th>{t('MASALLIQ')}</th><th>{t('MIQDOR')}</th><th>{t('BATCH XARAJATI')}</th></tr></thead>
               <tbody>
                 {recipe.lines.map(line => (
                   <tr key={line.id}>
                     <td><strong>{line.ingredient_name}</strong></td>
                     <td>{yieldLabel(line.quantity)} {line.unit}</td>
-                    <td className="number">{wholeMoney(line.batch_cost)} so‘m</td>
+                    <td className="number">{wholeMoney(line.batch_cost)} {t('so‘m')}</td>
                   </tr>
                 ))}
               </tbody>
@@ -263,45 +295,46 @@ export default function RecipesPage() {
       ))}
       {recipes.some(recipe => !recipe.dish) && (
         <p className="data-note">
-          <CircleAlert size={15} />Bulyon kalkulyatsiyasi saqlandi, ammo menyuda Bulyon taomi yo‘q. Uni menyuga qo‘shgach retseptga bog‘lanadi.
+          <CircleAlert size={15} />
+          {t('Bulyon kalkulyatsiyasi saqlandi, ammo menyuda Bulyon taomi yo‘q. Uni menyuga qo‘shgach retseptga bog‘lanadi.')}
         </p>
       )}
       <p className="data-note">
-        Yalpi foyda sotuv narxidan retsept tannarxi ayirilgan qiymat. Ijara, oylik va umumiy xarajatlar sof foydada alohida hisoblanadi.
+        {t('Yalpi foyda sotuv narxidan retsept tannarxi ayirilgan qiymat. Ijara, oylik va umumiy xarajatlar sof foydada alohida hisoblanadi.')}
       </p>
 
       <AppModal
         open={recipeModal}
-        title={editId ? 'Retseptni tahrirlash' : 'Yangi retsept'}
+        title={editId ? t('Retseptni tahrirlash') : t('Yangi retsept')}
         onClose={() => { if (!busy) setRecipeModal(false) }}
       >
         <form onSubmit={saveRecipe}>
           <fieldset disabled={busy}>
             <div className="form-row">
               <label>
-                Retsept nomi
+                {t('Retsept nomi')}
                 <input
                   value={form.name}
                   onChange={event => updateForm({ name: event.target.value })}
                   required
                   maxLength={120}
-                  placeholder="Masalan, Mastava"
+                  placeholder={t('Masalan, Mastava')}
                 />
               </label>
               <label>
-                Menyu taomi
+                {t('Menyu taomi')}
                 <select
                   value={form.dish ?? ''}
                   onChange={event => updateForm({ dish: event.target.value ? Number(event.target.value) : null })}
                 >
-                  <option value="">Hali bog‘lanmagan</option>
+                  <option value="">{t('Hali bog‘lanmagan')}</option>
                   {dishes.map(dish => <option key={dish.id} value={dish.id}>{dish.name}</option>)}
                 </select>
               </label>
             </div>
             <div className="form-row">
               <label>
-                Batch chiqimi
+                {t('Batch chiqimi')}
                 <input
                   value={form.yield_quantity}
                   onChange={event => updateForm({ yield_quantity: event.target.value })}
@@ -312,13 +345,13 @@ export default function RecipesPage() {
                 />
               </label>
               <label>
-                Birlik
+                {t('Birlik')}
                 <select value={form.yield_unit} onChange={event => updateForm({ yield_unit: event.target.value })}>
                   <option>dona</option><option>porsiya</option>
                 </select>
               </label>
               <label>
-                1 birlik sotuv narxi
+                {t('1 birlik sotuv narxi')}
                 <input
                   value={form.selling_price}
                   onChange={event => updateForm({ selling_price: event.target.value })}
@@ -333,13 +366,13 @@ export default function RecipesPage() {
               <div className="recipe-line-head">
                 <div>
                   <strong>
-                    {Number(form.yield_quantity) === 1
-                      ? `1 ${form.yield_unit} uchun masalliqlar`
-                      : `${Number(form.yield_quantity)} ${form.yield_unit} uchun masalliqlar`}
+                    {t('{count} {unit} uchun masalliqlar', {
+                      count: Number(form.yield_quantity), unit: form.yield_unit,
+                    })}
                   </strong>
-                  <small>Narx masalliq kartasidan olinadi — bu yerda faqat miqdor yoziladi</small>
+                  <small>{t('Narx masalliq kartasidan olinadi — bu yerda faqat miqdor yoziladi')}</small>
                 </div>
-                <button type="button" className="text-link" onClick={addLine}><Plus size={15} />Qator</button>
+                <button type="button" className="text-link" onClick={addLine}><Plus size={15} />{t('Qator')}</button>
               </div>
               {form.lines.map((line, index) => (
                 <div key={index} className="recipe-form-line">
@@ -364,12 +397,12 @@ export default function RecipesPage() {
                       type="number"
                       min={line.small ? '1' : '0.001'}
                       step={line.small ? '1' : '0.001'}
-                      placeholder="Miqdor"
+                      placeholder={t('Miqdor')}
                     />
                     <select
                       value={line.small ? 'small' : 'base'}
                       onChange={event => updateLine(index, { small: event.target.value === 'small' })}
-                      aria-label="O‘lchov birligi"
+                      aria-label={t('O‘lchov birligi')}
                     >
                       {(() => {
                         const item = ingredients.find(row => row.id === line.ingredient)
@@ -387,16 +420,16 @@ export default function RecipesPage() {
                     {(() => {
                       const chosen = ingredients.find(row => row.id === line.ingredient)
                       const price = Number(chosen?.unit_cost || 0)
-                      if (!price) return <em>narx kiritilmagan</em>
+                      if (!price) return <em>{t('narx kiritilmagan')}</em>
                       const amount = Number(line.quantity || 0) / (line.small ? 1000 : 1)
-                      return <>{wholeMoney(price * amount)} <small>so‘m</small></>
+                      return <>{wholeMoney(price * amount)} <small>{t('so‘m')}</small></>
                     })()}
                   </span>
                   <button
                     type="button"
                     className="icon-button"
                     disabled={form.lines.length === 1}
-                    aria-label="Qatorni o‘chirish"
+                    aria-label={t('Qatorni o‘chirish')}
                     onClick={() => removeLine(index)}
                   >
                     <Trash2 size={16} />
@@ -405,53 +438,55 @@ export default function RecipesPage() {
               ))}
               <div className="recipe-line-total">
                 <span>
-                  {Number(form.yield_quantity) === 1 ? '1 ta uchun tannarx' : 'Jami tannarx'}
+                  {Number(form.yield_quantity) === 1 ? t('1 ta uchun tannarx') : t('Jami tannarx')}
                 </span>
-                <strong>{wholeMoney(formCost)} so‘m</strong>
+                <strong>{wholeMoney(formCost)} {t('so‘m')}</strong>
                 {Number(form.yield_quantity) > 1 && (
-                  <small>1 {form.yield_unit} = {wholeMoney(formCost / Number(form.yield_quantity))} so‘m</small>
+                  <small>
+                    1 {form.yield_unit} = {wholeMoney(formCost / Number(form.yield_quantity))} {t('so‘m')}
+                  </small>
                 )}
                 {Number(form.selling_price) > 0 && (
                   <small className={formProfit < 0 ? 'owed' : undefined}>
-                    Foyda: {wholeMoney(formProfit)} so‘m
+                    {t('Foyda')}: {wholeMoney(formProfit)} {t('so‘m')}
                   </small>
                 )}
               </div>
             </div>
             <label className="checkbox">
               <input type="checkbox" checked={form.active} onChange={event => updateForm({ active: event.target.checked })} />
-              Retsept faol
+              {t('Retsept faol')}
             </label>
           </fieldset>
           {formError && <p className="alert error">{formError}</p>}
           <button className="button primary full" disabled={busy || !form.lines.length}>
-            {busy ? 'Saqlanmoqda…' : 'Retseptni saqlash'}
+            {busy ? t('Saqlanmoqda…') : t('Retseptni saqlash')}
           </button>
         </form>
       </AppModal>
 
-      <AppModal open={itemModal} title="Yangi mahsulot" onClose={() => { if (!busy) setItemModal(false) }}>
+      <AppModal open={itemModal} title={t('Yangi mahsulot')} onClose={() => { if (!busy) setItemModal(false) }}>
         <form onSubmit={saveItem}>
           <fieldset disabled={busy}>
             <label>
-              Mahsulot nomi
+              {t('Mahsulot nomi')}
               <input
                 value={item.name}
                 onChange={event => updateItem({ name: event.target.value })}
                 required
                 maxLength={100}
-                placeholder="Masalan, Pomidor"
+                placeholder={t('Masalan, Pomidor')}
               />
             </label>
             <div className="form-row">
               <label>
-                Birlik
+                {t('Birlik')}
                 <select value={item.unit} onChange={event => updateItem({ unit: event.target.value })}>
                   <option>kg</option><option>l</option><option>dona</option>
                 </select>
               </label>
               <label>
-                Minimal qoldiq
+                {t('Minimal qoldiq')}
                 <input
                   value={item.minimum}
                   onChange={event => updateItem({ minimum: event.target.value })}
@@ -464,11 +499,11 @@ export default function RecipesPage() {
             </div>
           </fieldset>
           <p className="alert">
-            Mahsulot qo‘shilgach uning boshlang‘ich qoldig‘ini «Ombor va sarf» bo‘limidagi Kirim orqali kiriting.
+            {t('Mahsulot qo‘shilgach uning boshlang‘ich qoldig‘ini «Ombor va sarf» bo‘limidagi Kirim orqali kiriting.')}
           </p>
           {formError && <p className="alert error">{formError}</p>}
           <button className="button primary full" disabled={busy}>
-            {busy ? 'Saqlanmoqda…' : 'Mahsulotni saqlash'}
+            {busy ? t('Saqlanmoqda…') : t('Mahsulotni saqlash')}
           </button>
         </form>
       </AppModal>

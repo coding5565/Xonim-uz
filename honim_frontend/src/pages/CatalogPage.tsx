@@ -264,70 +264,70 @@ export default function CatalogPage() {
       {!loading && !filtered.length && (
         <div className="empty-state">
           <Search size={32} />
-          <h3>Taom topilmadi</h3>
-          <p>Qidiruvni o‘zgartiring yoki yangi taom qo‘shing.</p>
+          <h3>{t('Taom topilmadi')}</h3>
+          <p>{t('Qidiruvni o‘zgartiring yoki yangi taom qo‘shing.')}</p>
         </div>
       )}
       <div className="inline-tip">
         <Eye size={18} />
-        <span>Faol taomlar kassir panelida va mijoz menyusida avtomatik ko‘rinadi.</span>
-        <Link to="/menu" target="_blank">Menyuni ko‘rish →</Link>
+        <span>{t('Faol taomlar kassir panelida va mijoz menyusida avtomatik ko‘rinadi.')}</span>
+        <Link to="/menu" target="_blank">{t('Menyuni ko‘rish')} →</Link>
       </div>
 
-      <AppModal open={modal === 'category'} title="Yangi kategoriya" onClose={() => { if (!busy) setModal('') }}>
+      <AppModal open={modal === 'category'} title={t('Yangi kategoriya')} onClose={() => { if (!busy) setModal('') }}>
         <form onSubmit={saveCategory}>
           <label>
-            Kategoriya nomi
+            {t('Kategoriya nomi')}
             <input
               value={categoryName}
               onChange={event => setCategoryName(event.target.value)}
               required
               maxLength={100}
-              placeholder="Masalan, Milliy taomlar"
+              placeholder={t('Masalan, Milliy taomlar')}
             />
           </label>
           <label>
-            Talon qaysi printerdan chiqsin?
+            {t('Talon qaysi printerdan chiqsin?')}
             <select value={categoryStation} onChange={event => setCategoryStation(event.target.value as Station)}>
-              <option value="kitchen">Oshxona — pishiriladi</option>
-              <option value="counter">Kassa — tayyor (suv, ichimlik)</option>
+              <option value="kitchen">{t('Oshxona — pishiriladi')}</option>
+              <option value="counter">{t('Kassa — tayyor (suv, ichimlik)')}</option>
             </select>
           </label>
           {formError && <p className="alert error">{formError}</p>}
           <button className="button primary full" disabled={busy}>
-            {busy ? 'Saqlanmoqda…' : 'Kategoriyani saqlash'}
+            {busy ? t('Saqlanmoqda…') : t('Kategoriyani saqlash')}
           </button>
         </form>
       </AppModal>
 
       <AppModal
         open={modal === 'dish'}
-        title={editId ? 'Taomni tahrirlash' : 'Yangi taom'}
+        title={editId ? t('Taomni tahrirlash') : t('Yangi taom')}
         onClose={() => { if (!busy) setModal('') }}
       >
         <form onSubmit={saveDish}>
           <div className="form-row">
             <label>
-              Taom nomi
+              {t('Taom nomi')}
               <input
                 value={form.name}
                 onChange={event => update({ name: event.target.value })}
                 required
                 maxLength={120}
-                placeholder="Masalan, To‘y oshi"
+                placeholder={t('Masalan, To‘y oshi')}
               />
             </label>
             <label>
-              Kategoriya
+              {t('Kategoriya')}
               <select value={form.category} onChange={event => update({ category: Number(event.target.value) })} required>
-                <option disabled value={0}>Kategoriyani tanlang</option>
+                <option disabled value={0}>{t('Kategoriyani tanlang')}</option>
                 {categories.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select>
             </label>
           </div>
           <div className="form-row">
             <label>
-              Narx, so‘m
+              {t('Narx, so‘m')}
               <input
                 value={form.price}
                 onChange={event => update({ price: event.target.value })}
@@ -339,7 +339,7 @@ export default function CatalogPage() {
               />
             </label>
             <label>
-              Porsiya
+              {t('Porsiya')}
               <input
                 value={form.portion}
                 onChange={event => update({ portion: event.target.value })}
@@ -350,18 +350,21 @@ export default function CatalogPage() {
             </label>
           </div>
           <label>
-            Tavsif
+            {t('Tavsif')}
             <textarea
               value={form.description}
               onChange={event => update({ description: event.target.value })}
               maxLength={500}
               rows={3}
-              placeholder="Tarkibi va taom haqida qisqacha…"
+              placeholder={t('Tarkibi va taom haqida qisqacha…')}
             />
           </label>
           <label className="upload-field">
             <ImagePlus size={24} />
-            <span>{imageFile?.name || 'Taom rasmini tanlang'}<small>JPG, PNG, WebP · 5 MB gacha</small></span>
+            <span>
+              {imageFile?.name || t('Taom rasmini tanlang')}
+              <small>{t('JPG, PNG, WebP · 5 MB gacha')}</small>
+            </span>
             <input type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseFile} />
           </label>
           <label className="checkbox">
@@ -370,7 +373,7 @@ export default function CatalogPage() {
               checked={form.available}
               onChange={event => update({ available: event.target.checked })}
             />
-            Hozir sotuvda mavjud
+            {t('Hozir sotuvda mavjud')}
           </label>
           {editId && (
             <label className="checkbox">
@@ -379,21 +382,21 @@ export default function CatalogPage() {
                 checked={form.archived}
                 onChange={event => update({ archived: event.target.checked })}
               />
-              Arxivlash (menyudan olib tashlash)
+              {t('Arxivlash (menyudan olib tashlash)')}
             </label>
           )}
           <div className="recipe-form-lines">
             <div className="recipe-line-head">
               <div>
-                <strong>1 porsiya uchun masalliqlar</strong>
+                <strong>{t('1 porsiya uchun masalliqlar')}</strong>
                 <small>
                   {ingredients.length
-                    ? 'Har bir taomdan bittasi sotilganda shu miqdor ombordan ayriladi'
-                    : 'Avval «Ombor va sarf» bo‘limiga masalliq qo‘shing'}
+                    ? t('Har bir taomdan bittasi sotilganda shu miqdor ombordan ayriladi')
+                    : t('Avval «Ombor va sarf» bo‘limiga masalliq qo‘shing')}
                 </small>
               </div>
               <button type="button" className="text-link" onClick={addRecipeLine} disabled={!ingredients.length}>
-                <Plus size={15} />Masalliq
+                <Plus size={15} />{t('Masalliq')}
               </button>
             </div>
             {recipeLines.map((line, index) => (
@@ -417,12 +420,12 @@ export default function CatalogPage() {
                     type="number"
                     min={line.small ? '1' : '0.001'}
                     step={line.small ? '1' : '0.001'}
-                    placeholder="Miqdor"
+                    placeholder={t('Miqdor')}
                   />
                   <select
                     value={line.small ? 'small' : 'base'}
                     onChange={event => updateRecipeLine(index, { small: event.target.value === 'small' })}
-                    aria-label="O‘lchov birligi"
+                    aria-label={t('O‘lchov birligi')}
                   >
                     {(() => {
                       const item = ingredients.find(row => row.id === line.ingredient)
@@ -438,15 +441,15 @@ export default function CatalogPage() {
                   {(() => {
                     const item = ingredients.find(row => row.id === line.ingredient)
                     const price = Number(item?.unit_cost || 0)
-                    if (!price) return <em>narx yo‘q</em>
+                    if (!price) return <em>{t('narx yo‘q')}</em>
                     const amount = Number(line.quantity || 0) / (line.small ? 1000 : 1)
-                    return <>{money(price * amount)} <small>so‘m</small></>
+                    return <>{money(price * amount)} <small>{t('so‘m')}</small></>
                   })()}
                 </span>
                 <button
                   type="button"
                   className="icon-button"
-                  aria-label="Qatorni o‘chirish"
+                  aria-label={t('Qatorni o‘chirish')}
                   onClick={() => setRecipeLines(recipeLines.filter((_, spot) => spot !== index))}
                 >
                   <Trash2 size={16} />
@@ -455,23 +458,23 @@ export default function CatalogPage() {
             ))}
             {!!recipeLines.length && (
               <div className="recipe-line-total">
-                <span>1 ta uchun tannarx</span>
-                <strong>{money(recipeCost)} so‘m</strong>
+                <span>{t('1 ta uchun tannarx')}</span>
+                <strong>{money(recipeCost)} {t('so‘m')}</strong>
                 {Number(form.price) > 0 && (
                   <small className={Number(form.price) - recipeCost < 0 ? 'owed' : undefined}>
-                    Foyda: {money(Number(form.price) - recipeCost)} so‘m
+                    {t('Foyda')}: {money(Number(form.price) - recipeCost)} {t('so‘m')}
                   </small>
                 )}
               </div>
             )}
             {!recipeLines.length && !!ingredients.length && (
               <p className="empty-state compact">
-                Retseptsiz taomning tannarxi nol hisoblanadi va foyda haqiqatdan yuqori ko‘rinadi.
+                {t('Retseptsiz taomning tannarxi nol hisoblanadi va foyda haqiqatdan yuqori ko‘rinadi.')}
               </p>
             )}
           </div>
           {formError && <p className="alert error" role="alert">{formError}</p>}
-          <button className="button primary full" disabled={busy}>{busy ? 'Saqlanmoqda…' : 'Saqlash'}</button>
+          <button className="button primary full" disabled={busy}>{busy ? t('Saqlanmoqda…') : t('Saqlash')}</button>
         </form>
       </AppModal>
     </>

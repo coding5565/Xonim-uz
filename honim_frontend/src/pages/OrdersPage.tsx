@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { ArrowRight, Printer, ReceiptText, Search, Undo2 } from 'lucide-react'
 import { api, dateLabel, list, money } from '../api'
 import { useSession } from '../session'
+import { useI18n } from '../i18n'
 import type { Order } from '../types'
 import AppModal from '../components/AppModal'
 
@@ -12,6 +13,7 @@ const statusTone = (status: Order['status']) =>
 
 export default function OrdersPage() {
   const { user } = useSession()
+  const { t, tn } = useI18n()
   const manager = user?.role === 'owner' || user?.role === 'admin'
   const [orders, setOrders] = useState<Order[]>([])
   const [filter, setFilter] = useState('all')
@@ -39,7 +41,8 @@ export default function OrdersPage() {
   }, [load])
 
   const methods = user?.payment_methods || []
-  const methodLabel = (value: string) => methods.find(item => item.method === value)?.label || 'To‘lov olinmagan'
+  const methodLabel = (value: string) =>
+    methods.find(item => item.method === value)?.label || t('To‘lov olinmagan')
 
   const visible = orders.filter(order =>
     (filter === 'all' || order.status === filter) &&
@@ -67,7 +70,7 @@ export default function OrdersPage() {
   /** To'langan hisobni qaytaradi: pul ham, ombor ham orqaga qaytadi. */
   async function refund() {
     if (!selected) return
-    const reason = prompt('Nima uchun qaytarilyapti?')
+    const reason = prompt(t('Nima uchun qaytarilyapti?'))
     if (!reason || reason.trim().length < 3) return
     setBusy(true)
     setError('')
@@ -92,7 +95,7 @@ export default function OrdersPage() {
     setPrinted('')
     try {
       await api(`orders/${selected.id}/print/`, { method: 'POST' })
-      setPrinted('Chek printerga yuborildi.')
+      setPrinted(t('Chek printerga yuborildi.'))
     } catch (exception) {
       setError((exception as Error).message)
     } finally {
@@ -104,53 +107,60 @@ export default function OrdersPage() {
     <>
       <div className="page-heading">
         <div>
-          <span className="eyebrow">SAVDO TARIXI</span>
-          <h1>Buyurtmalar<span className="heading-dot">.</span></h1>
-          <p>To‘lov kutilayotgan hisoblar, to‘lovlar va chek tafsilotlari.</p>
+          <span className="eyebrow">{t('SAVDO TARIXI')}</span>
+          <h1>{t('Buyurtmalar')}<span className="heading-dot">.</span></h1>
+          <p>{t('To‘lov kutilayotgan hisoblar, to‘lovlar va chek tafsilotlari.')}</p>
         </div>
-        <Link to="/pos" className="button primary">Kassaga o‘tish <ArrowRight size={17} /></Link>
+        <Link to="/pos" className="button primary">{t('Kassaga o‘tish')} <ArrowRight size={17} /></Link>
       </div>
       {error && <p className="alert error">{error}</p>}
       <section className="panel">
         <div className="table-toolbar">
           <div className="tabs">
-            <button className={filter === 'all' ? 'selected' : undefined} onClick={() => setFilter('all')}>Barchasi</button>
-            <button className={filter === 'open' ? 'selected' : undefined} onClick={() => setFilter('open')}>To‘lov kutilmoqda</button>
-            <button className={filter === 'paid' ? 'selected' : undefined} onClick={() => setFilter('paid')}>To‘langan</button>
-            <button className={filter === 'cancelled' ? 'selected' : undefined} onClick={() => setFilter('cancelled')}>Bekor qilingan</button>
-            <button className={filter === 'refunded' ? 'selected' : undefined} onClick={() => setFilter('refunded')}>Qaytarilgan</button>
+            <button className={filter === 'all' ? 'selected' : undefined} onClick={() => setFilter('all')}>{t('Barchasi')}</button>
+            <button className={filter === 'open' ? 'selected' : undefined} onClick={() => setFilter('open')}>{t('To‘lov kutilmoqda')}</button>
+            <button className={filter === 'paid' ? 'selected' : undefined} onClick={() => setFilter('paid')}>{t('To‘langan')}</button>
+            <button className={filter === 'cancelled' ? 'selected' : undefined} onClick={() => setFilter('cancelled')}>{t('Bekor qilingan')}</button>
+            <button className={filter === 'refunded' ? 'selected' : undefined} onClick={() => setFilter('refunded')}>{t('Qaytarilgan')}</button>
           </div>
           <div className="search-field">
             <Search size={17} />
             <input
               value={query}
               onChange={event => setQuery(event.target.value)}
-              aria-label="Buyurtma qidirish"
-              placeholder="Raqam, stol yoki ofitsiant…"
+              aria-label={t('Buyurtma qidirish')}
+              placeholder={t('Raqam, stol yoki ofitsiant…')}
             />
           </div>
         </div>
         <div className="table-wrap">
           <table>
             <thead>
-              <tr><th>HISOB</th><th>STOL / OFITSIANT</th><th>VAQT</th><th>SUMMA</th><th>HOLAT</th><th /></tr>
+              <tr>
+                <th>{t('HISOB')}</th>
+                <th>{t('STOL / OFITSIANT')}</th>
+                <th>{t('VAQT')}</th>
+                <th>{t('SUMMA')}</th>
+                <th>{t('HOLAT')}</th>
+                <th />
+              </tr>
             </thead>
             <tbody>
               {visible.map(order => (
                 <tr key={order.id}>
-                  <td><strong>#{String(order.id).padStart(4, '0')}</strong><small>{order.lines.length} xil taom</small></td>
-                  <td>{order.table ? `${order.table}-stol` : 'Tezkor savdo'}<small>{order.waiter || '—'}</small></td>
+                  <td><strong>#{String(order.id).padStart(4, '0')}</strong><small>{tn('{count} xil taom', order.lines.length)}</small></td>
+                  <td>{order.table ? t('{table}-stol', { table: order.table }) : t('Tezkor savdo')}<small>{order.waiter || '—'}</small></td>
                   <td>{dateLabel(order.created_at)}</td>
-                  <td className="number">{money(order.total)} so‘m</td>
+                  <td className="number">{money(order.total)} {t('so‘m')}</td>
                   <td>
                     <span className={`status ${statusTone(order.status)}`}>
-                      {order.status === 'open' ? 'To‘lov kutilmoqda' : order.status_label}
+                      {order.status === 'open' ? t('To‘lov kutilmoqda') : order.status_label}
                     </span>
                     {order.void_reason && <small>{order.void_reason}</small>}
                   </td>
                   <td>
                     <button className="text-link" onClick={() => { setSelected(order); setError(''); setPrinted('') }}>
-                      Ochish <ArrowRight size={15} />
+                      {t('Ochish')} <ArrowRight size={15} />
                     </button>
                   </td>
                 </tr>
@@ -160,24 +170,24 @@ export default function OrdersPage() {
           {!visible.length && (
             <div className="empty-state">
               <ReceiptText size={38} strokeWidth={1.3} />
-              <h3>{loading ? 'Yuklanmoqda…' : 'Hali buyurtmalar yo‘q'}</h3>
-              <p>Kassada yaratilgan hisoblar shu yerda saqlanadi.</p>
+              <h3>{loading ? t('Yuklanmoqda…') : t('Hali buyurtmalar yo‘q')}</h3>
+              <p>{t('Kassada yaratilgan hisoblar shu yerda saqlanadi.')}</p>
             </div>
           )}
         </div>
       </section>
       <AppModal
         open={!!selected}
-        title={`Hisob #${selected?.id || ''}`}
+        title={t('Hisob #{id}', { id: selected?.id || '' })}
         onClose={() => { if (!busy) setSelected(undefined) }}
       >
         {selected && (
           <>
             <div className="receipt">
               <h2>HONIM</h2>
-              <p>{selected.status === 'paid' ? 'TO‘LOV QAYDI' : 'OLDINDAN HISOB'}</p>
+              <p>{selected.status === 'paid' ? t('TO‘LOV QAYDI') : t('OLDINDAN HISOB')}</p>
               <small>{dateLabel(selected.created_at)} · #{selected.id}</small>
-              {selected.table && <p>Stol: {selected.table} · {selected.waiter}</p>}
+              {selected.table && <p>{t('Stol')}: {selected.table} · {selected.waiter}</p>}
               <div className="receipt-lines">
                 {selected.lines.map(line => (
                   <div key={line.id}>
@@ -189,27 +199,27 @@ export default function OrdersPage() {
                   </div>
                 ))}
               </div>
-              <div className="cart-total"><span>JAMI</span><strong>{money(selected.total)}</strong></div>
+              <div className="cart-total"><span>{t('JAMI')}</span><strong>{money(selected.total)}</strong></div>
               <p>{methodLabel(selected.payment_method)}</p>
-              <small>Mahalliy sinov cheki · fiskal chek emas</small>
+              <small>{t('Mahalliy sinov cheki · fiskal chek emas')}</small>
             </div>
             {error && <p className="alert error">{error}</p>}
             {selected.status === 'open' && (
               <form onSubmit={pay}>
                 <label>
-                  To‘lov usuli
+                  {t('To‘lov usuli')}
                   <select value={method} onChange={event => setMethod(event.target.value)}>
                     {methods.map(item => <option key={item.method} value={item.method}>{item.label}</option>)}
                   </select>
                 </label>
                 <button className="button primary full" disabled={busy}>
-                  {busy ? 'Saqlanmoqda…' : 'To‘lovni qayd etish'}
+                  {busy ? t('Saqlanmoqda…') : t('To‘lovni qayd etish')}
                 </button>
               </form>
             )}
             {selected.status === 'paid' && manager && (
               <button className="button danger full" disabled={busy} onClick={refund}>
-                <Undo2 size={17} />To‘lovni qaytarish
+                <Undo2 size={17} />{t('To‘lovni qaytarish')}
               </button>
             )}
             {(selected.status === 'cancelled' || selected.status === 'refunded') && (
@@ -220,10 +230,10 @@ export default function OrdersPage() {
             )}
             {printed && <p className="alert success">{printed}</p>}
             <button className="button primary full" disabled={printing} onClick={printReceipt}>
-              <Printer size={17} />{printing ? 'Chiqarilmoqda…' : 'Chekni chop etish'}
+              <Printer size={17} />{printing ? t('Chiqarilmoqda…') : t('Chekni chop etish')}
             </button>
             <button className="button secondary full" onClick={() => window.print()}>
-              Brauzer orqali chiqarish
+              {t('Brauzer orqali chiqarish')}
             </button>
           </>
         )}

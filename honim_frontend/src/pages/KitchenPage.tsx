@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { CheckCircle2, ChefHat, Clock3, RefreshCw, Utensils } from 'lucide-react'
 import { api } from '../api'
+import { useI18n } from '../i18n'
 import type { Order } from '../types'
 import KitchenTicket from '../components/KitchenTicket'
 
@@ -10,6 +11,7 @@ const actionLabel = (status: string) =>
       : 'Mijozga topshirildi'
 
 export default function KitchenPage() {
+  const { t, locale } = useI18n()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<number>()
@@ -57,31 +59,33 @@ export default function KitchenPage() {
   const ready = orders.filter(order => order.preparation_status === 'ready')
 
   const columns = [
-    { key: 'queued', rows: queued, icon: Clock3, actionIcon: ChefHat, title: 'Yangi buyurtmalar', caption: 'Tayyorlashni boshlash kerak', empty: 'Yangi buyurtma yo‘q', emptyIcon: CheckCircle2, isNew: true },
-    { key: 'preparing', rows: preparing, icon: ChefHat, actionIcon: CheckCircle2, title: 'Tayyorlanmoqda', caption: 'Oshpaz ishlayotgan buyurtmalar', empty: 'Jarayonda buyurtma yo‘q', emptyIcon: ChefHat, isNew: false },
-    { key: 'ready', rows: ready, icon: CheckCircle2, actionIcon: Utensils, title: 'Tayyor', caption: 'Mijozga berilishi kerak', empty: 'Tayyor buyurtma yo‘q', emptyIcon: Utensils, isNew: false },
+    { key: 'queued', rows: queued, icon: Clock3, actionIcon: ChefHat, title: t('Yangi buyurtmalar'), caption: t('Tayyorlashni boshlash kerak'), empty: t('Yangi buyurtma yo‘q'), emptyIcon: CheckCircle2, isNew: true },
+    { key: 'preparing', rows: preparing, icon: ChefHat, actionIcon: CheckCircle2, title: t('Tayyorlanmoqda'), caption: t('Oshpaz ishlayotgan buyurtmalar'), empty: t('Jarayonda buyurtma yo‘q'), emptyIcon: ChefHat, isNew: false },
+    { key: 'ready', rows: ready, icon: CheckCircle2, actionIcon: Utensils, title: t('Tayyor'), caption: t('Mijozga berilishi kerak'), empty: t('Tayyor buyurtma yo‘q'), emptyIcon: Utensils, isNew: false },
   ]
 
   return (
     <>
       <div className="page-heading kitchen-heading">
         <div>
-          <span className="eyebrow">JONLI OSHXONA EKRANI</span>
-          <h1>Oshxona<span className="heading-dot">.</span></h1>
-          <p>Kassadan tushgan buyurtmalar har 4 soniyada avtomatik yangilanadi.</p>
+          <span className="eyebrow">{t('JONLI OSHXONA EKRANI')}</span>
+          <h1>{t('Oshxona')}<span className="heading-dot">.</span></h1>
+          <p>{t('Kassadan tushgan buyurtmalar har 4 soniyada avtomatik yangilanadi.')}</p>
         </div>
         <button className="button secondary" disabled={loading} onClick={() => load()}>
-          <RefreshCw size={17} className={loading ? 'spin' : undefined} />Yangilash
+          <RefreshCw size={17} className={loading ? 'spin' : undefined} />{t('Yangilash')}
         </button>
       </div>
       {error && <p className="alert error">{error}</p>}
       <div className="kitchen-summary">
-        <div><span className="kitchen-dot queued" /><strong>{queued.length}</strong><small>Yangi</small></div>
-        <div><span className="kitchen-dot preparing" /><strong>{preparing.length}</strong><small>Tayyorlanmoqda</small></div>
-        <div><span className="kitchen-dot ready" /><strong>{ready.length}</strong><small>Tayyor</small></div>
+        <div><span className="kitchen-dot queued" /><strong>{queued.length}</strong><small>{t('Yangi')}</small></div>
+        <div><span className="kitchen-dot preparing" /><strong>{preparing.length}</strong><small>{t('Tayyorlanmoqda')}</small></div>
+        <div><span className="kitchen-dot ready" /><strong>{ready.length}</strong><small>{t('Tayyor')}</small></div>
         {updated && (
           <span>
-            Yangilandi: {updated.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            {t('Yangilandi: {time}', {
+              time: updated.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            })}
           </span>
         )}
       </div>
@@ -103,7 +107,7 @@ export default function KitchenPage() {
                     <KitchenTicket order={order} />
                     <button className="button kitchen-action" disabled={busy === order.id} onClick={() => advance(order)}>
                       <ActionIcon size={17} />
-                      {busy === order.id ? 'Saqlanmoqda…' : actionLabel(order.preparation_status)}
+                      {busy === order.id ? t('Saqlanmoqda…') : t(actionLabel(order.preparation_status))}
                     </button>
                   </article>
                 ))}

@@ -1,7 +1,9 @@
 import { dateLabel } from '../api'
+import { useI18n } from '../i18n'
 import type { Order } from '../types'
 
 export default function KitchenTicket({ order }: { order: Order }) {
+  const { t } = useI18n()
   return (
     <div className="ticket-body">
       <div className="ticket-top">
@@ -9,17 +11,19 @@ export default function KitchenTicket({ order }: { order: Order }) {
         <time>{dateLabel(order.created_at)}</time>
       </div>
       <div className="ticket-place">
-        {order.table ? `${order.table}-stol · ${order.waiter || 'Ofitsiant'}` : 'Tezkor savdo'}
+        {order.table
+          ? `${t('{table}-stol', { table: order.table })} · ${order.waiter || t('Ofitsiant')}`
+          : t('Tezkor savdo')}
       </div>
       <div className="ticket-lines">
         {order.lines.map(line => (
           <div key={line.id} className="ticket-line">
             <strong>{line.quantity} × {line.name}</strong>
-            {line.note && <p>Izoh: {line.note}</p>}
+            {line.note && <p>{t('Izoh')}: {line.note}</p>}
           </div>
         ))}
       </div>
-      <small>Kiritgan: {order.cashier_name || 'Kassa'}</small>
+      <small>{t('Kiritgan: {name}', { name: order.cashier_name || t('Kassa') })}</small>
     </div>
   )
 }

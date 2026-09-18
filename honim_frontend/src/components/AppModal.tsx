@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { X } from 'lucide-react'
+import { useI18n } from '../i18n'
 
 interface Props {
   open: boolean
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export default function AppModal({ open, title, onClose, children }: Props) {
+  const { t } = useI18n()
   const dialog = useRef<HTMLDialogElement>(null)
   // Pages render several modals at once, so the heading needs an id of its own
   // or every dialog would be announced with the first modal's title.
@@ -35,10 +37,10 @@ export default function AppModal({ open, title, onClose, children }: Props) {
     >
       <header>
         <div>
-          <span className="eyebrow">HONIM • BOSHQARUV</span>
+          <span className="eyebrow">{t('HONIM • BOSHQARUV')}</span>
           <h2 id={titleId}>{title}</h2>
         </div>
-        <button className="icon-button" aria-label="Yopish" onClick={onClose}><X size={20} /></button>
+        <button className="icon-button" aria-label={t('Yopish')} onClick={onClose}><X size={20} /></button>
       </header>
       {children}
     </dialog>

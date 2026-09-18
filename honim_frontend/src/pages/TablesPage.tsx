@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { BadgePercent, Ban, Plus, Printer, RefreshCw, ShoppingBag, Trash2, Users } from 'lucide-react'
 import { api, list, money } from '../api'
 import { useSession } from '../session'
+import { useI18n } from '../i18n'
 import type { Order, Table, TableZone } from '../types'
 import AppModal from '../components/AppModal'
 
@@ -12,14 +13,18 @@ const ZONES: { key: TableZone; title: string }[] = [
   { key: 'hall_right', title: 'O‘ng tomon · stulli' },
 ]
 
-function minutesSince(iso: string) {
+/** Matn tarjimoni — modul darajasidagi funksiyalarga hook o'rniga uzatiladi. */
+type Translate = (text: string, vars?: Record<string, string | number>) => string
+
+function minutesSince(iso: string, t: Translate) {
   const passed = Math.round((Date.now() - new Date(iso).getTime()) / 60000)
-  if (passed < 1) return 'hozir'
-  if (passed < 60) return `${passed} daq`
-  return `${Math.floor(passed / 60)} soat ${passed % 60} daq`
+  if (passed < 1) return t('hozir')
+  if (passed < 60) return t('{count} daq', { count: passed })
+  return t('{hours} soat {minutes} daq', { hours: Math.floor(passed / 60), minutes: passed % 60 })
 }
 
 function TableCard({ table, onOpen }: { table: Table; onOpen: (table: Table) => void }) {
+  const { t, tn } = useI18n()
   const open = table.open_order
   const classes = ['table-card', open ? 'busy' : '', table.seating === 'divan' ? 'divan' : '']
   return (
@@ -27,14 +32,14 @@ function TableCard({ table, onOpen }: { table: Table; onOpen: (table: Table) => 
       <strong>{table.label}</strong>
       {open ? (
         <>
-          <span className="table-total">{money(open.total)} so‘m</span>
-          <span className="table-meta">{open.items} taom · {minutesSince(open.created_at)}</span>
+          <span className="table-total">{money(open.total)} {t('so‘m')}</span>
+          <span className="table-meta">{tn('{count} taom', open.items)} · {minutesSince(open.created_at, t)}</span>
           {open.waiter && <span className="table-meta">{open.waiter}</span>}
         </>
       ) : (
         <>
-          <span className="table-state">Bo‘sh</span>
-          <span className="table-meta">{table.seats} o‘rin</span>
+          <span className="table-state">{t('Bo‘sh')}</span>
+          <span className="table-meta">{tn('{count} o‘rin', table.seats)}</span>
         </>
       )}
     </button>
@@ -44,6 +49,7 @@ function TableCard({ table, onOpen }: { table: Table; onOpen: (table: Table) => 
 export default function TablesPage() {
   const navigate = useNavigate()
   const { user } = useSession()
+  const { t, tn } = useI18n()
   const [tables, setTables] = useState<Table[]>([])
   const [selected, setSelected] = useState<Table>()
   const [bill, setBill] = useState<Order>()
@@ -108,13 +114,13 @@ export default function TablesPage() {
   /** Noto'g'ri bosilgan taomni ochiq hisobdan olib tashlaydi. */
   async function removeLine(lineId: number, name: string) {
     if (!bill) return
-    if (!confirm(`«${name}» hisobdan olib tashlansinmi?`)) return
+    if (!confirm(t('«{name}» hisobdan olib tashlansinmi?', { name }))) return
     setBusy(true)
     setError('')
     setNotice('')
     try {
       setBill(await api<Order>(`orders/${bill.id}/lines/${lineId}/`, { method: 'DELETE' }))
-      setNotice(`${name} olib tashlandi.`)
+      setNotice(t('{name} olib tashlandi.', { name }))
       await load()
     } catch (exception) {
       setError((exception as Error).message)
@@ -128,9 +134,8 @@ export default function TablesPage() {
     if (!bill) return
     const gross = Number(bill.total) + Number(bill.discount)
     const typed = prompt(
-      `Chegirma summasi, so‘m (yoki «10%» ko‘rinishida).
-Hisob summasi: ${money(gross)} so‘m.
-Olib tashlash uchun 0 yozing.`,
+      t('Chegirma summasi, so‘m (yoki «10%» ko‘rinishida).\nHisob summasi: {sum} so‘m.\nOlib tashlash uchun 0 yozing.',
+        { sum: money(gross) }),
       bill.discount === '0.00' ? '' : bill.discount,
     )
     if (typed === null) return
@@ -138,8 +143,8 @@ Olib tashlash uchun 0 yozing.`,
     const amount = trimmed.endsWith('%')
       ? Math.round(gross * Number(trimmed.slice(0, -1)) / 100)
       : Number(trimmed)
-    if (!Number.isFinite(amount) || amount < 0) return setError('Chegirma noto‘g‘ri kiritildi.')
-    const reason = amount ? prompt('Chegirma sababi?') : ''
+    if (!Number.isFinite(amount) || amount < 0) return setError(t('Chegirma noto‘g‘ri kiritildi.'))
+    const reason = amount ? prompt(t('Chegirma sababi?')) : ''
     if (amount && (!reason || !reason.trim())) return
     setBusy(true)
     setError('')
@@ -149,7 +154,9 @@ Olib tashlash uchun 0 yozing.`,
         method: 'POST',
         body: JSON.stringify({ amount: String(amount), reason: (reason || '').trim() }),
       }))
-      setNotice(amount ? `Chegirma qo‘llandi: ${money(amount)} so‘m.` : 'Chegirma olib tashlandi.')
+      setNotice(amount
+        ? t('Chegirma qo‘llandi: {sum} so‘m.', { sum: money(amount) })
+        : t('Chegirma olib tashlandi.'))
       await load()
     } catch (exception) {
       setError((exception as Error).message)
@@ -161,7 +168,7 @@ Olib tashlash uchun 0 yozing.`,
   /** Butun hisobni to'lovsiz yopadi. Sabab so'raladi — jurnalga yoziladi. */
   async function cancelBill() {
     if (!bill) return
-    const reason = prompt('Nima uchun bekor qilinyapti?')
+    const reason = prompt(t('Nima uchun bekor qilinyapti?'))
     if (!reason || reason.trim().length < 3) return
     setBusy(true)
     setError('')
@@ -183,7 +190,7 @@ Olib tashlash uchun 0 yozing.`,
     setError('')
     try {
       await api(`orders/${bill.id}/print/`, { method: 'POST' })
-      setNotice('Chek printerga yuborildi.')
+      setNotice(t('Chek printerga yuborildi.'))
     } catch (exception) {
       setError((exception as Error).message)
     } finally {
@@ -201,16 +208,16 @@ Olib tashlash uchun 0 yozing.`,
     <>
       <div className="page-heading">
         <div>
-          <span className="eyebrow">SAVDO ISH JOYI</span>
-          <h1>Stollar<span className="heading-dot">.</span></h1>
-          <p>Bo‘sh stolga bosing — buyurtma oching. Band stolga bosing — hisob va to‘lov.</p>
+          <span className="eyebrow">{t('SAVDO ISH JOYI')}</span>
+          <h1>{t('Stollar')}<span className="heading-dot">.</span></h1>
+          <p>{t('Bo‘sh stolga bosing — buyurtma oching. Band stolga bosing — hisob va to‘lov.')}</p>
         </div>
         <div className="heading-actions">
-          <button className="button secondary icon-button" aria-label="Yangilash" onClick={load}>
+          <button className="button secondary icon-button" aria-label={t('Yangilash')} onClick={load}>
             <RefreshCw size={17} className={loading ? 'spin' : undefined} />
           </button>
           <button className="button primary" onClick={() => navigate('/pos/tezkor')}>
-            <ShoppingBag size={17} />Tezkor savdo
+            <ShoppingBag size={17} />{t('Tezkor savdo')}
           </button>
         </div>
       </div>
@@ -218,19 +225,19 @@ Olib tashlash uchun 0 yozing.`,
       {error && <p className="alert error" role="alert">{error}</p>}
 
       <div className="inventory-summary">
-        <div><Users size={21} /><span><strong>{busyCount}</strong> band stol</span></div>
-        <div><span className="warning-dot" /><span><strong>{money(openTotal)}</strong> so‘m ochiq hisobda</span></div>
-        <p>Band stollar sariq rangda. Chapdagi uchtasi divanli, qolganlari stulli.</p>
+        <div><Users size={21} /><span><strong>{busyCount}</strong> {tn('band stol', busyCount)}</span></div>
+        <div><span className="warning-dot" /><span><strong>{money(openTotal)}</strong> {t('so‘m ochiq hisobda')}</span></div>
+        <p>{t('Band stollar sariq rangda. Chapdagi uchtasi divanli, qolganlari stulli.')}</p>
       </div>
 
-      {loading && !tables.length && <div className="empty-state">Stollar yuklanmoqda…</div>}
+      {loading && !tables.length && <div className="empty-state">{t('Stollar yuklanmoqda…')}</div>}
 
       <div className="floor">
         <section className="floor-zone">
-          <header><h2>Ichkari zal</h2><span>KIRISH PASTDA</span></header>
+          <header><h2>{t('Ichkari zal')}</h2><span>{t('KIRISH PASTDA')}</span></header>
           <div className="floor-hall">
             <div className="floor-side">
-              <small>{ZONES[0].title.toUpperCase()}</small>
+              <small>{t(ZONES[0].title).toUpperCase()}</small>
               <div className="table-grid">
                 {zoneTables('hall_left').map(table => (
                   <TableCard key={table.id} table={table} onOpen={openTable} />
@@ -239,7 +246,7 @@ Olib tashlash uchun 0 yozing.`,
             </div>
             <div className="floor-divider" />
             <div className="floor-side">
-              <small>{ZONES[1].title.toUpperCase()}</small>
+              <small>{t(ZONES[1].title).toUpperCase()}</small>
               <div className="table-grid">
                 {zoneTables('hall_right').map(table => (
                   <TableCard key={table.id} table={table} onOpen={openTable} />
@@ -251,7 +258,7 @@ Olib tashlash uchun 0 yozing.`,
 
         {!!outside.length && (
           <section className="floor-zone">
-            <header><h2>Tashqari</h2><span>{outside.length} TA STOL</span></header>
+            <header><h2>{t('Tashqari')}</h2><span>{tn('{count} TA STOL', outside.length)}</span></header>
             <div className="table-grid">
               {outside.map(table => <TableCard key={table.id} table={table} onOpen={openTable} />)}
             </div>
@@ -261,36 +268,38 @@ Olib tashlash uchun 0 yozing.`,
 
       <AppModal
         open={!!selected}
-        title={`${selected?.label || ''} · hisob`}
+        title={t('{table} · hisob', { table: selected?.label || '' })}
         onClose={() => { if (!busy) { setSelected(undefined); setBill(undefined) } }}
       >
         {bill && (
           <>
             {Number(bill.discount) > 0 && (
               <div className="bill-discount">
-                <span>Oraliq jami</span>
+                <span>{t('Oraliq jami')}</span>
                 <b>{money(Number(bill.total) + Number(bill.discount))}</b>
-                <span>Chegirma · {bill.discount_reason}</span>
+                <span>{t('Chegirma')} · {bill.discount_reason}</span>
                 <b className="owed">−{money(bill.discount)}</b>
               </div>
             )}
             <div className="cart-total">
-              <span>Jami</span>
-              <strong>{money(bill.total)} <small>so‘m</small></strong>
+              <span>{t('Jami')}</span>
+              <strong>{money(bill.total)} <small>{t('so‘m')}</small></strong>
             </div>
             <div className="bill-lines">
               {bill.lines.map(line => (
                 <div key={line.id}>
                   <span>
                     {line.quantity} × {line.name}
-                    {line.note && <small>izoh: {line.note}</small>}
+                    {line.note && <small>{t('izoh')}: {line.note}</small>}
                   </span>
                   <strong>{money(Number(line.price) * line.quantity)}</strong>
                   <button
                     className="line-remove"
                     disabled={busy || bill.lines.length === 1}
-                    title={bill.lines.length === 1 ? 'Oxirgi qator — butun hisobni bekor qiling' : 'Olib tashlash'}
-                    aria-label={`${line.name} ni olib tashlash`}
+                    title={bill.lines.length === 1
+                      ? t('Oxirgi qator — butun hisobni bekor qiling')
+                      : t('Olib tashlash')}
+                    aria-label={t('{name} ni olib tashlash', { name: line.name })}
                     onClick={() => removeLine(line.id, line.name)}
                   >
                     <Trash2 size={15} />
@@ -304,10 +313,10 @@ Olib tashlash uchun 0 yozing.`,
               disabled={busy}
               onClick={() => navigate(`/pos/hisob/${bill.id}`)}
             >
-              <Plus size={17} />Taom qo‘shish
+              <Plus size={17} />{t('Taom qo‘shish')}
             </button>
 
-            <p className="nav-caption">TO‘LOVNI QAYD ETISH</p>
+            <p className="nav-caption">{t('TO‘LOVNI QAYD ETISH')}</p>
             <div className="pay-grid">
               {methods.map(item => (
                 <button
@@ -324,13 +333,13 @@ Olib tashlash uchun 0 yozing.`,
             {notice && <p className="alert success">{notice}</p>}
             {error && <p className="alert error">{error}</p>}
             <button className="button secondary full" disabled={busy} onClick={reprint}>
-              <Printer size={17} />Chekni chop etish
+              <Printer size={17} />{t('Chekni chop etish')}
             </button>
             <button className="button secondary full" disabled={busy} onClick={setDiscount}>
-              <BadgePercent size={17} />{Number(bill.discount) > 0 ? 'Chegirmani o‘zgartirish' : 'Chegirma berish'}
+              <BadgePercent size={17} />{Number(bill.discount) > 0 ? t('Chegirmani o‘zgartirish') : t('Chegirma berish')}
             </button>
             <button className="button danger full" disabled={busy} onClick={cancelBill}>
-              <Ban size={17} />Hisobni bekor qilish
+              <Ban size={17} />{t('Hisobni bekor qilish')}
             </button>
           </>
         )}

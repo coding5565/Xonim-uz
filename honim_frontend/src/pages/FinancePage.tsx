@@ -4,15 +4,18 @@ import {
   AlertTriangle, ArrowRight, Banknote, ChefHat, Coins, Package, PiggyBank, Receipt, RefreshCw, Wallet,
 } from 'lucide-react'
 import { api, money, today } from '../api'
+import { useI18n } from '../i18n'
 import type { Finance } from '../types'
+
+type Translate = (text: string, vars?: Record<string, string | number>) => string
 
 const MONTHS = [
   'yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
   'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr',
 ]
-const monthName = (key: string) => {
+const monthName = (key: string, t: Translate) => {
   const [year, month] = key.split('-')
-  return `${year}-yil ${MONTHS[Number(month) - 1]}`
+  return t('{year}-yil {month}', { year, month: t(MONTHS[Number(month) - 1]) })
 }
 
 /** Xarajat kategoriyasi qaysi sahifada batafsil ko‘rinadi. */
@@ -22,6 +25,7 @@ function expenseLink(category: string, start: string, end: string, month: string
 }
 
 export default function FinancePage() {
+  const { t, tn } = useI18n()
   const [params, setParams] = useSearchParams()
   const [data, setData] = useState<Finance>()
   const [loading, setLoading] = useState(true)
@@ -51,11 +55,11 @@ export default function FinancePage() {
       <>
         <div className="page-heading">
           <div>
-            <span className="eyebrow">MOLIYA MARKAZI</span>
-            <h1>Umumiy moliya<span className="heading-dot">.</span></h1>
+            <span className="eyebrow">{t('MOLIYA MARKAZI')}</span>
+            <h1>{t('Umumiy moliya')}<span className="heading-dot">.</span></h1>
           </div>
         </div>
-        {error ? <p className="alert error">{error}</p> : <div className="empty-state">Hisoblanmoqda…</div>}
+        {error ? <p className="alert error">{error}</p> : <div className="empty-state">{t('Hisoblanmoqda…')}</div>}
       </>
     )
   }
@@ -71,35 +75,41 @@ export default function FinancePage() {
     <>
       <div className="page-heading">
         <div>
-          <span className="eyebrow">MOLIYA MARKAZI</span>
-          <h1>Umumiy moliya<span className="heading-dot">.</span></h1>
-          <p>Butun biznesning pul manzarasi. Har bir raqamni bosing — u qayerdan kelganini ko‘rasiz.</p>
+          <span className="eyebrow">{t('MOLIYA MARKAZI')}</span>
+          <h1>{t('Umumiy moliya')}<span className="heading-dot">.</span></h1>
+          <p>{t('Butun biznesning pul manzarasi. Har bir raqamni bosing — u qayerdan kelganini ko‘rasiz.')}</p>
         </div>
         <div className="heading-actions">
-          <select value={filters.month || ''} onChange={event => pickMonth(event.target.value)} aria-label="Oyni tanlash">
-            <option value="">Shu oy</option>
-            {data.months.map(item => <option key={item} value={item}>{monthName(item)}</option>)}
+          <select value={filters.month || ''} onChange={event => pickMonth(event.target.value)} aria-label={t('Oyni tanlash')}>
+            <option value="">{t('Shu oy')}</option>
+            {data.months.map(item => <option key={item} value={item}>{monthName(item, t)}</option>)}
           </select>
           <button className="button secondary" disabled={loading} onClick={() => load(search)}>
-            <RefreshCw size={17} className={loading ? 'spin' : undefined} />Yangilash
+            <RefreshCw size={17} className={loading ? 'spin' : undefined} />{t('Yangilash')}
           </button>
         </div>
       </div>
 
       {error && <p className="alert error">{error}</p>}
 
-      <p className="period-note"><strong>{filters.label}</strong> · {filters.days} kun · {profit.orders} ta to‘langan chek</p>
+      <p className="period-note">
+        <strong>{filters.label}</strong> · {tn('{count} kun', Number(filters.days))}
+        {' '}· {tn('{count} ta to‘langan chek', Number(profit.orders))}
+      </p>
 
       <section className="panel chain-panel">
         <header className="panel-heading">
-          <div><h2>Foyda zanjiri</h2><p>Yuqoridan pastga — pul qayerdan kelib, qayerga ketgani</p></div>
+          <div><h2>{t('Foyda zanjiri')}</h2><p>{t('Yuqoridan pastga — pul qayerdan kelib, qayerga ketgani')}</p></div>
         </header>
         <div className="chain">
           <Link to={`/reports?${range}`} className="chain-row">
             <span className="chain-icon green"><Banknote size={18} /></span>
             <div>
-              <strong>Tushum</strong>
-              <small>{profit.orders} ta chek · o‘rtacha {money(profit.average_check)} so‘m</small>
+              <strong>{t('Tushum')}</strong>
+              <small>
+                {tn('{count} ta chek', Number(profit.orders))}
+                {' '}· {t('o‘rtacha {amount} so‘m', { amount: money(profit.average_check) })}
+              </small>
             </div>
             <b>{money(profit.revenue)}</b>
             <ArrowRight size={15} />
@@ -108,23 +118,26 @@ export default function FinancePage() {
           <Link to={`/inventory?view=usage&${range}`} className="chain-row minus">
             <span className="chain-icon orange"><ChefHat size={18} /></span>
             <div>
-              <strong>Tannarx</strong>
-              <small>Sotilgan taomlarning retsept bo‘yicha xomashyo qiymati</small>
+              <strong>{t('Tannarx')}</strong>
+              <small>{t('Sotilgan taomlarning retsept bo‘yicha xomashyo qiymati')}</small>
             </div>
             <b>−{money(profit.cogs)}</b>
             <ArrowRight size={15} />
           </Link>
 
           <div className="chain-sum">
-            <div><strong>Yalpi foyda</strong><small>{profit.gross_margin}% marja</small></div>
+            <div>
+              <strong>{t('Yalpi foyda')}</strong>
+              <small>{t('{percent}% marja', { percent: profit.gross_margin })}</small>
+            </div>
             <b>{money(profit.gross_profit)}</b>
           </div>
 
           <Link to={`/expenses?${range}`} className="chain-row minus">
             <span className="chain-icon violet"><Receipt size={18} /></span>
             <div>
-              <strong>Operatsion xarajatlar</strong>
-              <small>Ijara, kommunal, ish haqi va boshqalar — barchasi shu yerda</small>
+              <strong>{t('Operatsion xarajatlar')}</strong>
+              <small>{t('Ijara, kommunal, ish haqi va boshqalar — barchasi shu yerda')}</small>
             </div>
             <b>−{money(profit.expenses)}</b>
             <ArrowRight size={15} />
@@ -134,8 +147,8 @@ export default function FinancePage() {
             <Link to={`/inventory?view=usage&${range}`} className="chain-row minus">
               <span className="chain-icon orange"><Package size={18} /></span>
               <div>
-                <strong>Ombor isrofi</strong>
-                <small>Qo‘lda yozilgan sarf — sotilmagan, lekin ombordan ketgan</small>
+                <strong>{t('Ombor isrofi')}</strong>
+                <small>{t('Qo‘lda yozilgan sarf — sotilmagan, lekin ombordan ketgan')}</small>
               </div>
               <b>−{money(profit.waste)}</b>
               <ArrowRight size={15} />
@@ -144,10 +157,14 @@ export default function FinancePage() {
 
           <div className={`chain-total${negative ? ' negative' : ''}`}>
             <div>
-              <strong>Sof foyda</strong>
-              <small>{negative ? 'Bu davrda zarar' : `Tushumning ${profit.net_margin}% i`}</small>
+              <strong>{t('Sof foyda')}</strong>
+              <small>
+                {negative
+                  ? t('Bu davrda zarar')
+                  : t('Tushumning {percent}% i', { percent: profit.net_margin })}
+              </small>
             </div>
-            <b>{money(profit.net_profit)} <em>so‘m</em></b>
+            <b>{money(profit.net_profit)} <em>{t('so‘m')}</em></b>
           </div>
         </div>
         <p className="data-note">{data.basis}</p>
@@ -157,41 +174,42 @@ export default function FinancePage() {
         <section className="panel warn-panel">
           <header className="panel-heading">
             <div>
-              <h2><AlertTriangle size={17} /> Tannarx to‘liq emas</h2>
-              <p>Yuqoridagi marja haqiqatdan yuqori ko‘rinadi — pastdagi raqamga qarang</p>
+              <h2><AlertTriangle size={17} /> {t('Tannarx to‘liq emas')}</h2>
+              <p>{t('Yuqoridagi marja haqiqatdan yuqori ko‘rinadi — pastdagi raqamga qarang')}</p>
             </div>
-            <Link to="/recipes" className="button secondary">Retseptlarni to‘ldirish</Link>
+            <Link to="/recipes" className="button secondary">{t('Retseptlarni to‘ldirish')}</Link>
           </header>
           <div className="warn-grid">
             <div>
-              <small>Tannarx qamrab olgan tushum</small>
+              <small>{t('Tannarx qamrab olgan tushum')}</small>
               <strong>{coverage.share}%</strong>
-              <em>{money(coverage.covered_revenue)} so‘m</em>
+              <em>{money(coverage.covered_revenue)} {t('so‘m')}</em>
             </div>
             <div>
-              <small>Retsepti bor taomlar</small>
+              <small>{t('Retsepti bor taomlar')}</small>
               <strong>{coverage.dishes_with_recipe} / {coverage.dishes_total}</strong>
               <em>
-                menyuda {coverage.menu_without_recipe} tasida retsept yo‘q
-                {coverage.sold_uncovered > 0 && `, shundan ${coverage.sold_uncovered} tasi shu davrda sotilgan`}
+                {tn('menyuda {count} tasida retsept yo‘q', Number(coverage.menu_without_recipe))}
+                {coverage.sold_uncovered > 0 &&
+                  t(', shundan {count} tasi shu davrda sotilgan', { count: coverage.sold_uncovered })}
               </em>
             </div>
             <div>
-              <small>Haqiqiy marja (retsepti borlarda)</small>
+              <small>{t('Haqiqiy marja (retsepti borlarda)')}</small>
               <strong>{coverage.covered_margin}%</strong>
-              <em>ko‘rsatilgan {profit.gross_margin}% o‘rniga</em>
+              <em>{t('ko‘rsatilgan {percent}% o‘rniga', { percent: profit.gross_margin })}</em>
             </div>
           </div>
           {!!coverage.top_uncovered.length && (
             <div className="table-wrap">
               <table>
-                <thead><tr><th>RETSEPTSIZ SOTILGAN TAOM</th><th>TUSHUM</th><th></th></tr></thead>
+                <thead><tr><th>{t('RETSEPTSIZ SOTILGAN TAOM')}</th><th>{t('TUSHUM')}</th><th></th></tr></thead>
                 <tbody>
                   {coverage.top_uncovered.map(row => (
                     <tr key={row.dish_id}>
                       <td><strong>{row.dish}</strong></td>
-                      <td className="number">{money(row.revenue)} so‘m</td>
-                      <td><Link to="/recipes" className="text-link">Retsept qo‘shish →</Link></td>
+                      <td className="number">{money(row.revenue)} {t('so‘m')}</td>
+                      <td><Link to="/recipes" className="text-link">{t('Retsept qo‘shish')} →</Link></td>
                     </tr>
                   ))}
                 </tbody>
@@ -204,37 +222,37 @@ export default function FinancePage() {
       <div className="finance-grid">
         <section className="panel">
           <header className="panel-heading">
-            <div><h2>Pul oqimi</h2><p>Foyda bilan pul bir xil emas — farqi shu yerda</p></div>
+            <div><h2>{t('Pul oqimi')}</h2><p>{t('Foyda bilan pul bir xil emas — farqi shu yerda')}</p></div>
             <Wallet size={18} />
           </header>
           <div className="cash-rows">
             <Link to={`/sales?${range}`} className="cash-row">
-              <span>Pul tushdi</span><b>{money(cash.in)}</b><ArrowRight size={14} />
+              <span>{t('Pul tushdi')}</span><b>{money(cash.in)}</b><ArrowRight size={14} />
             </Link>
             <Link to={`/expenses?${range}`} className="cash-row">
-              <span>Xarajatlarga ketdi</span><b>−{money(cash.settled_expenses)}</b><ArrowRight size={14} />
+              <span>{t('Xarajatlarga ketdi')}</span><b>−{money(cash.settled_expenses)}</b><ArrowRight size={14} />
             </Link>
             <Link to={`/inventory?view=usage&${range}`} className="cash-row">
-              <span>Ombor xaridiga ketdi</span><b>−{money(cash.stock_purchases)}</b><ArrowRight size={14} />
+              <span>{t('Ombor xaridiga ketdi')}</span><b>−{money(cash.stock_purchases)}</b><ArrowRight size={14} />
             </Link>
             <div className="cash-row total">
-              <span>Sof pul oqimi</span><b>{money(cash.net)} so‘m</b>
+              <span>{t('Sof pul oqimi')}</span><b>{money(cash.net)} {t('so‘m')}</b>
             </div>
             {!!Number(cash.unpaid) && (
               <Link to={`/expenses?${range}`} className="cash-row hint">
-                <span>Hali to‘lanmagan qarz</span><b>{money(cash.unpaid)}</b><ArrowRight size={14} />
+                <span>{t('Hali to‘lanmagan qarz')}</span><b>{money(cash.unpaid)}</b><ArrowRight size={14} />
               </Link>
             )}
           </div>
           <p className="data-note">
-            Ombor xaridi foydadan ayirilmaydi — u tovarga aylanadi va sotilganda tannarx bo‘lib hisobga olinadi.
+            {t('Ombor xaridi foydadan ayirilmaydi — u tovarga aylanadi va sotilganda tannarx bo‘lib hisobga olinadi.')}
           </p>
         </section>
 
         <section className="panel">
           <header className="panel-heading">
-            <div><h2>Xarajat tarkibi</h2><p>Pul aynan nimaga sarflandi</p></div>
-            <Link to={`/expenses?${range}`} className="text-link">Hammasi <ArrowRight size={14} /></Link>
+            <div><h2>{t('Xarajat tarkibi')}</h2><p>{t('Pul aynan nimaga sarflandi')}</p></div>
+            <Link to={`/expenses?${range}`} className="text-link">{t('Hammasi')} <ArrowRight size={14} /></Link>
           </header>
           {data.expenses.length ? (
             <div className="category-ranking">
@@ -243,7 +261,7 @@ export default function FinancePage() {
                   <div>
                     <div>
                       <strong>{row.category}</strong>
-                      <span>{row.count} ta yozuv · {row.share}%</span>
+                      <span>{tn('{count} ta yozuv', Number(row.count))} · {row.share}%</span>
                       <b>{money(row.amount)}</b>
                     </div>
                     <div className="progress-track"><span style={{ width: `${row.share}%` }} /></div>
@@ -253,8 +271,8 @@ export default function FinancePage() {
             </div>
           ) : (
             <div className="empty-state compact">
-              <strong>Bu davrda xarajat kiritilmagan</strong>
-              <Link to="/expenses" className="text-link">Xarajat qo‘shish →</Link>
+              <strong>{t('Bu davrda xarajat kiritilmagan')}</strong>
+              <Link to="/expenses" className="text-link">{t('Xarajat qo‘shish')} →</Link>
             </div>
           )}
         </section>
@@ -263,7 +281,7 @@ export default function FinancePage() {
       <div className="finance-grid">
         <section className="panel">
           <header className="panel-heading">
-            <div><h2>Pul qaysi yo‘l bilan tushdi</h2><p>To‘lov turlari bo‘yicha</p></div>
+            <div><h2>{t('Pul qaysi yo‘l bilan tushdi')}</h2><p>{t('To‘lov turlari bo‘yicha')}</p></div>
             <Coins size={18} />
           </header>
           <div className="category-ranking">
@@ -272,45 +290,51 @@ export default function FinancePage() {
                 <div>
                   <div>
                     <strong>{row.label}</strong>
-                    <span>{row.orders} ta chek · {row.share}%</span>
+                    <span>{tn('{count} ta chek', Number(row.orders))} · {row.share}%</span>
                     <b>{money(row.revenue)}</b>
                   </div>
                   <div className="progress-track"><span style={{ width: `${row.share}%` }} /></div>
                 </div>
               </Link>
             ))}
-            {!data.methods.length && <div className="empty-state compact">Bu davrda savdo yo‘q.</div>}
+            {!data.methods.length && <div className="empty-state compact">{t('Bu davrda savdo yo‘q.')}</div>}
           </div>
         </section>
 
         <section className="panel">
           <header className="panel-heading">
-            <div><h2>Ombor va ish haqi</h2><p>Eng katta ikki xarajat manbasi</p></div>
+            <div><h2>{t('Ombor va ish haqi')}</h2><p>{t('Eng katta ikki xarajat manbasi')}</p></div>
             <Package size={18} />
           </header>
           <div className="cash-rows">
             <Link to="/inventory" className="cash-row">
-              <span>Omborda turgan pul</span><b>{money(stock.value)}</b><ArrowRight size={14} />
+              <span>{t('Omborda turgan pul')}</span><b>{money(stock.value)}</b><ArrowRight size={14} />
             </Link>
             <Link to={`/inventory?view=usage&${range}`} className="cash-row">
-              <span>Davrda sarflangan xomashyo</span><b>{money(stock.consumed)}</b><ArrowRight size={14} />
+              <span>{t('Davrda sarflangan xomashyo')}</span><b>{money(stock.consumed)}</b><ArrowRight size={14} />
             </Link>
             <Link to={`/payroll${filters.month ? `?month=${filters.month}` : ''}`} className="cash-row">
-              <span>Ish haqiga to‘langan</span><b>{money(data.salary.total)}</b><ArrowRight size={14} />
+              <span>{t('Ish haqiga to‘langan')}</span><b>{money(data.salary.total)}</b><ArrowRight size={14} />
             </Link>
           </div>
           {!!Number(data.salary.manual_total) && (
             <p className="alert">
-              «Ish haqi» deb qo‘lda kiritilgan {data.salary.manual_count} ta xarajat bor
-              ({money(data.salary.manual_total)} so‘m) — ular oylik to‘loviga bog‘lanmagan, shuning uchun
-              oyliklar hisobiga kirmaydi. <Link to={`/expenses?${range}&category=Ish%20haqi`} className="text-link">Tekshiring</Link>.
+              {tn(
+                '«Ish haqi» deb qo‘lda kiritilgan {count} ta xarajat bor ({amount} so‘m) — ular oylik to‘loviga bog‘lanmagan, shuning uchun oyliklar hisobiga kirmaydi.',
+                Number(data.salary.manual_count),
+                { amount: money(data.salary.manual_total) },
+              )}{' '}
+              <Link to={`/expenses?${range}&category=Ish%20haqi`} className="text-link">{t('Tekshiring')}</Link>.
             </p>
           )}
           {bigGap && (
             <p className="alert">
-              Retsept tannarxi ({money(profit.cogs)} so‘m) ombor narxidan ({money(stock.consumed)} so‘m)
-              {' '}{stock.gap_share}% farq qilyapti. Retseptlardagi partiya narxi eskirgan bo‘lishi mumkin —
-              {' '}<Link to="/recipes" className="text-link">tekshiring</Link>.
+              {t('Retsept tannarxi ({cost} so‘m) ombor narxidan ({stock} so‘m) {gap}% farq qilyapti. Retseptlardagi partiya narxi eskirgan bo‘lishi mumkin —', {
+                cost: money(profit.cogs),
+                stock: money(stock.consumed),
+                gap: stock.gap_share,
+              })}
+              {' '}<Link to="/recipes" className="text-link">{t('tekshiring')}</Link>.
             </p>
           )}
         </section>
@@ -318,15 +342,19 @@ export default function FinancePage() {
 
       <section className="panel spaced">
         <header className="panel-heading">
-          <div><h2>Oyma-oy</h2><p>Ustunni bosing — o‘sha oyning to‘liq moliyasi ochiladi</p></div>
+          <div><h2>{t('Oyma-oy')}</h2><p>{t('Ustunni bosing — o‘sha oyning to‘liq moliyasi ochiladi')}</p></div>
           <PiggyBank size={18} />
         </header>
-        <div className="report-chart" role="img" aria-label="Oylik moliya grafigi">
+        <div className="report-chart" role="img" aria-label={t('Oylik moliya grafigi')}>
           {data.trend.map(point => (
             <button
               key={point.period}
               className="report-bar"
-              title={`${point.label}: tushum ${money(point.revenue)}, sof foyda ${money(point.net_profit)} so‘m`}
+              title={t('{label}: tushum {revenue}, sof foyda {profit} so‘m', {
+                label: point.label,
+                revenue: money(point.revenue),
+                profit: money(point.net_profit),
+              })}
               onClick={() => pickMonth(point.period)}
             >
               <div><span style={{ height: `${(Number(point.revenue) / maxTrend) * 100}%` }} /></div>
@@ -336,12 +364,17 @@ export default function FinancePage() {
         </div>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>OY</th><th>TUSHUM</th><th>TANNARX</th><th>XARAJAT</th><th>SOF FOYDA</th></tr></thead>
+            <thead>
+              <tr>
+                <th>{t('OY')}</th><th>{t('TUSHUM')}</th><th>{t('TANNARX')}</th>
+                <th>{t('XARAJAT')}</th><th>{t('SOF FOYDA')}</th>
+              </tr>
+            </thead>
             <tbody>
               {[...data.trend].reverse().filter(row => Number(row.revenue) || Number(row.expenses)).map(row => (
                 <tr key={row.period}>
                   <td>
-                    <button className="text-link" onClick={() => pickMonth(row.period)}>{monthName(row.period)}</button>
+                    <button className="text-link" onClick={() => pickMonth(row.period)}>{monthName(row.period, t)}</button>
                   </td>
                   <td className="number">{money(row.revenue)}</td>
                   <td className="number">{money(row.cogs)}</td>

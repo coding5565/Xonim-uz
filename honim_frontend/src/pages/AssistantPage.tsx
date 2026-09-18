@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Bot, LoaderCircle, Send, Sparkles } from 'lucide-react'
 import { api, money } from '../api'
+import { useI18n } from '../i18n'
 
 interface Chart {
   title: string
@@ -23,10 +24,8 @@ const prompts = [
   'Xarajatlar qayerga ketdi?',
 ]
 
-const greeting: Message = {
-  role: 'assistant',
-  text: 'Salom! Men Honim AI yordamchisiman. Restorandagi savdo, xarajat, ombor, xodimlar va buyurtmalar bo‘yicha savol bering.',
-}
+const greeting =
+  'Salom! Men Honim AI yordamchisiman. Restorandagi savdo, xarajat, ombor, xodimlar va buyurtmalar bo‘yicha savol bering.'
 
 const maxValue = (chart: Chart) => Math.max(1, ...chart.values.map(Number))
 
@@ -41,11 +40,16 @@ function formatAnswer(value: string) {
 }
 
 export default function AssistantPage() {
+  const { t } = useI18n()
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
-  const [messages, setMessages] = useState<Message[]>([greeting])
+  const [messages, setMessages] = useState<Message[]>([])
   const threadEnd = useRef<HTMLDivElement>(null)
+
+  // Salomlashish suhbat tarixida saqlanmaydi — shunda til o'zgarganda
+  // u ham yangi tilda ko'rinadi.
+  const thread: Message[] = [{ role: 'assistant', text: t(greeting) }, ...messages]
 
   // Yangi javob kelganda ro'yxat pastga suriladi — foydalanuvchi o'zi
   // aylantirib izlamasligi uchun.
@@ -86,18 +90,18 @@ export default function AssistantPage() {
       <div className="page-heading assistant-heading">
         <div>
           <span className="eyebrow">HONIM AI</span>
-          <h1>AI yordamchi<span className="heading-dot">.</span></h1>
-          <p>Restoraningizdagi raqamlarni so‘rang, aniq tahlil oling.</p>
+          <h1>{t('AI yordamchi')}<span className="heading-dot">.</span></h1>
+          <p>{t('Restoraningizdagi raqamlarni so‘rang, aniq tahlil oling.')}</p>
         </div>
-        <span className="assistant-status"><span />Tizim ma’lumotlari himoyalangan</span>
+        <span className="assistant-status"><span />{t('Tizim ma’lumotlari himoyalangan')}</span>
       </div>
       <section className="assistant-panel panel">
         <header>
           <div className="assistant-avatar"><Bot size={24} /></div>
-          <div><h2>Restoran tahlilchisi</h2><p>Faqat Super Admin uchun</p></div>
+          <div><h2>{t('Restoran tahlilchisi')}</h2><p>{t('Faqat Super Admin uchun')}</p></div>
         </header>
         <div className="chat-thread" aria-live="polite">
-          {messages.map((item, index) => (
+          {thread.map((item, index) => (
             <article key={index} className={`chat-message ${item.role}`}>
               {item.role === 'assistant' && <span className="chat-bot"><Bot size={16} /></span>}
               <div>
@@ -109,7 +113,7 @@ export default function AssistantPage() {
                       <div key={label} className="chat-chart-row">
                         <span>{label}</span>
                         <div><i style={{ width: `${Number(chart.values[chartIndex]) / maxValue(chart) * 100}%` }} /></div>
-                        <b>{money(chart.values[chartIndex])} so‘m</b>
+                        <b>{money(chart.values[chartIndex])} {t('so‘m')}</b>
                       </div>
                     ))}
                   </div>
@@ -120,7 +124,7 @@ export default function AssistantPage() {
           {sending && (
             <article className="chat-message assistant">
               <span className="chat-bot"><Bot size={16} /></span>
-              <div className="typing"><LoaderCircle size={16} className="spin" />Tahlil qilinmoqda…</div>
+              <div className="typing"><LoaderCircle size={16} className="spin" />{t('Tahlil qilinmoqda…')}</div>
             </article>
           )}
           <div ref={threadEnd} />
@@ -128,11 +132,11 @@ export default function AssistantPage() {
         {error && <p className="alert error">{error}</p>}
         <form className="assistant-input" onSubmit={(event: FormEvent) => { event.preventDefault(); send() }}>
           <div className="quick-prompts">
-            <span>Tezkor savollar</span>
+            <span>{t('Tezkor savollar')}</span>
             <div>
               {prompts.map(prompt => (
                 <button key={prompt} type="button" disabled={sending} onClick={() => send(prompt)}>
-                  <Sparkles size={13} />{prompt}
+                  <Sparkles size={13} />{t(prompt)}
                 </button>
               ))}
             </div>
@@ -144,13 +148,13 @@ export default function AssistantPage() {
               onKeyDown={onKey}
               rows={2}
               maxLength={800}
-              placeholder="Masalan: bugun tushum kechagiga nisbatan necha foiz o‘zgardi?"
+              placeholder={t('Masalan: bugun tushum kechagiga nisbatan necha foiz o‘zgardi?')}
             />
-            <button className="button primary" disabled={!message.trim() || sending} aria-label="Savolni yuborish">
-              <Send size={18} />Yuborish
+            <button className="button primary" disabled={!message.trim() || sending} aria-label={t('Savolni yuborish')}>
+              <Send size={18} />{t('Yuborish')}
             </button>
           </div>
-          <p className="compose-hint">Enter — yuborish · Shift+Enter — yangi satr</p>
+          <p className="compose-hint">{t('Enter — yuborish · Shift+Enter — yangi satr')}</p>
         </form>
       </section>
     </div>
