@@ -19,54 +19,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from operations.models import SalaryPayment
+from operations.money import MONTH_NAMES, last_months, money, month_key, month_label, next_month, short_label
 
 from .models import User
 from .permissions import OwnerOnly
 
-MONTH_NAMES = [
-    'yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
-    'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr',
-]
 METHOD_LABELS = {'cash': 'Naqd', 'card': 'Karta'}
 TREND_MONTHS = 12
-CENT = Decimal('0.01')
-
-
-def money(value):
-    """Pulni bir xil ko'rinishda qaytaradi.
-
-    SQLite'da Sum() ba'zan kasrsiz Decimal beradi, shuning uchun frontend
-    bir joyda «3000000», boshqa joyda «3000000.00» ko'rmasligi uchun tekislaymiz.
-    """
-    return str((value or Decimal('0')).quantize(CENT))
-
-
-def month_key(period):
-    return period.strftime('%Y-%m')
-
-
-def month_label(period):
-    return f'{period.year}-yil {MONTH_NAMES[period.month - 1]}'
-
-
-def short_label(period):
-    return f'{MONTH_NAMES[period.month - 1][:3]} {period.year}'
-
-
-def next_month(period):
-    return (period.replace(day=28) + timedelta(days=4)).replace(day=1)
-
-
-def previous_month(period):
-    return (period.replace(day=1) - timedelta(days=1)).replace(day=1)
-
-
-def last_months(final, count):
-    """Oxirgi `count` oy, eskisidan yangisiga qarab."""
-    months = [final.replace(day=1)]
-    while len(months) < count:
-        months.append(previous_month(months[-1]))
-    return list(reversed(months))
 
 
 def known_months(branch, today):

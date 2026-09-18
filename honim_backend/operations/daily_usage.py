@@ -24,27 +24,14 @@ from rest_framework.views import APIView
 from users.permissions import ManagerOnly, OwnerOnly
 
 from .models import DailyUsage, Ingredient, StockMovement
+from .money import CENT, money, quantity, share
 from .services import audit, audit_many, quantity_text
 
-CENT = Decimal('0.01')
-MILLI = Decimal('0.001')
 # Shu foizdan katta farq e'tibor talab qiladi.
 ALERT_SHARE = Decimal('15')
 # Eng ko'pi bilan shuncha kun orqaga kirita olinadi: kechagi hisobotni
 # tuzatish mumkin, lekin bir oy oldingisini qayta yozish nazoratni buzardi.
 BACKDATE_DAYS = 7
-
-
-def quantity(value):
-    return str((value or Decimal('0')).quantize(MILLI) + Decimal('0'))
-
-
-def money(value):
-    return str((value or Decimal('0')).quantize(CENT) + Decimal('0'))
-
-
-def percent(part, whole):
-    return str((part / whole * 100).quantize(CENT)) if whole else ''
 
 
 class UsageLineInput(serializers.Serializer):
@@ -212,10 +199,10 @@ def build_comparison(branch, start, end):
         counted_value = (counted * item.unit_cost).quantize(CENT)
         system_value += expected_value
         actual_value += counted_value
-        share = percent(abs(gap), expected) if expected else ''
+        gap_share = share(abs(gap), expected)
         # Faqat ikkala tomonda ham ma'lumot bo'lganda ogohlantiramiz: bir
         # tomoni bo'sh bo'lsa bu farq emas, hisobot to'liq emas.
-        flagged = bool(expected and counted and share and Decimal(share) > ALERT_SHARE)
+        flagged = bool(expected and counted and gap_share and Decimal(gap_share) > ALERT_SHARE)
         if flagged:
             alerts += 1
         rows.append({
@@ -226,7 +213,7 @@ def build_comparison(branch, start, end):
             'counted': quantity(counted),
             'gap': quantity(gap),
             'gap_value': money((gap * item.unit_cost).quantize(CENT)),
-            'share': share,
+            'share': gap_share,
             'expected_value': money(expected_value),
             'counted_value': money(counted_value),
             'status': (
@@ -250,7 +237,7 @@ def build_comparison(branch, start, end):
             'system_value': money(system_value),
             'actual_value': money(actual_value),
             'gap_value': money(actual_value - system_value),
-            'gap_share': percent(abs(actual_value - system_value), system_value),
+            'gap_share': share(abs(actual_value - system_value), system_value),
             'alerts': alerts,
             'items': len(rows),
             'reported_days': reported,

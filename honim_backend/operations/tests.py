@@ -9,6 +9,7 @@ from rest_framework.test import APIClient
 from users.models import AuditEvent, Branch, User
 from catalog.models import Category, Dish
 from .models import DailyUsage, Order, OrderLine, Expense, Ingredient, Recipe, RecipeLine, SalaryPayment, ShiftClose, StockMovement, Table
+from .money import money, percent, quantity, share
 from .services import append_order_lines, create_order, move_stock, Conflict
 
 
@@ -1756,3 +1757,69 @@ class ShiftCloseTests(TestCase):
         self.assertEqual(self.client.get(f'/api/v1/shift/?date={tomorrow}').status_code, 400)
         old = self.today - timedelta(days=30)
         self.assertEqual(self.client.post('/api/v1/shift/', {'date': str(old), 'counted_cash': '0'}, format='json').status_code, 400)
+
+
+class MoneyFormatTests(TestCase):
+    """Pul hamma joyda bir xil ko'rinsin: «0» va «0.00» aralashmasin."""
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.category = Category.objects.create(branch=self.branch, name='Taom')
+        self.dish = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('50000'))
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+
+    def test_helpers_agree_on_shape(self):
+        # Ikki kasr har doim, manfiy nol esa hech qachon.
+        self.assertEqual(money(Decimal('3000000')), '3000000.00')
+        self.assertEqual(money(None), '0.00')
+        self.assertEqual(money(Decimal('-0.001')), '0.00')
+        self.assertEqual(quantity(Decimal('20')), '20.000')
+        self.assertEqual(quantity(Decimal('19.705') - Decimal('20') + Decimal('0.295')), '0.000')
+        # Bo'luvchi nol bo'lganda: percent nol, share esa «noma'lum».
+        self.assertEqual(percent(Decimal('1'), Decimal('0')), '0.00')
+        self.assertEqual(share(Decimal('1'), Decimal('0')), '')
+        self.assertEqual(share(Decimal('1'), Decimal('4')), '25.00')
+
+    def test_every_money_endpoint_returns_the_same_shape_when_empty(self):
+        # Bo'sh bazada ham hamma nol bir xil yozilishi kerak.
+        self.assertEqual(self.client.get('/api/v1/sales/summary/').data['today']['revenue'], '0.00')
+        self.assertEqual(self.client.get('/api/v1/dashboard/').data['revenue'], '0.00')
+        self.assertEqual(self.client.get('/api/v1/finance/').data['profit']['revenue'], '0.00')
+        self.assertEqual(self.client.get('/api/v1/payroll/').data['summary']['paid'], '0.00')
+        self.assertEqual(self.client.get('/api/v1/shift/').data['expected_cash'], '0.00')
+        self.assertEqual(self.client.get('/api/v1/stock/usage/').data['summary']['used_value'], '0.00')
+
+    def test_the_same_sale_reads_the_same_in_every_report(self):
+        create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': 'cash',
+            'lines': [{'dish': self.dish.id, 'quantity': 3, 'note': ''}],
+        })
+        expected = '150000.00'
+        self.assertEqual(self.client.get('/api/v1/finance/').data['profit']['revenue'], expected)
+        self.assertEqual(self.client.get('/api/v1/sales/summary/').data['today']['revenue'], expected)
+        self.assertEqual(self.client.get('/api/v1/dashboard/').data['revenue'], expected)
+        self.assertEqual(self.client.get('/api/v1/shift/').data['revenue'], expected)
+        # Hisobot ham, sotuv taxtasi ham xuddi shu raqamni beradi.
+        today = timezone.localdate()
+        report = self.client.get(f'/api/v1/reports/sales/?start={today}&end={today}').data
+        board = self.client.get(f'/api/v1/sales/board/?start={today}&end={today}').data
+        self.assertEqual(Decimal(report['summary']['revenue']), Decimal(expected))
+        self.assertEqual(Decimal(board['summary']['revenue']), Decimal(expected))
+
+    def test_money_module_is_the_only_definition(self):
+        """money() endi bitta joyda — nusxalar qayta paydo bo'lmasin."""
+        import pathlib
+        root = pathlib.Path(__file__).resolve().parent.parent
+        owners = []
+        for path in root.rglob('*.py'):
+            if 'migrations' in path.parts or path.name == 'tests.py':
+                continue
+            marker = chr(10) + 'def money('
+            if marker in path.read_text(encoding='utf-8'):
+                owners.append(path.name)
+        # printing.py chek uchun boshqacha formatlaydi ('40 000'), shuning uchun
+        # uning funksiyasi som_text deb ataladi va bu ro'yxatga tushmaydi.
+        self.assertEqual(sorted(owners), ['money.py'], owners)

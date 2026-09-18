@@ -7,7 +7,6 @@ naqdga kirmaydi — lekin kun manzarasi to'liq bo'lishi uchun ko'rsatiladi.
 Yopilgandan keyin raqamlar muzlatiladi: o'sha kunga tegishli yozuv keyin
 o'zgarsa ham yopilgan kun hisoboti o'zgarmaydi.
 """
-from datetime import datetime, time, timedelta
 from decimal import Decimal
 
 from django.db import transaction
@@ -21,24 +20,13 @@ from rest_framework.views import APIView
 from users.permissions import ManagerOnly, SalesOnly
 
 from .models import SALE_PAYMENT_LABELS, Expense, Order, ShiftClose
+from .money import day_window, money
 from .services import audit
 
-CENT = Decimal('0.01')
 # Shu summadan katta farq e'tibor talab qiladi.
 ALERT_SOM = Decimal('20000')
 # Eng ko'pi bilan shuncha kun orqaga yopish mumkin.
 BACKDATE_DAYS = 7
-
-
-def money(value):
-    return str((value or Decimal('0')).quantize(CENT) + Decimal('0'))
-
-
-def day_window(day):
-    return (
-        timezone.make_aware(datetime.combine(day, time.min)),
-        timezone.make_aware(datetime.combine(day + timedelta(days=1), time.min)),
-    )
 
 
 def day_figures(branch, day):

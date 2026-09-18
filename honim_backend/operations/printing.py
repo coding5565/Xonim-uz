@@ -63,8 +63,13 @@ def ascii_only(text):
     return text.encode('ascii', 'replace').decode('ascii')
 
 
-def money(value):
-    """40000.00 -> '40 000'. O'zbekchada razryadlar probel bilan ajratiladi."""
+def som_text(value):
+    """Chek uchun: 40000.00 -> '40 000'.
+
+    Bu API javoblaridagi `operations/money.py: som_text()` dan ataylab farq
+    qiladi — chekda tiyin ko'rsatilmaydi va razryadlar probel bilan
+    ajratiladi. Nomi ham shuning uchun boshqacha.
+    """
     return f'{int(Decimal(value)):,}'.replace(',', ' ')
 
 
@@ -127,13 +132,13 @@ def receipt_bytes(order, *, open_drawer=False):
     for line in order.lines.all():
         name = line.name + ('   (qo‘shimcha)' if line.batch_key else '')
         ticket.text(name)
-        ticket.row(f'   {line.quantity} x {money(line.price)}',
-                   money(Decimal(line.price) * line.quantity))
+        ticket.row(f'   {line.quantity} x {som_text(line.price)}',
+                   som_text(Decimal(line.price) * line.quantity))
         if line.note:
             ticket.text(f'   izoh: {line.note}')
 
     ticket.rule()
-    ticket.raw(BOLD_ON).row('JAMI', f'{money(order.total)} so‘m').raw(BOLD_OFF)
+    ticket.raw(BOLD_ON).row('JAMI', f'{som_text(order.total)} so‘m').raw(BOLD_OFF)
     if order.status == 'paid':
         label = SALE_PAYMENT_LABELS.get(order.payment_method, order.payment_method or '-')
         ticket.text(f'To‘lov: {label}')

@@ -15,10 +15,10 @@ Ikki marta sanashning oldini olish qoidalari:
 Foyda bilan pul oqimi farqi algebraik aniq:
     sof_pul = sof_foyda + tannarx + to'lanmagan_xarajat − ombor_xaridi
 """
-from datetime import datetime, time, timedelta
+from datetime import timedelta
 from decimal import Decimal
 
-from django.db.models import Count, DecimalField, F, Q, Sum
+from django.db.models import Count, F, Q, Sum
 from django.db.models.functions import Coalesce, TruncMonth
 from django.utils import timezone
 from rest_framework import serializers
@@ -26,31 +26,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from catalog.models import Dish
-from users.payroll import MONTH_NAMES, month_key, month_label, next_month, short_label
 from users.permissions import OwnerOnly
 
 from .models import SALE_PAYMENT_LABELS, Expense, Ingredient, Order, OrderLine, SalaryPayment, StockMovement
+from .money import MONEY, day_window, money, month_key, month_label, next_month, percent, short_label
 
-CENT = Decimal('0.01')
 SALARY_CATEGORY = 'Ish haqi'
 TREND_MONTHS = 12
-MONEY = DecimalField(max_digits=18, decimal_places=2)
-
-
-def money(value):
-    return str((value or Decimal('0')).quantize(CENT) + Decimal('0'))
-
-
-def percent(part, whole):
-    return str((part / whole * 100).quantize(CENT)) if whole else '0.00'
-
-
-def day_window(start, end):
-    """Mahalliy kunni aniq oraliqqa aylantiradi — kun chegarasi Toshkent vaqtida."""
-    return (
-        timezone.make_aware(datetime.combine(start, time.min)),
-        timezone.make_aware(datetime.combine(end + timedelta(days=1), time.min)),
-    )
 
 
 class FinanceFilters(serializers.Serializer):

@@ -23,6 +23,7 @@ from rest_framework.views import APIView
 from users.permissions import ManagerOnly
 
 from .models import Ingredient, StockMovement
+from .money import money, quantity, share
 
 OUT_KINDS = ['consumption', 'sale_consumption']
 KIND_LABELS = {
@@ -30,26 +31,6 @@ KIND_LABELS = {
     'consumption': 'Qo‘lda sarf',
     'sale_consumption': 'Sotuv sarfi',
 }
-QUANTITY = Decimal('0.001')
-CENT = Decimal('0.01')
-
-
-def quantity(value):
-    # Nolni qo'shish manfiy nolni ("-0.000") oddiy nolga aylantiradi: ayirmalar
-    # yaxlitlanganda shunday chiqib qolishi mumkin.
-    return str((value or Decimal('0')).quantize(QUANTITY) + Decimal('0'))
-
-
-def money(value):
-    return str((value or Decimal('0')).quantize(CENT) + Decimal('0'))
-
-
-def percent_of(part, whole):
-    """Ulush pul bo'yicha. Narx yo'q bo'lsa bo'sh qaytadi — nol emas,
-    chunki «nol ulush» bilan «noma'lum» bir xil narsa emas."""
-    return str((part / whole * 100).quantize(CENT)) if whole else ''
-
-
 class UsageFilters(serializers.Serializer):
     start = serializers.DateField(required=False)
     end = serializers.DateField(required=False)
@@ -206,7 +187,7 @@ def build_usage(user, filters):
     total_value = totals.get('out_value') or Decimal('0')
     for row in items:
         # Ulush pul bo'yicha hisoblanadi; narx yo'q bo'lsa taqqoslash mumkin emas.
-        row['share'] = percent_of(Decimal(row['used_value']), total_value)
+        row['share'] = share(Decimal(row['used_value']), total_value)
     stock_value = sum((entry.stock_value for entry in stock), Decimal('0'))
     return {
         'filters': {'start': start, 'end': end, 'group': group, 'ingredient': chosen},

@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 from users.models import AuditEvent
 from users.permissions import BranchMember, KitchenOnly, ManagerOnly, OwnerOnly, SalesOnly
 from .models import ORDER_STATUSES, SALE_PAYMENT_CHOICES, SALE_PAYMENT_LABELS, Order, OrderLine, Table, Expense, Ingredient, Recipe, StockMovement
+from .money import money
 from .serializers import AppendLinesInput, OrderInput, OrderSerializer, TableSerializer, ExpenseSerializer, IngredientSerializer, MovementInput, MovementSerializer, RecipeSerializer
 from .printing import PrinterError, print_receipt
 from .services import append_order_lines, audit, cancel_order, create_order, pay_order, create_expense, move_stock, quantity_text, refund_order, remove_order_line, reprice_recipes, Conflict
@@ -348,15 +349,15 @@ class DashboardView(APIView):
         by_method = [
             {'method': row['payment_method'],
              'label': SALE_PAYMENT_LABELS.get(row['payment_method'], row['payment_method'] or '—'),
-             'revenue': str(row['total'])}
+             'revenue': money(row['total'])}
             for row in paid.values('payment_method').annotate(total=Sum('total')).order_by('-total')
         ]
         trend = []
         cursor = start
         while cursor <= end:
-            trend.append({'date': cursor, 'revenue': str(revenue_by_day.get(cursor) or Decimal('0')), 'expenses': str(expenses_by_day.get(cursor) or Decimal('0'))})
+            trend.append({'date': cursor, 'revenue': money(revenue_by_day.get(cursor)), 'expenses': money(expenses_by_day.get(cursor))})
             cursor += timedelta(days=1)
-        return Response({'revenue': str(revenue), 'expenses': str(spending), 'net_cash': str(revenue - cash_out), 'cost': str(recipe_cost), 'gross_profit': str(revenue - recipe_cost), 'gross_margin': str((revenue - recipe_cost) / revenue * 100 if revenue else 0), 'paid_count': paid.count(), 'open_count': orders.filter(status='open').count(), 'previous_revenue': str(previous), 'by_method': by_method, 'low_stock': Ingredient.objects.filter(branch=branch, quantity__lte=F('minimum')).count(), 'trend': trend, 'period': {'kind': 'month' if request.query_params.get('month') else 'days', 'start': start, 'end': end}, 'months': dashboard_months(branch, today), 'expense_categories': list(expenses.values('category').annotate(total=Sum('amount')).order_by('-total')), 'recent_orders': OrderSerializer(period_orders.select_related('cashier').prefetch_related('lines')[:5], many=True).data, 'as_of': timezone.now(), 'basis': 'Yalpi foyda: tushumdan sotuv paytidagi retsept tannarxi ayirilgan qiymat. Oylik, ijara va boshqa xarajatlar bu ko‘rsatkichdan alohida.'})
+        return Response({'revenue': money(revenue), 'expenses': money(spending), 'net_cash': money(revenue - cash_out), 'cost': money(recipe_cost), 'gross_profit': money(revenue - recipe_cost), 'gross_margin': money((revenue - recipe_cost) / revenue * 100 if revenue else Decimal('0')), 'paid_count': paid.count(), 'open_count': orders.filter(status='open').count(), 'previous_revenue': money(previous), 'by_method': by_method, 'low_stock': Ingredient.objects.filter(branch=branch, quantity__lte=F('minimum')).count(), 'trend': trend, 'period': {'kind': 'month' if request.query_params.get('month') else 'days', 'start': start, 'end': end}, 'months': dashboard_months(branch, today), 'expense_categories': list(expenses.values('category').annotate(total=Sum('amount')).order_by('-total')), 'recent_orders': OrderSerializer(period_orders.select_related('cashier').prefetch_related('lines')[:5], many=True).data, 'as_of': timezone.now(), 'basis': 'Yalpi foyda: tushumdan sotuv paytidagi retsept tannarxi ayirilgan qiymat. Oylik, ijara va boshqa xarajatlar bu ko‘rsatkichdan alohida.'})
 
 
 class SalesSummaryView(APIView):
@@ -372,11 +373,11 @@ class SalesSummaryView(APIView):
 
         def totals(queryset):
             row = queryset.aggregate(total=Sum('total'), orders=Count('id'))
-            return {'revenue': str(row['total'] or Decimal('0')), 'orders': row['orders']}
+            return {'revenue': money(row['total']), 'orders': row['orders']}
 
         # Grouped so a new payment method shows up here without touching this view.
         by_method = [
-            {'method': row['payment_method'], 'label': SALE_PAYMENT_LABELS.get(row['payment_method'], row['payment_method']), 'revenue': str(row['total'])}
+            {'method': row['payment_method'], 'label': SALE_PAYMENT_LABELS.get(row['payment_method'], row['payment_method']), 'revenue': money(row['total'])}
             for row in today_paid.values('payment_method').annotate(total=Sum('total')).order_by('-total')
         ]
         open_row = Order.objects.filter(branch=branch, status='open').aggregate(total=Sum('total'), orders=Count('id'))
@@ -385,7 +386,7 @@ class SalesSummaryView(APIView):
             'yesterday': totals(paid.filter(paid_at__date=today - timedelta(days=1))),
             'last_7_days': totals(paid.filter(paid_at__date__gte=today - timedelta(days=6), paid_at__date__lte=today)),
             'mine_today': totals(today_paid.filter(cashier=request.user)),
-            'open': {'revenue': str(open_row['total'] or Decimal('0')), 'orders': open_row['orders']},
+            'open': {'revenue': money(open_row['total']), 'orders': open_row['orders']},
             'today_by_method': by_method,
             'as_of': timezone.now(),
         })
