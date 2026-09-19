@@ -2292,6 +2292,26 @@ class SalesChannelTests(TestCase):
         self.assertEqual(
             cashier.post(f'/api/v1/orders/{order.id}/pay/', {'payment_method': 'uzum'}).status_code, 200)
 
+    def test_every_payment_method_is_listed_even_at_zero(self):
+        # Sotuvsiz usul ro'yxatdan tushib qolsa, kassir «tekshirilmagan» deb
+        # o'ylashi mumkin. Har biri doim turadi, noli bilan.
+        self.sell('uzum', 'uzum')
+
+        cashier = APIClient()
+        cashier.force_authenticate(self.cashier)
+        rows = {row['method']: row for row in cashier.get('/api/v1/shift/').data['breakdown']}
+        self.assertEqual(sorted(rows), ['card', 'cash', 'click', 'uzum', 'yandex'])
+        self.assertEqual(Decimal(rows['uzum']['amount']), Decimal('100000'))
+        self.assertEqual(Decimal(rows['yandex']['amount']), Decimal('0'))
+        self.assertEqual(rows['yandex']['count'], 0)
+        # Kassada faqat naqd qoladi.
+        self.assertTrue(rows['cash']['in_drawer'])
+        self.assertFalse(rows['yandex']['in_drawer'])
+        # Yig'indi kun tushumiga teng bo'lishi shart.
+        self.assertEqual(
+            sum(Decimal(row['amount']) for row in rows.values()),
+            Decimal(cashier.get('/api/v1/shift/').data['revenue']))
+
     def test_the_till_sees_each_channel_counted_on_its_own(self):
         # Kassir stollar sahifasida Uzum va Yandex tugmalarida bugungi
         # tushumni ko'radi, shuning uchun kesim shu javobda kelishi kerak.

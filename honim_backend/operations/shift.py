@@ -19,7 +19,7 @@ from rest_framework.views import APIView
 
 from users.permissions import OwnerOnly, SalesOnly
 
-from .models import SALE_PAYMENT_LABELS, Expense, Order, ShiftClose
+from .models import SALE_PAYMENT_METHODS, Expense, Order, ShiftClose
 from .money import day_window, money
 from .services import audit
 from core.i18n import _
@@ -45,14 +45,16 @@ def day_figures(branch, day):
         branch=branch, date=day, payment_method='cash',
     ).aggregate(total=Coalesce(Sum('amount'), Decimal('0')))['total']
 
+    # Har bir to'lov usuli doim ro'yxatda turadi, sotuvsizi ham nol bo'lib:
+    # yo'q qator «tekshirilmagan» degani emasligini kassir ko'rib tursin.
     breakdown = [{
         'method': method,
-        'label': SALE_PAYMENT_LABELS.get(method, method or '—'),
-        'amount': money(row['total']),
-        'count': row['count'],
+        'label': label,
+        'amount': money(by_method.get(method, {}).get('total')),
+        'count': by_method.get(method, {}).get('count', 0),
         # Faqat naqd kassada qoladi.
         'in_drawer': method == 'cash',
-    } for method, row in by_method.items()]
+    } for method, label in SALE_PAYMENT_METHODS]
     return {
         'revenue': totals['revenue'],
         'orders': totals['orders'],
