@@ -409,7 +409,6 @@ export const ru: Record<string, string> = {
   'l': 'л',
   'LAVOZIM': 'ДОЛЖНОСТЬ',
   'Lavozim yoki qo‘shimcha ma’lumot': 'Должность или доп. информация',
-  'litr': 'л',
   'Localhost · Sinov versiyasi': 'Localhost · Тестовая версия',
   'Login': 'Логин',
   'Login va parolni xodimga xavfsiz yetkazing. Tizim parolni keyin qayta ko‘rsatmaydi.': 'Передайте логин и пароль сотруднику лично. Позже система пароль не покажет.',

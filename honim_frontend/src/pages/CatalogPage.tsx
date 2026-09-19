@@ -426,7 +426,7 @@ export default function CatalogPage() {
                   }}
                 >
                   {ingredients.map(row => (
-                    <option key={row.id} value={row.id}>{row.name} · {row.unit}</option>
+                    <option key={row.id} value={row.id}>{row.name} · {t(row.unit)}</option>
                   ))}
                 </select>
                 <div className="amount-field">

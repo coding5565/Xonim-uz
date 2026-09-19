@@ -409,7 +409,6 @@ export const en: Record<string, string> = {
   'l': 'l',
   'LAVOZIM': 'ROLE',
   'Lavozim yoki qo‘shimcha ma’lumot': 'Job title or extra details',
-  'litr': 'l',
   'Localhost · Sinov versiyasi': 'Localhost · test build',
   'Login': 'Login',
   'Login va parolni xodimga xavfsiz yetkazing. Tizim parolni keyin qayta ko‘rsatmaydi.': 'Hand the login and password to the employee safely. The system will not show the password again.',

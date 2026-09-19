@@ -2990,15 +2990,20 @@ class TranslationCoverageTests(SimpleTestCase):
             self.skipTest('frontend manbasi yonida emas')
 
     def test_every_label_the_server_sends_has_a_translation(self):
-        from operations.models import ORDER_STATUS_LABELS, SALE_CHANNEL_LABELS, SALE_PAYMENT_LABELS
+        from operations.models import (
+            ORDER_STATUS_LABELS, SALE_CHANNEL_LABELS, SALE_PAYMENT_LABELS, Ingredient,
+        )
         from users.models import AUDIT_GROUPS, AUDIT_LABELS
 
+        # Birliklar modeldan olinadi: qo'lda yozilsa ro'yxat sekin-asta
+        # haqiqatdan uzoqlashadi va test o'zi yolg'on tinchlik beradi.
+        units = {value for value, _ in Ingredient._meta.get_field('unit').choices}
         expected = (
             set(AUDIT_LABELS.values()) | set(AUDIT_GROUPS.values())
             | set(SALE_PAYMENT_LABELS.values()) | set(SALE_CHANNEL_LABELS.values())
             | set(ORDER_STATUS_LABELS.values())
             | {'Superadmin', 'Kassir', 'Oshxona'}
-            | {'kg', 'litr', 'dona'}
+            | units
         ) - self.BRANDS
 
         for lang, catalogue in self.catalogues.items():

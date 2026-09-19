@@ -211,14 +211,14 @@ export default function InventoryPage() {
                 return (
                   <tr key={row.id}>
                     <td><strong>{row.name}</strong></td>
-                    <td className="number">{money(row.quantity)} {row.unit}</td>
+                    <td className="number">{money(row.quantity)} {t(row.unit)}</td>
                     <td className="number">
                       {Number(row.unit_cost)
                         ? <>{money(row.unit_cost)} <small>{t('so‘m')}/{row.unit}</small></>
                         : <span className="muted">{t('narx yo‘q')}</span>}
                     </td>
                     <td className="number">{Number(row.stock_value) ? `${money(row.stock_value)} ${t('so‘m')}` : '—'}</td>
-                    <td>{money(row.minimum)} {row.unit}</td>
+                    <td>{money(row.minimum)} {t(row.unit)}</td>
                     <td><span className={`status ${isLow ? 'open' : 'paid'}`}>{isLow ? t('Kam qolgan') : t('Yetarli')}</span></td>
                   </tr>
                 )
@@ -244,7 +244,7 @@ export default function InventoryPage() {
                       {row.kind === 'receipt' ? t('Kirim') : row.kind === 'sale_consumption' ? t('Sotuv sarfi') : t('Sarf')}
                     </span>
                   </td>
-                  <td className="number">{row.kind === 'receipt' ? '+' : '−'}{money(row.quantity)} {row.unit}</td>
+                  <td className="number">{row.kind === 'receipt' ? '+' : '−'}{money(row.quantity)} {t(row.unit)}</td>
                   <td className="number">{Number(row.cost_total) ? `${money(row.cost_total)} ${t('so‘m')}` : '—'}</td>
                   <td>{row.date}</td>
                   <td>{row.note}</td>
@@ -318,7 +318,7 @@ export default function InventoryPage() {
                     required
                   >
                     {ingredients.map(row => (
-                      <option key={row.id} value={row.id}>{row.name} · {money(row.quantity)} {row.unit}</option>
+                      <option key={row.id} value={row.id}>{row.name} · {money(row.quantity)} {t(row.unit)}</option>
                     ))}
                   </select>
                 </label>

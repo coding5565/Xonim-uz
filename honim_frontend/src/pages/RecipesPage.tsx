@@ -287,7 +287,7 @@ export default function RecipesPage() {
                 {recipe.lines.map(line => (
                   <tr key={line.id}>
                     <td><strong>{line.ingredient_name}</strong></td>
-                    <td>{yieldLabel(line.quantity)} {line.unit}</td>
+                    <td>{yieldLabel(line.quantity)} {t(line.unit)}</td>
                     <td className="number">{wholeMoney(line.batch_cost)} {t('so‘m')}</td>
                   </tr>
                 ))}
@@ -379,7 +379,7 @@ export default function RecipesPage() {
                     required
                   >
                     {ingredients.map(row => (
-                      <option key={row.id} value={row.id}>{row.name} · {row.unit}</option>
+                      <option key={row.id} value={row.id}>{row.name} · {t(row.unit)}</option>
                     ))}
                   </select>
                   <div className="amount-field">
