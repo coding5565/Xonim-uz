@@ -13,12 +13,29 @@ from django.db import connection
 from django.db.models import Sum
 from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
+from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient
 from users.models import AuditEvent, Branch, User
 from catalog.models import Category, Dish
 from .models import AssistantChat, AssistantMessage, DailyUsage, DishPrep, Order, OrderLine, Expense, Ingredient, Recipe, RecipeLine, SalaryPayment, ShiftClose, StockMovement, Table, Waiter
 from .money import money, percent, quantity, share
 from .services import append_order_lines, create_order, move_stock, Conflict
+
+
+def prepare(user, *dishes, quantity=999):
+    """Testda sotuvdan oldin oshxona nima pishirganini yozadi.
+
+    Tizim tayyor bo'lmagan taomni sotmaydi — oshxona talon kelgach
+    pishirmaydi, u faqat tayyoridan yig'adi. Shuning uchun sotuvni
+    tekshiradigan har bir test avval shu qadamdan o'tadi, xuddi haqiqiy
+    kunda bo'lgani kabi. Miqdor ataylab katta: bu testlar qoldiqni emas,
+    boshqa narsani tekshiradi.
+    """
+    DishPrep.objects.bulk_create([
+        DishPrep(branch=user.branch, dish=dish, actor=user,
+                 date=timezone.localdate(), quantity=quantity)
+        for dish in dishes
+    ])
 
 
 class WorkflowTests(TestCase):
@@ -32,6 +49,7 @@ class WorkflowTests(TestCase):
         self.dish = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=45000)
         self.client = APIClient()
         self.client.force_authenticate(self.owner)
+        prepare(self.cashier, *Dish.objects.filter(branch=self.branch))
 
     def order_data(self):
         return {'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': 'cash', 'lines': [{'dish': self.dish.id, 'quantity': 2, 'note': ''}]}
@@ -225,6 +243,7 @@ class WorkflowTests(TestCase):
 
     def test_cashier_appends_to_open_bill_and_kitchen_sees_it_again(self):
         second = Dish.objects.create(branch=self.branch, category=self.category, name='Choy', price=8000)
+        prepare(self.cashier, second)
         data = self.order_data()
         data['payment_method'] = ''
         order = create_order(self.cashier, data)
@@ -305,6 +324,7 @@ class WorkflowTests(TestCase):
         water = Dish.objects.create(branch=self.branch, category=drinks, name='Suv', price=5000)
         # Kategoriyasi kassa, lekin o'zi oshxonada damlanadi - alohida qiymat kategoriyadan ustun.
         tea = Dish.objects.create(branch=self.branch, category=drinks, name='Choy', price=8000, station=Station.KITCHEN)
+        prepare(self.cashier, water, tea)
 
         data = self.order_data()
         data['payment_method'] = ''
@@ -504,6 +524,7 @@ class WorkflowTests(TestCase):
     def test_sales_report_filters_and_exports_excel_for_managers(self):
         dessert = Category.objects.create(branch=self.branch, name='Shirinlik')
         cake = Dish.objects.create(branch=self.branch, category=dessert, name='Tort', price=20000)
+        prepare(self.owner, cake)
         first = create_order(self.owner, self.order_data())
         second = create_order(self.owner, {
             'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': 'card',
@@ -552,6 +573,7 @@ class ActivityLogTests(TestCase):
         self.dish = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=45000)
         self.client = APIClient()
         self.client.force_authenticate(self.owner)
+        prepare(self.cashier, *Dish.objects.filter(branch=self.branch))
 
     def stamp(self, event, day, hour=12):
         """auto_now_add'ni chetlab o'tib, yozuvga aniq sana qo'yadi."""
@@ -677,6 +699,7 @@ class StockCostingTests(TestCase):
         self.rice = Ingredient.objects.create(branch=self.branch, name='Guruch', unit='kg')
         self.client = APIClient()
         self.client.force_authenticate(self.owner)
+        prepare(self.cashier, *Dish.objects.filter(branch=self.branch))
 
     def receipt(self, quantity, cost):
         return move_stock(self.owner, {
@@ -1052,6 +1075,7 @@ class FinanceTests(TestCase):
         })
         self.client = APIClient()
         self.client.force_authenticate(self.owner)
+        prepare(self.cashier, *Dish.objects.filter(branch=self.branch))
 
     def sell(self, dish, quantity, method='cash'):
         return create_order(self.cashier, {
@@ -1246,6 +1270,7 @@ class DailyUsageTests(TestCase):
         self.client = APIClient()
         self.client.force_authenticate(self.admin)
         self.today = timezone.localdate()
+        prepare(self.cashier, *Dish.objects.filter(branch=self.branch))
 
     def recipe_for_one_manti(self):
         """1 ta manti uchun 20 g go'sht va 30 g kartoshka."""
@@ -1433,6 +1458,8 @@ class FullSetupFlowTests(TestCase):
             }, format='json')
 
         # 4-qadam: 50 ta manti sotiladi -> ombordan o'zi ayriladi.
+        # Oshxona ertalab pishirdi — tayyorsiz sotuv bo'lmaydi.
+        prepare(self.cashier, Dish.objects.get(pk=dish['id']))
         order = create_order(self.cashier, {
             'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': 'cash',
             'lines': [{'dish': dish['id'], 'quantity': 50, 'note': ''}],
@@ -1513,6 +1540,8 @@ class FullSetupFlowTests(TestCase):
             'key': str(uuid4()), 'ingredient': meat['id'], 'kind': 'receipt',
             'quantity': '10', 'cost_total': '800000', 'date': str(timezone.localdate()), 'note': 'x',
         }, format='json')
+        # Oshxona ertalab pishirdi — tayyorsiz sotuv bo'lmaydi.
+        prepare(self.cashier, Dish.objects.get(pk=dish['id']))
         order = create_order(self.cashier, {
             'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': 'cash',
             'lines': [{'dish': dish['id'], 'quantity': 10, 'note': ''}],
@@ -1544,6 +1573,7 @@ class OrderCorrectionTests(TestCase):
         self.table = Table.objects.create(branch=self.branch, number=1)
         self.client = APIClient()
         self.client.force_authenticate(self.cashier)
+        prepare(self.cashier, *Dish.objects.filter(branch=self.branch))
 
     def open_bill(self, lines=None):
         return create_order(self.cashier, {
@@ -1679,6 +1709,7 @@ class ShiftCloseTests(TestCase):
         self.client = APIClient()
         self.client.force_authenticate(self.cashier)
         self.today = timezone.localdate()
+        prepare(self.cashier, *Dish.objects.filter(branch=self.branch))
 
     def sell(self, quantity, method):
         return create_order(self.cashier, {
@@ -1799,6 +1830,7 @@ class MoneyFormatTests(TestCase):
         self.dish = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('50000'))
         self.client = APIClient()
         self.client.force_authenticate(self.owner)
+        prepare(self.cashier, *Dish.objects.filter(branch=self.branch))
 
     def test_helpers_agree_on_shape(self):
         # Ikki kasr har doim, manfiy nol esa hech qachon.
@@ -1865,6 +1897,7 @@ class DiscountTests(TestCase):
         self.dish = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('50000'))
         self.client = APIClient()
         self.client.force_authenticate(self.cashier)
+        prepare(self.cashier, *Dish.objects.filter(branch=self.branch))
 
     def open_bill(self, quantity=4):
         return create_order(self.cashier, {
@@ -2094,6 +2127,7 @@ class WaiterTests(TestCase):
         self.dish = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('50000'))
         self.client = APIClient()
         self.client.force_authenticate(self.owner)
+        prepare(self.cashier, *Dish.objects.filter(branch=self.branch))
 
     def add_waiter(self, name='Fazliddin', commission='5'):
         return self.client.post('/api/v1/waiters/', {
@@ -2204,6 +2238,7 @@ class SalesChannelTests(TestCase):
         self.dish = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('50000'))
         self.client = APIClient()
         self.client.force_authenticate(self.owner)
+        prepare(self.cashier, *Dish.objects.filter(branch=self.branch))
 
     def sell(self, channel, method, quantity=2):
         return create_order(self.cashier, {
@@ -2396,14 +2431,15 @@ class DishPrepTests(TestCase):
         self.assertEqual([item['quantity'] for item in history], [15, 20])
         self.assertEqual(history[0]['note'], 'tushda')
 
-    def test_a_dish_without_an_entry_is_never_limited(self):
+    def test_a_dish_with_no_entry_cannot_be_sold_at_all(self):
+        # Kiritilmagan degani «yo'q» degani: oshxona talon kelgach pishirmaydi,
+        # u faqat ertalab tayyorlanganidan yig'adi.
         self.prepare(self.manti, 5)
-        self.sell(self.somsa, 100)
-        row = self.row(self.somsa)
-        # Kassir ertalab kiritishni unutgan bo'lishi mumkin - restoran to'xtamaydi.
-        self.assertFalse(row['tracked'])
-        self.assertFalse(row['out'])
-        self.assertFalse(row['low'])
+        with self.assertRaises(ValidationError) as caught:
+            self.sell(self.somsa, 1)
+        self.assertIn('Somsa', str(caught.exception))
+        self.assertIn('tayyorlanmagan', str(caught.exception))
+        self.assertFalse(self.row(self.somsa)['tracked'])
         self.assertEqual(self.client.get('/api/v1/dish-prep/').data['summary']['tracked'], 1)
 
     def test_the_low_warning_is_proportional_to_the_batch(self):
@@ -2418,7 +2454,7 @@ class DishPrepTests(TestCase):
         self.sell(self.somsa, 2)
         self.assertTrue(self.row(self.somsa)['low'])
 
-    def test_running_out_is_flagged_but_selling_still_works(self):
+    def test_selling_stops_when_the_batch_runs_out(self):
         self.prepare(self.manti, 5)
         self.sell(self.manti, 5)
         row = self.row(self.manti)
@@ -2426,13 +2462,24 @@ class DishPrepTests(TestCase):
         self.assertTrue(row['out'])
         self.assertFalse(row['low'])
 
-        # Sotuv to'xtatilmaydi: oshxona qo'shimcha pishirgan bo'lishi mumkin.
+        # Tugagan taomni sotib bo'lmaydi — yig'adigan narsa yo'q.
+        with self.assertRaises(ValidationError) as caught:
+            self.sell(self.manti, 1)
+        self.assertIn('Manti', str(caught.exception))
+        self.assertEqual(self.row(self.manti)['remaining'], 0)
+
+        # Oshxona yana pishirsa sotuv darhol davom etadi.
+        self.prepare(self.manti, 3)
         self.sell(self.manti, 2)
-        self.assertEqual(self.row(self.manti)['remaining'], -2)
-        # Lekin ortiqcha sotilgani jurnalga tushadi - egasi ko'rib tursin.
-        entry = AuditEvent.objects.filter(action='prep.oversell').last()
-        self.assertIn('Manti', entry.description)
-        self.assertIn('2 porsiya ortiqcha', entry.description)
+        self.assertEqual(self.row(self.manti)['remaining'], 1)
+
+    def test_a_bill_cannot_ask_for_more_than_is_left(self):
+        self.prepare(self.manti, 3)
+        with self.assertRaises(ValidationError) as caught:
+            self.sell(self.manti, 4)
+        self.assertIn('3 ta qoldi', str(caught.exception))
+        # Hisob umuman ochilmaydi: yarim buyurtma qabul qilinmaydi.
+        self.assertEqual(self.row(self.manti)['sold'], 0)
 
     def test_an_open_bill_already_counts_as_gone(self):
         self.prepare(self.manti, 10)
@@ -2762,6 +2809,7 @@ class DiscountInReportsTests(TestCase):
         self.choy = Dish.objects.create(branch=self.branch, category=self.category, name='Choy', price=Decimal('10000'))
         self.client = APIClient()
         self.client.force_authenticate(self.owner)
+        prepare(self.cashier, *Dish.objects.filter(branch=self.branch))
 
     def bill_with_discount(self, amount):
         # 2×50 000 + 3×10 000 = 130 000 — chegirma teng bo'linmaydi.
@@ -2887,6 +2935,7 @@ class DiscountedLineRemovalTests(TestCase):
         self.choy = Dish.objects.create(branch=self.branch, category=self.category, name='Choy', price=Decimal('10000'))
         self.client = APIClient()
         self.client.force_authenticate(self.cashier)
+        prepare(self.cashier, *Dish.objects.filter(branch=self.branch))
 
     def open_bill(self):
         # 2×50 000 + 3×10 000 = 130 000
@@ -3103,6 +3152,7 @@ class ServerSpeaksTheRequestedLanguageTests(TestCase):
         self.category = Category.objects.create(branch=self.branch, name='Taom')
         self.osh = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('50000'))
         self.client = APIClient()
+        prepare(self.cashier, *Dish.objects.filter(branch=self.branch))
 
     def test_a_failed_login_answers_in_the_requested_language(self):
         response = self.client.post(
@@ -3158,6 +3208,7 @@ class PrintingStaysOutsideTheTransactionTests(TransactionTestCase):
             'cashier', password='test-only-long-password', role='cashier', branch=self.branch)
         self.category = Category.objects.create(branch=self.branch, name='Taom')
         self.osh = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('50000'))
+        prepare(self.cashier, *Dish.objects.filter(branch=self.branch))
 
     def test_the_kitchen_ticket_is_printed_after_the_transaction_closes(self):
         seen = []
@@ -3219,3 +3270,85 @@ class PrintingStaysOutsideTheTransactionTests(TransactionTestCase):
         order.refresh_from_db()
         self.assertEqual(order.total, Decimal('100000'))
         self.assertEqual(len(printed), 1)
+
+
+class RecipeIsAnEstimateNotALawTests(TestCase):
+    """Retsept ombordan ayiradi, lekin sotuvni HECH QACHON to'xtatmaydi.
+
+    Bir taomga ba'zida retseptdan ko'proq, ba'zida kamroq ketadi — shuning
+    uchun retsept bo'yicha hisoblangan qoldiq taxmin bo'lib qoladi. Mijoz
+    oldida turgan kassir shu taxminiy raqam sababli pul ololmay qolishi mumkin
+    emas. Haqiqiy sarfni admin kunlik kiritadi, superadmin esa ikkalasini
+    solishtiradi.
+    """
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.category = Category.objects.create(branch=self.branch, name='Taom')
+        self.osh = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('50000'))
+        # Omborda atigi 0.5 kg go'sht bor, har porsiyaga 0.2 kg ketadi.
+        self.meat = Ingredient.objects.create(
+            branch=self.branch, name='Go‘sht', unit='kg', quantity=Decimal('0.5'), unit_cost=Decimal('80000'))
+        recipe = Recipe.objects.create(branch=self.branch, dish=self.osh, name='Osh', yield_quantity=Decimal('1'))
+        RecipeLine.objects.create(
+            recipe=recipe, ingredient=self.meat, quantity=Decimal('0.200'), batch_cost=Decimal('16000'))
+        prepare(self.cashier, self.osh)
+        self.client = APIClient()
+        self.client.force_authenticate(self.cashier)
+
+    def sell(self, quantity):
+        return create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': 'cash',
+            'lines': [{'dish': self.osh.id, 'quantity': quantity, 'note': ''}],
+        })
+
+    def test_a_sale_goes_through_even_when_the_recipe_wants_more_than_there_is(self):
+        # 5 porsiya = 1 kg kerak, omborda 0.5 kg. Sotuv baribir o'tadi.
+        order = self.sell(5)
+        self.assertEqual(order.status, 'paid')
+        self.assertEqual(order.total, Decimal('250000'))
+        self.meat.refresh_from_db()
+        # Qoldiq minusga tushadi — bu yashiriladigan emas, ko'rsatiladigan fakt.
+        self.assertEqual(self.meat.quantity, Decimal('-0.500'))
+
+    def test_the_shortage_is_written_to_the_activity_log(self):
+        self.sell(5)
+        entry = AuditEvent.objects.filter(action='stock.shortage').first()
+        self.assertIsNotNone(entry, 'kamchilik jurnalga tushmadi')
+        self.assertIn('Go‘sht', entry.description)
+        self.assertIn('retsept 1 kg so‘radi', entry.description)
+        self.assertIn('qoldiq 0.5 edi', entry.description)
+
+    def test_a_sale_within_the_stock_writes_no_shortage(self):
+        self.sell(2)  # 0.4 kg, omborda 0.5 kg bor
+        self.meat.refresh_from_db()
+        self.assertEqual(self.meat.quantity, Decimal('0.100'))
+        self.assertFalse(AuditEvent.objects.filter(action='stock.shortage').exists())
+
+    def test_the_cost_is_still_taken_from_the_recipe(self):
+        # Retsept qat'iy emas, lekin tannarx hisobi o'zgarmaydi: 0.2 × 80 000.
+        order = self.sell(1)
+        line = order.lines.get()
+        self.assertEqual(line.cost_per_unit, Decimal('16000.00'))
+        self.assertEqual(line.cost_total, Decimal('16000.00'))
+
+    def test_writing_stock_off_by_hand_is_still_refused_when_short(self):
+        # Qo'lda chiqim — bu odamning qarori, xato yozuvdan himoya qoladi.
+        response = self.client.post('/api/v1/stock/', {
+            'key': str(uuid4()), 'ingredient': self.meat.id, 'kind': 'consumption',
+            'quantity': '5', 'date': str(timezone.localdate()), 'note': 'Isrof',
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.meat.refresh_from_db()
+        self.assertEqual(self.meat.quantity, Decimal('0.500'))
+
+    def test_the_owner_can_see_how_far_the_estimate_drifted(self):
+        self.sell(5)
+        owner = APIClient()
+        owner.force_authenticate(self.owner)
+        rows = owner.get('/api/v1/ingredients/').data['results']
+        meat = next(row for row in rows if row['name'] == 'Go‘sht')
+        # Manfiy qoldiq API orqali ham ko'rinadi — yashirilmaydi.
+        self.assertEqual(Decimal(meat['quantity']), Decimal('-0.500'))

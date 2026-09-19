@@ -110,23 +110,33 @@ def consume_order_stock(user, order):
     ingredients = {
         item.id: item for item in Ingredient.objects.select_for_update().filter(branch=user.branch, id__in=required).order_by('id')
     }
-    missing = []
+    # Retsept — TAXMIN, qonun emas: bir taomga ba'zida ko'proq, ba'zida kamroq
+    # ketadi. Shuning uchun qoldiq yetmasa ham sotuv to'xtatilmaydi — mijoz
+    # oldida turgan kassir omborning taxminiy raqami sababli pul ololmay
+    # qolishi mumkin emas. Qoldiq minusga tushadi va bu superadminga
+    # «hisob haqiqatdan ajralib ketdi» degan aniq signal bo'ladi.
+    shortages = []
     for ingredient_id, quantity in required.items():
         ingredient = ingredients.get(ingredient_id)
-        if not ingredient or ingredient.quantity < quantity:
-            name = ingredient.name if ingredient else 'noma’lum mahsulot'
-            available = ingredient.quantity if ingredient else 0
-            missing.append(f'{name}: kerak {quantity.normalize()} {ingredient.unit if ingredient else ""}, qoldiq {available}')
-    if missing:
-        raise ValidationError({'stock': _('Ombor yetarli emas. Kirimni tekshiring: ') + '; '.join(missing)})
+        if ingredient and ingredient.quantity < quantity:
+            shortages.append((
+                'stock.shortage',
+                f'#{order.id} buyurtma · {ingredient.name} · retsept {quantity_text(quantity)} '
+                f'{ingredient.unit} so‘radi, qoldiq {quantity_text(ingredient.quantity)} edi',
+            ))
+    audit_many(user, shortages)
 
     for ingredient_id, quantity in required.items():
-        ingredient = ingredients[ingredient_id]
+        if ingredient_id not in ingredients:
+            # Masalliq o'chirilgan bo'lsa yozib o'tirmaymiz: retsept eskirgan.
+            continue
         Ingredient.objects.filter(pk=ingredient_id).update(quantity=F('quantity') - quantity)
 
     for line, recipe_line, quantity in usage_rows:
+        ingredient = ingredients.get(recipe_line.ingredient_id)
+        if not ingredient:
+            continue
         key = uuid5(NAMESPACE_URL, f'honim-sale-stock:{order.id}:{line.id}:{recipe_line.ingredient_id}')
-        ingredient = ingredients[recipe_line.ingredient_id]
         # Sotuv paytidagi ombor tannarxi muzlatiladi: keyin narx o'zgarsa ham
         # eski hisobotlar o'zgarmaydi.
         StockMovement.objects.create(
@@ -143,7 +153,10 @@ def consume_order_stock(user, order):
             'stock.sale_consumption',
             f'#{order.id} buyurtma · {ingredients[ingredient_id].name} · -{quantity_text(quantity)} {ingredients[ingredient_id].unit}',
         )
-        for ingredient_id, quantity in sorted(required.items(), key=lambda item: ingredients[item[0]].name)
+        for ingredient_id, quantity in sorted(
+            ((key, value) for key, value in required.items() if key in ingredients),
+            key=lambda item: ingredients[item[0]].name,
+        )
     ])
 
 
@@ -212,6 +225,10 @@ def _record_order(user, data):
         raise ValidationError(_('Buyurtma summasi juda katta.'))
     paid = bool(data['payment_method'])
     check_payment_channel(data.get('channel', 'hall'), data['payment_method'])
+    # Tayyor bo'lmagan taom buyurtmaga tushmaydi: oshxona talon kelgach
+    # pishirmaydi, u faqat tayyoridan yig'adi.
+    from .dish_prep import require_prepared
+    require_prepared(user.branch, {line['dish']: line['quantity'] for line in data['lines']})
 
     table = None
     table_text = data['table']
@@ -304,6 +321,10 @@ def _record_extra_lines(user, order_id, data):
     added = sum((dishes[line['dish']].price * line['quantity'] for line in data['lines']), Decimal('0'))
     if order.total + added > Decimal('999999999999.99'):
         raise ValidationError(_('Buyurtma summasi juda katta.'))
+    # Qo'shimcha taom ham tayyor bo'lishi shart — hisob ochiq bo'lgani
+    # oshxonada ovqat borligini anglatmaydi.
+    from .dish_prep import require_prepared
+    require_prepared(user.branch, {line['dish']: line['quantity'] for line in data['lines']})
 
     recipes = _recipes_for_dishes(user.branch, dishes)
     now = timezone.now()

@@ -208,10 +208,14 @@ export default function InventoryPage() {
             <tbody>
               {ingredients.map(row => {
                 const isLow = Number(row.quantity) <= Number(row.minimum)
+                // Manfiy qoldiq — retsept bo'yicha borig'idan ko'p ayrilgan
+                // degani. Buni yashirmaslik kerak: kirim yozilmagan yoki
+                // haqiqiy sarf retseptdan farq qilyapti.
+                const owing = Number(row.quantity) < 0
                 return (
                   <tr key={row.id}>
                     <td><strong>{row.name}</strong></td>
-                    <td className="number">{money(row.quantity)} {t(row.unit)}</td>
+                    <td className={`number${owing ? ' owed' : ''}`}>{money(row.quantity)} {t(row.unit)}</td>
                     <td className="number">
                       {Number(row.unit_cost)
                         ? <>{money(row.unit_cost)} <small>{t('so‘m')}/{row.unit}</small></>
@@ -219,7 +223,11 @@ export default function InventoryPage() {
                     </td>
                     <td className="number">{Number(row.stock_value) ? `${money(row.stock_value)} ${t('so‘m')}` : '—'}</td>
                     <td>{money(row.minimum)} {t(row.unit)}</td>
-                    <td><span className={`status ${isLow ? 'open' : 'paid'}`}>{isLow ? t('Kam qolgan') : t('Yetarli')}</span></td>
+                    <td>
+                      <span className={`status ${owing ? 'alert' : isLow ? 'open' : 'paid'}`}>
+                        {owing ? t('Hisobdan oshgan') : isLow ? t('Kam qolgan') : t('Yetarli')}
+                      </span>
+                    </td>
                   </tr>
                 )
               })}

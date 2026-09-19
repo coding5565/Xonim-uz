@@ -50,6 +50,7 @@ AUDIT_LABELS = {
     'stock.receipt': 'Omborga kirim',
     'stock.consumption': 'Ombordan chiqim',
     'stock.sale_consumption': 'Savdo bo‘yicha sarf',
+    'stock.shortage': 'Qoldiqdan ko‘p sarflandi',
     'expense.create': 'Xarajat kiritildi',
     'salary.pay': 'Oylik to‘landi',
     'staff.create': 'Xodim qo‘shildi',

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, CheckCircle2, Minus, Plus, Search, ShoppingBag, Trash2 } from 'lucide-react'
 import { api, list, money } from '../api'
 import { useSession } from '../session'
@@ -136,10 +136,14 @@ export default function PosPage() {
   const paymentLabel = methods.find(item => item.method === payment)?.label || payment
 
   const stock = new Map((prep?.dishes || []).map(row => [row.dish, row]))
-  // Miqdori kiritilmagan taom cheklanmaydi — u haqda hech narsa da'vo qilmaymiz.
+  // Miqdori kiritilmagan taom — tayyor emas. Oshxona talon kelgach
+  // pishirmaydi, u faqat ertalab tayyorlanganidan yig'adi, demak kiritilmagan
+  // degani «yo'q» degani. Qoldiq hali yuklanmagan bo'lsa cheklamaymiz —
+  // aks holda sahifa ochilishi bilan hamma taom o'chiq ko'rinardi.
   const left = (id: number) => {
+    if (!prep) return Infinity
     const row = stock.get(id)
-    return row?.tracked ? row.remaining : Infinity
+    return row?.tracked ? row.remaining : 0
   }
   // Savatdagi miqdor hali sotilmagan, shuning uchun qoldiqdan alohida ayiriladi.
   const inCart = (id: number) => cart.find(line => line.dish.id === id)?.quantity || 0
@@ -160,11 +164,9 @@ export default function PosPage() {
 
   function add(dish: Dish) {
     if (busy || locked || !dish.available) return
-    // Qoldiq tugaganda ogohlantiriladi, lekin to'xtatilmaydi: oshxona
-    // qo'shimcha pishirgan bo'lishi mumkin. Faqat nolni kesib o'tgan
-    // paytda so'raladi — keyingi har bosishda takrorlanmaydi.
-    if (left(dish.id) - inCart(dish.id) === 0
-      && !confirm(t('«{name}» tizimda tugagan. Baribir qo‘shilsinmi?', { name: dish.name }))) return
+    // Tayyori qolmagan taom buyurtmaga tushmaydi: server ham qabul qilmaydi,
+    // shuning uchun bu yerda to'xtatish kassirga xatoni oldindan ko'rsatadi.
+    if (left(dish.id) - inCart(dish.id) <= 0) return
     setCart(previous => previous.some(line => line.dish.id === dish.id)
       ? previous.map(line => line.dish.id === dish.id
         ? { ...line, quantity: Math.min(999, line.quantity + 1) }
@@ -298,6 +300,16 @@ export default function PosPage() {
         </p>
       )}
 
+      {/* Hech narsa tayyor deb belgilanmagan bo'lsa sotuv umuman bo'lmaydi —
+          kassir nima qilishini darhol bilishi kerak. */}
+      {!!prep && !prep.summary.tracked && (
+        <p className="alert error" role="alert">
+          <strong>{t('Bugun hech qanday taom tayyor deb belgilanmagan.')}</strong>{' '}
+          {t('Oshxona nechta tayyorlaganini kiriting, shundan keyin sotuv boshlanadi.')}{' '}
+          <Link to="/tayyor" className="text-link">{t('Tayyor taomlar')} →</Link>
+        </p>
+      )}
+
       <div className="pos-layout">
         <section>
           <div className="search-field wide">
@@ -324,18 +336,24 @@ export default function PosPage() {
           <div className="pos-dishes">
             {filtered.map(dish => {
               const row = stock.get(dish.id)
-              const remaining = row?.tracked ? row.remaining - inCart(dish.id) : null
+              // Hisoblanmagan taom «tayyor emas», tugagani esa «tugadi» —
+              // ikkalasi ham sotilmaydi, lekin kassir farqini bilishi kerak:
+              // biri kiritilmagan, ikkinchisi sotilib bitgan.
+              const remaining = prep ? (row?.tracked ? row.remaining - inCart(dish.id) : 0) : null
+              const ready = remaining === null || remaining > 0
               return (
               <button
                 key={dish.id}
-                className="pos-dish"
-                disabled={!dish.available || busy || locked}
+                className={`pos-dish${ready ? '' : ' not-ready'}`}
+                disabled={!dish.available || busy || locked || !ready}
                 onClick={() => add(dish)}
               >
                 <DishArt name={dish.name} category={dish.category_name} image={dish.image} />
                 {remaining !== null && (
                   <span className={`prep-badge${remaining <= 0 ? ' out' : remaining <= row!.warn_at ? ' low' : ''}`}>
-                    {remaining <= 0 ? t('Tugadi') : tn('{count} ta qoldi', remaining)}
+                    {!row?.tracked
+                      ? t('Tayyor emas')
+                      : remaining <= 0 ? t('Tugadi') : tn('{count} ta qoldi', remaining)}
                   </span>
                 )}
                 <div>

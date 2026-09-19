@@ -8,8 +8,13 @@ Sotilgan deb nima sanaladi:
   · qaytarilgan — pul qaytdi, lekin PORSIYA qaytmadi, shuning uchun sanaladi;
   · bekor qilingan — oshxonaga «BEKOR» taloni ketgan, sanalmaydi.
 
-Miqdori kiritilmagan taom CHEKLANMAYDI: kassir ertalab kiritishni unutsa,
-butun restoran to'xtab qolmasligi kerak. Hisob taomma-taom, ixtiyoriy yoqiladi.
+Tayyor bo'lmagan taomni sotib BO'LMAYDI. Oshxona buyurtma kelgach pishirmaydi
+— u ertalab partiya qilib pishiradi, talon esa «shuni yig'inglar» degan
+signal. Demak tayyori yo'q taom uchun yig'adigan narsa ham yo'q. Miqdori
+kiritilmagan taom ham sotilmaydi: kiritilmagan degani «yo'q» degani.
+
+Diqqat: bu qoida kassirning ertalabki kiritishiga bog'liq. Kiritmasa sotuv
+to'xtaydi — xabar aynan nima qilish kerakligini aytadi.
 """
 from decimal import Decimal
 
@@ -149,6 +154,38 @@ def record_prep(user, lines):
         events.append(('prep.record', f'{dish.name} · +{line["quantity"]} porsiya tayyorlandi'))
     audit_many(user, events)
     return stock_status(user.branch, day)
+
+
+def check_prepared(branch, wanted):
+    """Tayyor bo'lmagan taomlar ro'yxatini qaytaradi.
+
+    `wanted` — {taom_id: miqdor}. Bo'sh ro'yxat qaytsa hammasi tayyor.
+    Qoldiq sotuvdan OLDIN tekshiriladi, shuning uchun hisobdagi qatorlar
+    bu yerga kirmaydi.
+    """
+    status = stock_status(branch)
+    by_dish = {row['dish']: row for row in status['dishes']}
+    blocked = []
+    for dish_id, quantity in wanted.items():
+        row = by_dish.get(dish_id)
+        if not row:
+            continue
+        if not row['tracked']:
+            blocked.append(_('{name} — bugun tayyorlanmagan').format(name=row['name']))
+        elif row['remaining'] < quantity:
+            blocked.append(_('{name} — {count} ta qoldi').format(
+                name=row['name'], count=max(row['remaining'], 0)))
+    return blocked
+
+
+def require_prepared(branch, wanted):
+    """Tayyor bo'lmasa sotuvni to'xtatadi."""
+    blocked = check_prepared(branch, wanted)
+    if blocked:
+        raise serializers.ValidationError({'prepared': _(
+            'Bu taomlar tayyor emas: {dishes}. «Tayyor taomlar» bo‘limida '
+            'bugun nechta tayyorlanganini kiriting.',
+        ).format(dishes=', '.join(blocked))})
 
 
 def note_oversell(user, order):

@@ -269,7 +269,13 @@ class Ingredient(models.Model):
 
     class Meta:
         ordering = ['name']
-        constraints = [models.CheckConstraint(condition=Q(quantity__gte=0), name='stock_nonnegative'), models.UniqueConstraint(fields=['branch', 'name'], name='ingredient_branch_name')]
+        # Qoldiq manfiy bo'lishiga ruxsat beriladi: retsept bo'yicha ayirish
+        # TAXMIN, sotuvni to'xtatmasligi kerak. Ba'zida taomga retseptdan ko'p
+        # ketadi va kassir shu sababli pul ololmay qolishi mumkin emas. Manfiy
+        # qoldiq esa superadminga «hisob haqiqatdan ajralib ketdi» degan
+        # signal bo'ladi. Qo'lda chiqim yozishda tekshiruv o'z joyida qoladi
+        # (services.move_stock), ya'ni xato kiritishdan himoya yo'qolmaydi.
+        constraints = [models.UniqueConstraint(fields=['branch', 'name'], name='ingredient_branch_name')]
 
 
 class StockMovement(models.Model):

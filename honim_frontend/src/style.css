@@ -1070,3 +1070,8 @@ td small{font-size:12px}
 .chain-row strong{font-size:14.5px}
 .chain-row small{font-size:12px}
 .data-note{font-size:12px;line-height:1.6}
+
+/* Tayyor bo'lmagan taom: bosilmaydi, lekin menyuda ko'rinib turadi —
+   kassir uning borligini bilsin, faqat hozir yo'qligini. */
+.pos-dish.not-ready{opacity:.55;filter:saturate(.4)}
+.pos-dish.not-ready .add-circle{display:none}
