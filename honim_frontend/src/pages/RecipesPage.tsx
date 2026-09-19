@@ -224,11 +224,11 @@ export default function RecipesPage() {
       <div className="recipe-summary">
         <article>
           <ChefHat size={21} />
-          <div><small>{t('Retseptlar')}</small><strong>{t('{count} ta', { count: recipes.length })}</strong></div>
+          <div><small>{t('Retseptlar')}</small><strong>{tn('{count} ta', recipes.length)}</strong></div>
         </article>
         <article>
           <PackageCheck size={21} />
-          <div><small>{t('Menyuga bog‘langan')}</small><strong>{t('{count} ta', { count: linked })}</strong></div>
+          <div><small>{t('Menyuga bog‘langan')}</small><strong>{tn('{count} ta', linked)}</strong></div>
         </article>
         <article>
           <Coins size={21} />

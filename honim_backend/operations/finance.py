@@ -29,7 +29,8 @@ from catalog.models import Dish
 from users.permissions import OwnerOnly
 
 from .models import SALE_CHANNEL_LABELS, SALE_PAYMENT_LABELS, Expense, Ingredient, Order, OrderLine, SalaryPayment, StockMovement
-from .money import MONEY, day_window, money, month_key, month_label, next_month, percent, short_label
+from .money import MONEY, day_window, money, month_key, month_label, next_month, parse_month, percent, short_label
+from .reports import discount_cuts
 from core.i18n import _
 
 SALARY_CATEGORY = 'Ish haqi'
@@ -44,10 +45,7 @@ class FinanceFilters(serializers.Serializer):
     def validate(self, attrs):
         today = timezone.localdate()
         if attrs.get('month'):
-            year, month = attrs['month'].split('-')
-            if not 1 <= int(month) <= 12:
-                raise serializers.ValidationError({'month': _('Oy 01 dan 12 gacha bo‘lishi kerak.')})
-            first = timezone.datetime(int(year), int(month), 1).date()
+            first = parse_month(attrs['month'])
             if first > today.replace(day=1):
                 raise serializers.ValidationError({'month': _('Kelajak oyi uchun hisobot tuzilmaydi.')})
             attrs['start'] = first
@@ -86,15 +84,24 @@ def cost_coverage(lines, revenue, branch):
     marja haqiqatdan yuqori ko'rinadi. Shu qamrov ko'rsatkichisiz raqamga
     ishonib bo'lmaydi.
     """
-    covered = lines.filter(cost_per_unit__gt=0).aggregate(
+    # Qamrov ulushi tushumga bo'linadi, tushum esa chegirma ayrilgan summa.
+    # Agar surat menyu narxida qolsa, ulush 100% dan oshib ketadi va aynan
+    # shu ogohlantirish — «tannarx qamrovi past» — o'chib qoladi.
+    covered_lines = lines.filter(cost_per_unit__gt=0)
+    covered = covered_lines.aggregate(
         revenue=Coalesce(Sum(F('price') * F('quantity'), output_field=MONEY), Decimal('0')),
         cost=Coalesce(Sum('cost_total'), Decimal('0')),
     )
+    covered_cut = discount_cuts(covered_lines)
+    covered_revenue = covered['revenue'] - (covered_cut['total'] if covered_cut else Decimal('0'))
+
+    bare_lines = lines.filter(cost_per_unit=0)
+    bare_cut = discount_cuts(bare_lines)
     uncovered = [{
         'dish_id': row['dish_id'],
         'dish': row['name'],
-        'revenue': money(row['revenue']),
-    } for row in lines.filter(cost_per_unit=0).values('dish_id', 'name').annotate(
+        'revenue': money(row['revenue'] - (bare_cut['dish'][row['dish_id']] if bare_cut else Decimal('0'))),
+    } for row in bare_lines.values('dish_id', 'name').annotate(
         revenue=Sum(F('price') * F('quantity'), output_field=MONEY),
     ).order_by('-revenue')[:5]]
     dishes = Dish.objects.filter(branch=branch, archived=False)
@@ -102,9 +109,9 @@ def cost_coverage(lines, revenue, branch):
     # narxsiz qator bo'lishi mumkin, shuning uchun distinct sanaladi.
     sold_uncovered = lines.filter(cost_per_unit=0).values('dish_id').distinct().count()
     return {
-        'covered_revenue': money(covered['revenue']),
-        'share': percent(covered['revenue'], revenue),
-        'covered_margin': percent(covered['revenue'] - covered['cost'], covered['revenue']),
+        'covered_revenue': money(covered_revenue),
+        'share': percent(covered_revenue, revenue),
+        'covered_margin': percent(covered_revenue - covered['cost'], covered_revenue),
         'dishes_total': dishes.count(),
         # Arxivlanmagan taomlardan nechtasida umuman retsept yo'q.
         'menu_without_recipe': dishes.filter(recipe__isnull=True).count(),

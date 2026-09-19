@@ -264,7 +264,7 @@ export default function PayrollPage() {
             <p className="data-note">
               {t('Bu oyda:')}&nbsp;
               {data.summary.by_method
-                .map(row => `${row.label} ${money(row.amount)} ${t('so‘m')} (${t('{count} ta', { count: row.count })})`)
+                .map(row => `${row.label} ${money(row.amount)} ${t('so‘m')} (${tn('{count} ta', row.count)})`)
                 .join(' · ')}.
               {t('Har bir oylik to‘lovi «Ish haqi» kategoriyasida xarajat ham yaratadi, shuning uchun umumiy moliyada u xarajatlar ichida turadi — ustiga qo‘shilmaydi.')}
             </p>

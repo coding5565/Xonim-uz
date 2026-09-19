@@ -2245,6 +2245,46 @@ class SalesChannelTests(TestCase):
         self.assertEqual(sorted(rows), ['hall', 'uzum'])
         self.assertEqual(rows['uzum']['orders'], 1)
 
+    def test_a_delivery_order_cannot_be_rung_up_as_cash(self):
+        # Uzum buyurtmasining puli platforma hisobiga tushadi. Naqd deb
+        # belgilansa kassa qoldig'i shishib, smena yopishda tushuntirib
+        # bo'lmaydigan farq chiqardi.
+        response = self.client.post('/api/v1/orders/', {
+            'key': str(uuid4()), 'table': '', 'waiter': '', 'payment_method': 'cash',
+            'channel': 'uzum',
+            'lines': [{'dish': self.dish.id, 'quantity': 1, 'note': ''}],
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+
+    def test_an_open_delivery_bill_cannot_be_closed_with_cash_either(self):
+        order = create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': '',
+            'channel': 'yandex',
+            'lines': [{'dish': self.dish.id, 'quantity': 1, 'note': ''}],
+        })
+        cashier = APIClient()
+        cashier.force_authenticate(self.cashier)
+        self.assertEqual(
+            cashier.post(f'/api/v1/orders/{order.id}/pay/', {'payment_method': 'cash'}).status_code, 400)
+        # O'z platformasi orqali to'lansa qabul qilinadi.
+        self.assertEqual(
+            cashier.post(f'/api/v1/orders/{order.id}/pay/', {'payment_method': 'yandex'}).status_code, 200)
+        # Kassada esa hech narsa qolmaydi.
+        self.assertEqual(Decimal(cashier.get('/api/v1/shift/').data['expected_cash']), Decimal('0'))
+
+    def test_a_hall_order_can_still_be_paid_by_any_method(self):
+        # Zalda o'tirgan mijoz Uzum ilovasi bilan to'lashi mumkin — bu
+        # yetkazib berish emas, shuning uchun cheklanmaydi.
+        order = create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': '',
+            'channel': 'hall',
+            'lines': [{'dish': self.dish.id, 'quantity': 1, 'note': ''}],
+        })
+        cashier = APIClient()
+        cashier.force_authenticate(self.cashier)
+        self.assertEqual(
+            cashier.post(f'/api/v1/orders/{order.id}/pay/', {'payment_method': 'uzum'}).status_code, 200)
+
     def test_an_unknown_channel_is_refused(self):
         response = self.client.post('/api/v1/orders/', {
             'key': str(uuid4()), 'table': '', 'waiter': '', 'payment_method': 'cash',
@@ -2583,6 +2623,12 @@ class WholeDayConsistencyTests(TestCase):
         self.assertEqual(Decimal(shift['revenue']), expected_revenue)
         self.assertEqual(Decimal(report['summary']['revenue']), expected_revenue)
 
+        # ── 1b. «Sof pul oqimi» ikkala sahifada bir xil formulada ────────
+        # Ikkala kartaning nomi ham bir xil, demak raqami ham bir xil bo'lishi
+        # shart: kirim − to'langan xarajat − ombor xaridi (800 000).
+        self.assertEqual(Decimal(dashboard['net_cash']), expected_revenue - Decimal('800000'))
+        self.assertEqual(Decimal(finance['cash']['net']), Decimal(dashboard['net_cash']))
+
         # ── 2. Kanal kesimi jamiga teng bo'lishi shart ────────────────────
         channels = {row['channel']: Decimal(row['revenue']) for row in finance['channels']}
         self.assertEqual(channels, {
@@ -2718,6 +2764,24 @@ class DiscountInReportsTests(TestCase):
         }
         self.assertEqual(set(figures.values()), {Decimal('123000')}, figures)
 
+    def test_cost_coverage_never_exceeds_a_hundred_percent(self):
+        # Qamrov ulushi surat bilan maxrajni bir xil bazadan olishi shart.
+        # Menyu narxi chegirmali tushumga bo'linsa, ulush 100% dan oshib,
+        # «tannarx qamrovi past» ogohlantirishi o'chib qolardi.
+        recipe = Recipe.objects.create(
+            branch=self.branch, dish=self.osh, name='Osh', yield_quantity=Decimal('1'))
+        meat = Ingredient.objects.create(
+            branch=self.branch, name='Go‘sht', unit='kg', quantity=Decimal('50'), unit_cost=Decimal('80000'))
+        RecipeLine.objects.create(
+            recipe=recipe, ingredient=meat, quantity=Decimal('0.100'), batch_cost=Decimal('8000'))
+
+        self.bill_with_discount(7000)
+        data = self.client.get('/api/v1/finance/').data
+        share = Decimal(data['coverage']['share'])
+        self.assertLessEqual(share, Decimal('100'))
+        # Oshning qamrab olingan tushumi ham chegirma ayrilgan qiymatda.
+        self.assertEqual(Decimal(data['coverage']['covered_revenue']), Decimal('94615.38'))
+
     def test_a_bill_without_a_discount_keeps_its_exact_menu_price(self):
         # Chegirmasiz hisobda bo'lish umuman bajarilmaydi — aniqlik yo'qolmasin.
         create_order(self.cashier, {
@@ -2754,3 +2818,128 @@ class DiscountInReportsTests(TestCase):
             f'/api/v1/sales/board/?start={today}&end={today}&mine=true').data
         self.assertEqual(Decimal(mine['summary']['revenue']), Decimal('123000'))
         self.assertEqual(Decimal(mine['cashiers'][0]['revenue']), Decimal('123000'))
+
+
+class DiscountedLineRemovalTests(TestCase):
+    """Chegirmali hisobdan qator olib tashlash summani manfiyga tushirmasligi kerak."""
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.category = Category.objects.create(branch=self.branch, name='Taom')
+        self.osh = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('50000'))
+        self.choy = Dish.objects.create(branch=self.branch, category=self.category, name='Choy', price=Decimal('10000'))
+        self.client = APIClient()
+        self.client.force_authenticate(self.cashier)
+
+    def open_bill(self):
+        # 2×50 000 + 3×10 000 = 130 000
+        return create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': '',
+            'lines': [
+                {'dish': self.osh.id, 'quantity': 2, 'note': ''},
+                {'dish': self.choy.id, 'quantity': 3, 'note': ''},
+            ],
+        })
+
+    def test_removing_a_line_under_a_big_discount_is_refused_not_crashed(self):
+        order = self.open_bill()
+        self.client.post(f'/api/v1/orders/{order.id}/discount/',
+                         {'amount': '100000', 'reason': 'Tanishga'}, format='json')
+        order.refresh_from_db()
+        self.assertEqual(order.total, Decimal('30000'))
+
+        # Oshni olib tashlasa qolgani 30 000, chegirma esa 100 000 — summa
+        # manfiy bo'lardi. Kassir 500 xatosi emas, tushunarli javob olishi kerak.
+        osh = order.lines.get(name='Osh')
+        response = self.client.delete(f'/api/v1/orders/{order.id}/lines/{osh.id}/')
+        self.assertEqual(response.status_code, 409)
+        # Xabar aniq bo'lishi kerak: kassir nima qilishini bilsin.
+        self.assertIn('chegirma', str(response.data).lower())
+        order.refresh_from_db()
+        self.assertEqual(order.total, Decimal('30000'))
+        self.assertEqual(order.lines.count(), 2)
+
+    def test_a_line_can_still_be_removed_when_the_discount_leaves_room(self):
+        order = self.open_bill()
+        self.client.post(f'/api/v1/orders/{order.id}/discount/',
+                         {'amount': '5000', 'reason': 'Doimiy mijoz'}, format='json')
+        osh = order.lines.get(name='Osh')
+        response = self.client.delete(f'/api/v1/orders/{order.id}/lines/{osh.id}/')
+        self.assertEqual(response.status_code, 200)
+        order.refresh_from_db()
+        # Qolgani 30 000, chegirma 5 000 -> 25 000.
+        self.assertEqual(order.total, Decimal('25000'))
+        self.assertEqual(order.discount, Decimal('5000'))
+
+    def test_removing_a_line_without_a_discount_is_unchanged(self):
+        order = self.open_bill()
+        osh = order.lines.get(name='Osh')
+        self.assertEqual(self.client.delete(f'/api/v1/orders/{order.id}/lines/{osh.id}/').status_code, 200)
+        order.refresh_from_db()
+        self.assertEqual(order.total, Decimal('30000'))
+
+
+class BadInputStaysFourHundredTests(TestCase):
+    """Noto'g'ri kiritilgan ma'lumot 500 emas, tushunarli 400 bo'lishi kerak.
+
+    500 xatosi foydalanuvchiga nima qilishni aytmaydi va serverda kutilmagan
+    istisno bo'lib qoladi — ya'ni haqiqiy nosozlikni jurnalda ko'rish qiyinlashadi.
+    """
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.category = Category.objects.create(branch=self.branch, name='Taom')
+        self.osh = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('50000'))
+        self.choy = Dish.objects.create(branch=self.branch, category=self.category, name='Choy', price=Decimal('10000'))
+        self.meat = Ingredient.objects.create(
+            branch=self.branch, name='Go‘sht', unit='kg', quantity=Decimal('10'), unit_cost=Decimal('80000'))
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+
+    def recipe(self, dish, name):
+        return self.client.post('/api/v1/recipes/', {
+            'dish': dish.id, 'name': name, 'yield_quantity': 1, 'yield_unit': 'porsiya',
+            'active': True, 'lines': [{'ingredient': self.meat.id, 'quantity': '0.020'}],
+        }, format='json')
+
+    def test_a_repeated_recipe_name_is_refused_not_crashed(self):
+        self.assertEqual(self.recipe(self.osh, 'Bir xil').status_code, 201)
+        response = self.recipe(self.choy, 'Bir xil')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('retsept', str(response.data).lower())
+        # Katta-kichik harf farqi ham himoyani chetlab o'tmaydi.
+        self.assertEqual(self.recipe(self.choy, 'BIR XIL').status_code, 400)
+
+    def test_a_recipe_can_keep_its_own_name_while_being_edited(self):
+        created = self.recipe(self.osh, 'Osh').data
+        response = self.client.patch(f'/api/v1/recipes/{created["id"]}/',
+                                     {'name': 'Osh', 'yield_quantity': 2}, format='json')
+        self.assertEqual(response.status_code, 200)
+
+    def test_an_ingredient_can_keep_its_own_name_while_being_edited(self):
+        # Faqat narxni o'zgartirmoqchi bo'lgan odam «bu mahsulot mavjud»
+        # xabariga urilib qolmasligi kerak.
+        response = self.client.patch(f'/api/v1/ingredients/{self.meat.id}/',
+                                     {'name': 'Go‘sht', 'unit_cost': '90000'}, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.meat.refresh_from_db()
+        self.assertEqual(self.meat.unit_cost, Decimal('90000.0000'))
+        # Boshqa mahsulotning nomini olib bo'lmaydi.
+        other = Ingredient.objects.create(branch=self.branch, name='Un', unit='kg', quantity=Decimal('5'))
+        self.assertEqual(self.client.patch(f'/api/v1/ingredients/{other.id}/',
+                                           {'name': 'go‘sht'}, format='json').status_code, 400)
+
+    def test_an_impossible_month_is_refused_everywhere(self):
+        # 0000-01 «year 0 is out of range» bilan 500 berardi.
+        for path in ('/api/v1/payroll/', '/api/v1/finance/', '/api/v1/dashboard/'):
+            for month in ('0000-01', '2026-13', '2026-00', '9999-01'):
+                response = self.client.get(f'{path}?month={month}')
+                self.assertEqual(response.status_code, 400, f'{path} {month} -> {response.status_code}')
+
+    def test_a_real_month_still_works_everywhere(self):
+        month = timezone.localdate().strftime('%Y-%m')
+        for path in ('/api/v1/payroll/', '/api/v1/finance/', '/api/v1/dashboard/'):
+            self.assertEqual(self.client.get(f'{path}?month={month}').status_code, 200, path)

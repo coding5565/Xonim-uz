@@ -19,7 +19,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from operations.models import SalaryPayment
-from operations.money import MONTH_NAMES, last_months, money, month_key, month_label, next_month, short_label
+from operations.money import MONTH_NAMES, last_months, money, month_key, month_label, next_month, parse_month, short_label
 
 from .models import User
 from .permissions import OwnerOnly
@@ -46,10 +46,7 @@ class PayrollFilters(serializers.Serializer):
     month = serializers.RegexField(r'^\d{4}-\d{2}$', required=False)
 
     def validate_month(self, value):
-        year, month = value.split('-')
-        if not 1 <= int(month) <= 12:
-            raise serializers.ValidationError(_('Oy 01 dan 12 gacha bo‘lishi kerak.'))
-        return date(int(year), int(month), 1)
+        return parse_month(value)
 
 
 def month_breakdown(branch, period, staff):

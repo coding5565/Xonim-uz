@@ -12,11 +12,14 @@ Diqqat: chekdagi pul boshqacha ko'rinadi (`40 000`, tiyinsiz, probel bilan)
 — u `operations/printing.py` dagi `som_text()` ning ishi, bu yerdagi
 `money()` esa API javoblari uchun.
 """
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
 from django.db.models import DecimalField
 from django.utils import timezone
+from rest_framework import serializers
+
+from core.i18n import _
 
 ZERO = Decimal('0')
 CENT = Decimal('0.01')
@@ -72,6 +75,23 @@ def day_window(start, end=None):
         timezone.make_aware(datetime.combine(start, time.min)),
         timezone.make_aware(datetime.combine(final + timedelta(days=1), time.min)),
     )
+
+
+def parse_month(value):
+    """«YYYY-MM» matnini oyning birinchi kuniga aylantiradi.
+
+    Oy tekshiruvi uch joyda alohida yozilgan edi va har birida boshqa teshik
+    qolgan: 0000-01 kabi qiymat `year 0 is out of range` bilan 500 berardi.
+    Shuning uchun tekshiruv bitta joyga yig'ildi.
+    """
+    try:
+        year, month = value.split('-')
+        first = date(int(year), int(month), 1)
+    except (TypeError, ValueError):
+        raise serializers.ValidationError(_('Oy noto‘g‘ri. Format: YYYY-MM.'))
+    if not 2000 <= first.year <= 2100:
+        raise serializers.ValidationError(_('Oy noto‘g‘ri. Format: YYYY-MM.'))
+    return first
 
 
 def month_key(period):

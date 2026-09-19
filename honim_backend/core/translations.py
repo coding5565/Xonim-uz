@@ -24,6 +24,8 @@ RU = {
     'Xodim topilmadi.': 'Сотрудник не найден.',
     'Kategoriya topilmadi.': 'Категория не найдена.',
     'Bu qator hisobda yo‘q.': 'Этой строки нет в счёте.',
+    'Qator olib tashlansa chegirma qolgan summadan katta bo‘lib qoladi. Avval chegirmani o‘zgartiring.':
+        'Если убрать строку, скидка станет больше остатка счёта. Сначала измените скидку.',
     'Amal holati o‘zgargan. Ma’lumotni yangilang.':
         'Состояние операции изменилось. Обновите данные.',
     'Amal boshqa so‘rov bilan to‘qnashdi. Shu amalni qayta tekshiring.':
@@ -40,6 +42,8 @@ RU = {
     'To‘langan hisobga taom qo‘shib bo‘lmaydi. Yangi hisob oching.':
         'В оплаченный счёт нельзя добавить блюдо. Откройте новый.',
     'Buyurtma boshqa usul bilan to‘langan.': 'Заказ оплачен другим способом.',
+    'Yetkazib berish buyurtmasi faqat o‘sha platforma orqali to‘lanadi.':
+        'Заказ на доставку оплачивается только через ту же платформу.',
     'Bir taomni takrorlamang; ko‘pi bilan 100 satr.':
         'Не повторяйте блюдо; не более 100 строк.',
     'Bu oxirgi qator. Butun hisobni bekor qiling.':
@@ -58,6 +62,7 @@ RU = {
     'Dona butun son bo‘lishi kerak.': 'Штуки должны быть целым числом.',
     'Qoldiq chegaradan oshadi.': 'Остаток превышает предел.',
     'Bu mahsulot mavjud.': 'Такой продукт уже есть.',
+    'Bu nomli retsept allaqachon bor.': 'Рецепт с таким названием уже есть.',
     'Narx faqat kirimda kiritiladi.': 'Цена указывается только при приходе.',
     'Dastlabki versiyada ombor harakati faqat bugungi sana bilan.':
         'В этой версии движение по складу возможно только сегодняшней датой.',
@@ -150,6 +155,8 @@ EN = {
     'Xodim topilmadi.': 'Employee not found.',
     'Kategoriya topilmadi.': 'Category not found.',
     'Bu qator hisobda yo‘q.': 'That line is not on this bill.',
+    'Qator olib tashlansa chegirma qolgan summadan katta bo‘lib qoladi. Avval chegirmani o‘zgartiring.':
+        'Removing that line would leave a discount larger than the bill. Change the discount first.',
     'Amal holati o‘zgargan. Ma’lumotni yangilang.':
         'This has changed since you loaded it. Refresh and try again.',
     'Amal boshqa so‘rov bilan to‘qnashdi. Shu amalni qayta tekshiring.':
@@ -166,6 +173,8 @@ EN = {
     'To‘langan hisobga taom qo‘shib bo‘lmaydi. Yangi hisob oching.':
         'A paid bill cannot take more dishes. Open a new one.',
     'Buyurtma boshqa usul bilan to‘langan.': 'This order was paid by another method.',
+    'Yetkazib berish buyurtmasi faqat o‘sha platforma orqali to‘lanadi.':
+        'A delivery order can only be paid through that same platform.',
     'Bir taomni takrorlamang; ko‘pi bilan 100 satr.':
         'Do not repeat a dish; 100 lines at most.',
     'Bu oxirgi qator. Butun hisobni bekor qiling.':
@@ -184,6 +193,7 @@ EN = {
     'Dona butun son bo‘lishi kerak.': 'Pieces must be a whole number.',
     'Qoldiq chegaradan oshadi.': 'The balance would exceed the limit.',
     'Bu mahsulot mavjud.': 'That item already exists.',
+    'Bu nomli retsept allaqachon bor.': 'A recipe with that name already exists.',
     'Narx faqat kirimda kiritiladi.': 'A price is only entered on a receipt.',
     'Dastlabki versiyada ombor harakati faqat bugungi sana bilan.':
         'For now stock movements can only be dated today.',

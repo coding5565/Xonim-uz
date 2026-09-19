@@ -11,7 +11,7 @@ from rest_framework.exceptions import ValidationError, APIException
 from core.i18n import _
 from catalog.models import Dish
 from users.models import AuditEvent
-from .models import CLOSED_STATUSES, ORDER_STATUS_LABELS, SALE_PAYMENT_LABELS, Order, OrderLine, Expense, Ingredient, Recipe, RecipeLine, StockMovement, Table, Waiter
+from .models import CLOSED_STATUSES, DELIVERY_CHANNELS, ORDER_STATUS_LABELS, SALE_PAYMENT_LABELS, Order, OrderLine, Expense, Ingredient, Recipe, RecipeLine, StockMovement, Table, Waiter
 from .printing import print_prep_tickets, print_receipt_quietly, print_void_ticket
 
 
@@ -180,6 +180,7 @@ def create_order(user, data):
     if total > Decimal('999999999999.99'):
         raise ValidationError(_('Buyurtma summasi juda katta.'))
     paid = bool(data['payment_method'])
+    check_payment_channel(data.get('channel', 'hall'), data['payment_method'])
 
     table = None
     table_text = data['table']
@@ -321,6 +322,13 @@ def remove_order_line(user, order_id, line_id):
         raise Conflict(_('Bu oxirgi qator. Butun hisobni bekor qiling.'))
 
     removed = line.price * line.quantity
+    # Chegirma butun hisobga berilgan. Qator olib tashlangach qolgan summa
+    # chegirmadan kichik bo'lsa, hisob manfiyga tushardi — baza buni to'xtatadi,
+    # lekin kassir «boshqa so'rov bilan to'qnashdi» degan tushunarsiz xabarni
+    # olib, qayta-qayta urinib ko'rardi. Shuning uchun shu yerda tekshiriladi.
+    if order.discount and order.total + order.discount - removed <= order.discount:
+        raise Conflict(_('Qator olib tashlansa chegirma qolgan summadan katta bo‘lib qoladi. Avval chegirmani o‘zgartiring.'))
+
     name, amount = line.name, line.quantity
     line.delete()
     order.total = order.total - removed
@@ -445,6 +453,17 @@ def apply_discount(user, order_id, amount, reason):
     return order
 
 
+
+def check_payment_channel(channel, method):
+    """Yetkazib berish buyurtmasi faqat o'sha platforma orqali to'lanadi.
+
+    Uzum buyurtmasini «naqd» deb belgilash puli kassaga tushgandek ko'rsatadi:
+    smena yopishda kutilgan naqd shishib, kassir tushuntira olmaydigan farq
+    paydo bo'ladi. Pul aslida platforma hisobiga tushadi.
+    """
+    if method and channel in DELIVERY_CHANNELS and method != channel:
+        raise ValidationError(_('Yetkazib berish buyurtmasi faqat o‘sha platforma orqali to‘lanadi.'))
+
 @transaction.atomic
 def pay_order(user, order_id, method):
     order = Order.objects.select_for_update().filter(branch=user.branch, id=order_id).first()
@@ -454,6 +473,7 @@ def pay_order(user, order_id, method):
         if order.payment_method != method:
             raise Conflict(_('Buyurtma boshqa usul bilan to‘langan.'))
         return order
+    check_payment_channel(order.channel, method)
     consume_order_stock(user, order)
     changed = Order.objects.filter(pk=order.pk, status='open').update(status='paid', payment_method=method, paid_at=timezone.now())
     if not changed:

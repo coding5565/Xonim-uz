@@ -108,6 +108,12 @@ export default function PosPage() {
     setPayment(previous => delivery
       ? channel
       : previous === 'uzum' || previous === 'yandex' ? 'cash' : previous)
+    // Yetkazib berishda ofitsiant yo'q: tanlov ekrandan yo'qolgani uchun
+    // uni holatda qoldirish «ko'rinmas ofitsiant»ga ulush yozib qo'yardi.
+    if (delivery) {
+      setWaiterId('')
+      setWaiter('')
+    }
   }, [channel, delivery])
 
   const total = cart.reduce((sum, line) => sum + Math.round(Number(line.dish.price) * 100) * line.quantity, 0) / 100
@@ -181,8 +187,8 @@ export default function PosPage() {
           table_id: tableId ? Number(tableId) : null,
           // Ro'yxatdan tanlangan bo'lsa ism serverda qo'yiladi; qo'lda
           // yozilgani esa ofitsiantlar ro'yxati bo'sh bo'lgandagina yuboriladi.
-          waiter: waiterId ? '' : waiter,
-          waiter_id: waiterId ? Number(waiterId) : null,
+          waiter: delivery || waiterId ? '' : waiter,
+          waiter_id: !delivery && waiterId ? Number(waiterId) : null,
           channel,
           payment_method: method,
           lines,

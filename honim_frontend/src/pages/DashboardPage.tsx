@@ -72,7 +72,7 @@ export default function DashboardPage() {
   const tiles = data ? [
     { name: 'Jami tushum', value: data.revenue, icon: Wallet, color: 'green', tone: 'in', note: growth() },
     { name: 'Kiritilgan xarajat', value: data.expenses, icon: ArrowDownLeft, color: 'orange', tone: 'out', note: t('To‘langan va to‘lanmagan') },
-    { name: 'Sof pul oqimi', value: data.net_cash, icon: TrendingUp, color: 'green', tone: Number(data.net_cash) < 0 ? 'hero-down' : 'hero', note: t('Kirim − to‘langan chiqim') },
+    { name: 'Sof pul oqimi', value: data.net_cash, icon: TrendingUp, color: 'green', tone: Number(data.net_cash) < 0 ? 'hero-down' : 'hero', note: t('Kirim − to‘langan xarajat − ombor xaridi') },
     { name: 'To‘langan cheklar', value: data.paid_count, icon: ReceiptText, color: 'violet', tone: 'flat', note: tn('{count} ta ochiq hisob', Number(data.open_count)), count: true },
   ] : []
 

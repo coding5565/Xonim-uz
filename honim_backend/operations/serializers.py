@@ -153,7 +153,13 @@ class IngredientSerializer(serializers.ModelSerializer):
         }
 
     def validate_name(self, value):
-        if Ingredient.objects.filter(branch=self.context['request'].user.branch, name__iexact=value).exists():
+        # Tahrirlashda mahsulotning o'z nomi hisobga olinmaydi, aks holda
+        # faqat narxni o'zgartirmoqchi bo'lgan odam «bu mahsulot mavjud»
+        # degan xabarga urilib qolardi.
+        query = Ingredient.objects.filter(branch=self.context['request'].user.branch, name__iexact=value)
+        if self.instance:
+            query = query.exclude(pk=self.instance.pk)
+        if query.exists():
             raise serializers.ValidationError(_('Bu mahsulot mavjud.'))
         return value
 
@@ -222,6 +228,16 @@ class RecipeSerializer(serializers.ModelSerializer):
             'dish': {'required': False, 'allow_null': True},
             'yield_quantity': {'min_value': Decimal('0.001')},
         }
+
+    def validate_name(self, value):
+        # Filial ichida nom unikal (UniqueConstraint). Tekshirilmasa baza
+        # IntegrityError beradi va foydalanuvchi 500 xatosini ko'radi.
+        query = Recipe.objects.filter(branch=self.context['request'].user.branch, name__iexact=value)
+        if self.instance:
+            query = query.exclude(pk=self.instance.pk)
+        if query.exists():
+            raise serializers.ValidationError(_('Bu nomli retsept allaqachon bor.'))
+        return value
 
     def _cost(self, obj):
         return sum((line.batch_cost for line in obj.lines.all()), Decimal('0'))

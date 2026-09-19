@@ -371,7 +371,6 @@ export default function StaffPage() {
             <label>
               {t('Rol')}
               <select value={createForm.role} onChange={event => updateCreate({ role: event.target.value })}>
-                <option value="admin">{t('Admin')}</option>
                 <option value="cashier">{t('Kassir')}</option>
                 <option value="kitchen">{t('Oshxona')}</option>
               </select>
@@ -446,7 +445,6 @@ export default function StaffPage() {
             <label>
               {t('Rol')}
               <select value={editForm.role} onChange={event => updateEdit({ role: event.target.value })}>
-                <option value="admin">{t('Admin')}</option>
                 <option value="cashier">{t('Kassir')}</option>
                 <option value="kitchen">{t('Oshxona')}</option>
               </select>

@@ -73,6 +73,9 @@ export default function CatalogPage() {
     dish.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
   )
 
+  // Tahrirlanayotgan taomning retsepti partiya bo'yicha yozilganmi.
+  const batchRecipe = recipes.find(item => item.dish === editId && Number(item.yield_quantity) !== 1)
+
   function openDish(dish?: Dish) {
     setFormError('')
     setEditId(dish?.id)
@@ -84,9 +87,13 @@ export default function CatalogPage() {
       }
       : { ...emptyDish, category: category || categories[0]?.id || 0 })
     // Taomning retsepti bo'lsa formaga tortiladi, bo'lmasa bo'sh qator beriladi.
+    // Partiya retsepti (24 dona uchun) bu yerga tortilmaydi: forma bir porsiya
+    // uchun yozilgan, partiya miqdorlari esa undan katta. Aks holda saqlash
+    // paytida chiqim 1 ga tushib, har sotuvda 24 barobar masalliq ayrilardi.
     const recipe = dish ? recipes.find(item => item.dish === dish.id) : undefined
-    setRecipeLines(recipe
-      ? recipe.lines.map(line => {
+    const perPortion = recipe && Number(recipe.yield_quantity) === 1 ? recipe : undefined
+    setRecipeLines(perPortion
+      ? perPortion.lines.map(line => {
         const item = ingredients.find(row => row.id === line.ingredient)
         const small = item?.unit !== 'dona' && Number(line.quantity) < 1
         return {
@@ -141,6 +148,9 @@ export default function CatalogPage() {
   async function saveRecipeFor(dish: Dish) {
     const filled = recipeLines.filter(line => line.ingredient && Number(line.quantity) > 0)
     const existing = recipes.find(item => item.dish === dish.id)
+    // Partiya retsepti bu yerdan tahrirlanmaydi — chiqimi va miqdorlari
+    // «Retsept va foyda» bo'limida turadi.
+    if (existing && Number(existing.yield_quantity) !== 1) return
     if (!filled.length) {
       // Retsept bo'sh qoldirilsa mavjudiga tegilmaydi — tasodifan o'chib
       // ketmasligi uchun; olib tashlash «Retsept va foyda» bo'limida.
@@ -151,7 +161,6 @@ export default function CatalogPage() {
       name: dish.name,
       yield_quantity: 1,
       yield_unit: 'porsiya',
-      selling_price: Number(dish.price),
       active: true,
       lines: filled.map(line => ({
         ingredient: line.ingredient,
@@ -385,6 +394,13 @@ export default function CatalogPage() {
               {t('Arxivlash (menyudan olib tashlash)')}
             </label>
           )}
+          {batchRecipe ? (
+            <p className="alert">
+              {t('Bu taomning retsepti {quantity} {unit}lik partiya uchun yozilgan, shuning uchun bu yerda tahrirlanmaydi. Masalliqlarni «Retsept va foyda» bo‘limida o‘zgartiring — narxni esa shu yerdan o‘zgartiraverasiz.', {
+                quantity: Number(batchRecipe.yield_quantity), unit: batchRecipe.yield_unit,
+              })}
+            </p>
+          ) : (
           <div className="recipe-form-lines">
             <div className="recipe-line-head">
               <div>
@@ -473,6 +489,7 @@ export default function CatalogPage() {
               </p>
             )}
           </div>
+          )}
           {formError && <p className="alert error" role="alert">{formError}</p>}
           <button className="button primary full" disabled={busy}>{busy ? t('Saqlanmoqda…') : t('Saqlash')}</button>
         </form>

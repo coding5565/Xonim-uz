@@ -452,7 +452,7 @@ export default function SalesPage() {
           <section className="panel spaced">
             <header className="panel-heading">
               <div><h2>{t('So‘nggi cheklar')}</h2><p>{t('Tanlangan davrdagi oxirgi 20 ta to‘lov')}</p></div>
-              <span className="pill">{t('{count} ta', { count: data.checks.length })}</span>
+              <span className="pill">{tn('{count} ta', data.checks.length)}</span>
             </header>
             <div className="table-wrap">
               <table>

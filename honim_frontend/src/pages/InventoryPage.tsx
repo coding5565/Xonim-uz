@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { ArrowDownToLine, ClipboardList, Coins, Package, Plus } from 'lucide-react'
 import { api, list, money, today } from '../api'
 import { useI18n } from '../i18n'
+import { useSession } from '../session'
 import type { Ingredient, Movement } from '../types'
 import AppModal from '../components/AppModal'
 import StockUsagePanel from '../components/StockUsagePanel'
@@ -33,11 +34,14 @@ const modalTitle = (modal: Modal) =>
 
 export default function InventoryPage() {
   const { t, tn } = useI18n()
+  const owner = useSession().user?.role == 'owner'
   // Ko'rinish ham, sarf filtrlari ham manzil satrida turadi, shunda boshqa
   // sahifadan «shu mahsulotning sarfi» havolasi to'g'ridan-to'g'ri ochiladi.
   const [params, setParams] = useSearchParams()
   const wanted = params.get('view')
-  const view = wanted === 'usage' ? 'usage' : wanted === 'daily' ? 'daily' : 'stock'
+  // Sarf tahlili faqat egasiga ochiq; kassir manzil satri orqali kelsa
+  // qoldiq ko'rinishiga tushadi, 403 xatosiga emas.
+  const view = wanted === 'usage' && owner ? 'usage' : wanted === 'daily' ? 'daily' : 'stock'
   const usageFilters = {
     start: params.get('start') || `${today().slice(0, 8)}01`,
     end: params.get('end') || today(),
@@ -162,12 +166,15 @@ export default function InventoryPage() {
         >
           {t('Qoldiq va harakatlar')}
         </button>
-        <button
-          className={view === 'usage' ? 'selected' : undefined}
-          onClick={() => applyUsage({})}
-        >
-          {t('Sarf tahlili')}
-        </button>
+        {/* Sarf tahlili — egasining nazorat vositasi, backendda ham OwnerOnly. */}
+        {owner && (
+          <button
+            className={view === 'usage' ? 'selected' : undefined}
+            onClick={() => applyUsage({})}
+          >
+            {t('Sarf tahlili')}
+          </button>
+        )}
         <button
           className={view === 'daily' ? 'selected' : undefined}
           onClick={() => setParams({ view: 'daily' }, { replace: true })}

@@ -11,7 +11,7 @@ from rest_framework.views import APIView
 from users.models import AuditEvent
 from users.permissions import BranchMember, KitchenOnly, OwnerOnly, SalesOnly
 from .models import ORDER_STATUSES, SALE_PAYMENT_CHOICES, SALE_PAYMENT_LABELS, Order, OrderLine, Table, Expense, Ingredient, Recipe, StockMovement
-from .money import money
+from .money import money, parse_month
 from .serializers import AppendLinesInput, OrderInput, OrderSerializer, TableSerializer, ExpenseSerializer, IngredientSerializer, MovementInput, MovementSerializer, RecipeSerializer
 from .printing import PrinterError, print_receipt
 from .services import append_order_lines, apply_discount, audit, cancel_order, create_order, pay_order, create_expense, move_stock, quantity_text, refund_order, remove_order_line, reprice_recipes, Conflict
@@ -309,10 +309,7 @@ def dashboard_period(params, today):
     """Turns ?month=YYYY-MM or ?days=7|30 into the window and the one before it."""
     month = params.get('month')
     if month:
-        try:
-            first = datetime.strptime(month, '%Y-%m').date().replace(day=1)
-        except ValueError:
-            raise serializers.ValidationError(_('Oy noto‘g‘ri. Format: YYYY-MM.'))
+        first = parse_month(month)
         if first > today.replace(day=1):
             raise serializers.ValidationError(_('Kelajak oyi uchun hisobot tuzilmaydi.'))
         last = (first.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
@@ -362,7 +359,14 @@ class DashboardView(APIView):
         revenue = amount(paid, 'total')
         recipe_cost = OrderLine.objects.filter(order__in=paid).aggregate(total=Sum('cost_total'))['total'] or Decimal('0')
         spending = amount(expenses, 'amount')
-        cash_out = amount(expenses.exclude(payment_method='unpaid'), 'amount')
+        # «Sof pul oqimi» Moliya sahifasidagi bilan bir xil formulada bo'lishi
+        # shart: ikkala karta ham shu nom bilan turadi. Ombor xaridi ham
+        # kassadan chiqadi, shuning uchun u ham ayiriladi.
+        settled = amount(expenses.exclude(payment_method='unpaid'), 'amount')
+        purchases = StockMovement.objects.filter(
+            branch=branch, kind='receipt', date__gte=start, date__lte=end,
+        ).aggregate(total=Sum('cost_total'))['total'] or Decimal('0')
+        cash_out = settled + purchases
         previous = amount(orders.filter(status='paid', paid_at__date__gte=previous_start, paid_at__date__lte=previous_end), 'total')
         # One grouped query per series instead of two aggregates per day. order_by() drops the
         # model's default ordering, which Django would otherwise add to GROUP BY and split the totals.
