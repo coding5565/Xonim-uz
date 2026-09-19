@@ -278,7 +278,7 @@ export default function DashboardPage() {
             </section>
           </div>
           <p className="data-note">
-            <Info size={15} />{data.basis} {t('Yangilandi: {date}.', { date: dateLabel(data.as_of) })}
+            <Info size={15} />{t(data.basis)} {t('Yangilandi: {date}.', { date: dateLabel(data.as_of) })}
           </p>
         </>
       )}

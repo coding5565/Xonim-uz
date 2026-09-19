@@ -130,7 +130,7 @@ export default function ExpensesPage() {
           <div><h2>{t('Davr va kategoriya')}</h2><p>{t('Qaysi kundan qaysi kungacha, qaysi turdagi chiqim')}</p></div>
           {narrowed && (
             <button className="button secondary" onClick={() => setParams({}, { replace: true })}>
-              <X size={15} />{t('Tozalash')}
+              <X size={15} />{t('Filtrni tozalash')}
             </button>
           )}
         </header>
@@ -177,7 +177,7 @@ export default function ExpensesPage() {
               {filtered.map(row => (
                 <tr key={row.id}>
                   <td><strong>{row.purpose}</strong><small>{row.recipient || t('Oluvchi ko‘rsatilmagan')}</small></td>
-                  <td><span className="pill subtle">{row.category}</span></td>
+                  <td><span className="pill subtle">{t(row.category)}</span></td>
                   <td>{row.date}</td>
                   <td className="number">{money(row.amount)}</td>
                   <td>

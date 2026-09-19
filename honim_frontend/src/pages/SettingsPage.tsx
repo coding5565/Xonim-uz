@@ -88,7 +88,7 @@ export default function SettingsPage() {
                   <tr key={row.id}>
                     <td>{dateLabel(row.created_at)}</td>
                     <td>{row.actor}</td>
-                    <td><Link to={`/activity?action=${row.action}`} className="text-link">{row.label}</Link></td>
+                    <td><Link to={`/activity?action=${row.action}`} className="text-link">{t(row.label)}</Link></td>
                     <td>{row.description}</td>
                   </tr>
                 ))}

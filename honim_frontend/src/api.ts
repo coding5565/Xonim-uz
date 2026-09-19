@@ -1,4 +1,4 @@
-import { currentLang, translate } from './i18n'
+import { currentLang, currentLocale, translate } from './i18n'
 
 let csrf = ''
 
@@ -91,11 +91,13 @@ export async function download(path: string, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
+// Raqam va sana tanlangan tilda ko'rinadi: ruscha ekranda «20-sen» degan
+// o'zbekcha qisqartma turishi kerak emas.
 export const money = (value: string | number) =>
-  new Intl.NumberFormat('uz-UZ', { maximumFractionDigits: 2 }).format(Number(value))
+  new Intl.NumberFormat(currentLocale(), { maximumFractionDigits: 2 }).format(Number(value))
 
 export const dateLabel = (value: string) =>
-  new Intl.DateTimeFormat('uz-UZ', {
+  new Intl.DateTimeFormat(currentLocale(), {
     day: '2-digit',
     month: 'short',
     hour: '2-digit',

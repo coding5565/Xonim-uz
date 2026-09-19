@@ -97,7 +97,7 @@ class LoginView(APIView):
         data.is_valid(raise_exception=True)
         user = authenticate(request, **data.validated_data)
         if not user or not user.branch_id:
-            return Response({'detail': 'Login yoki parol noto‘g‘ri.'}, status=400)
+            return Response({'detail': _('Login yoki parol noto‘g‘ri.')}, status=400)
         login(request, user)
         audit(user, 'auth.login', f'{user.first_name or user.username} · {user.get_role_display()}')
         return Response(profile(user))

@@ -3,8 +3,12 @@ from decimal import Decimal
 from io import BytesIO
 from uuid import uuid4
 from zipfile import ZipFile
+import re
+from pathlib import Path
+
+from django.conf import settings
 from django.db.models import Sum
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 from users.models import AuditEvent, Branch, User
@@ -2943,3 +2947,136 @@ class BadInputStaysFourHundredTests(TestCase):
         month = timezone.localdate().strftime('%Y-%m')
         for path in ('/api/v1/payroll/', '/api/v1/finance/', '/api/v1/dashboard/'):
             self.assertEqual(self.client.get(f'{path}?month={month}').status_code, 200, path)
+
+
+class TranslationCoverageTests(SimpleTestCase):
+    """Uch til to'liq ishlashini qo'riqlaydi.
+
+    Bu test frontend lug'atlarini o'qiydi. G'alati ko'rinishi mumkin, lekin
+    aynan shu chegarada xato tug'iladi: server o'zbekcha yorliq yuboradi
+    («Naqd», «Taom tayyorlandi»), ekran uni tarjima qilishi kerak. Ikki tomon
+    alohida o'zgarganda hech qanday tekshiruv ishlamaydi — natijada ruscha
+    sahifada o'zbekcha so'z paydo bo'ladi. Shuning uchun tekshiruv shu yerda.
+
+    Ikkinchi xato turi: sanoq shakli bor kalit t() bilan chaqirilsa, ekranda
+    «7 шт.|7 шт.|7 шт.» chiqadi — chunki t() qiymatni xom qaytaradi.
+    """
+
+    FRONTEND = Path(settings.BASE_DIR).parent / 'honim_frontend' / 'src'
+    # Brend nomlari hamma tilda bir xil yoziladi, tarjima talab qilmaydi.
+    BRANDS = {'Uzum', 'Yandex', 'Click'}
+    QUOTED = "(?:'([^']*)'|\"([^\"]*)\")"
+    FORMS = {'ru': 3, 'en': 2}
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        entry = re.compile(r"^  " + cls.QUOTED + r":\s*" + cls.QUOTED + r",\s*$", re.M)
+        cls.catalogues = {}
+        for lang in cls.FORMS:
+            path = cls.FRONTEND / 'i18n' / f'{lang}.ts'
+            text = path.read_text(encoding='utf-8')
+            cls.catalogues[lang] = {
+                (match.group(1) if match.group(1) is not None else match.group(2)):
+                (match.group(3) if match.group(3) is not None else match.group(4))
+                for match in entry.finditer(text)
+            }
+
+    def setUp(self):
+        if not self.FRONTEND.exists():
+            self.skipTest('frontend manbasi yonida emas')
+
+    def test_every_label_the_server_sends_has_a_translation(self):
+        from operations.models import ORDER_STATUS_LABELS, SALE_CHANNEL_LABELS, SALE_PAYMENT_LABELS
+        from users.models import AUDIT_GROUPS, AUDIT_LABELS
+
+        expected = (
+            set(AUDIT_LABELS.values()) | set(AUDIT_GROUPS.values())
+            | set(SALE_PAYMENT_LABELS.values()) | set(SALE_CHANNEL_LABELS.values())
+            | set(ORDER_STATUS_LABELS.values())
+            | {'Superadmin', 'Kassir', 'Oshxona'}
+            | {'kg', 'litr', 'dona'}
+        ) - self.BRANDS
+
+        for lang, catalogue in self.catalogues.items():
+            missing = sorted(label for label in expected if label not in catalogue)
+            self.assertEqual(missing, [], f'{lang}: tarjimasiz yorliqlar')
+
+    def test_a_counted_key_is_never_read_through_the_singular_helper(self):
+        call = re.compile(r"(?<![A-Za-z0-9_.])(tn?)\(\s*" + self.QUOTED)
+        wrong = []
+        for path in self.FRONTEND.rglob('*.ts*'):
+            if 'i18n' in path.parts:
+                continue
+            for match in call.finditer(path.read_text(encoding='utf-8')):
+                key = match.group(2) if match.group(2) is not None else match.group(3)
+                for lang, catalogue in self.catalogues.items():
+                    value = catalogue.get(key)
+                    if match.group(1) == 't' and value and '|' in value:
+                        wrong.append(f'{lang} · {path.name} · t({key!r})')
+                    if match.group(1) == 'tn' and value and value.count('|') + 1 != self.FORMS[lang]:
+                        wrong.append(f'{lang} · {path.name} · tn({key!r}) shakllari yetarli emas')
+        self.assertEqual(sorted(set(wrong)), [], 'sanoq shakllari noto‘g‘ri ishlatilgan')
+
+    def test_both_dictionaries_hold_the_same_keys(self):
+        russian, english = self.catalogues['ru'], self.catalogues['en']
+        self.assertEqual(sorted(set(russian) - set(english)), [], 'faqat ruschada bor')
+        self.assertEqual(sorted(set(english) - set(russian)), [], 'faqat inglizchada bor')
+
+    def test_no_dictionary_key_is_mangled_by_escaping(self):
+        # Ilgari ikki kalit teskari sleshlar zanjiri bilan buzilgan edi va
+        # hech qachon mos kelmagan — ya'ni matn hech bir tilda tarjima
+        # qilinmagan, lekin buni hech narsa ko'rsatmagan.
+        for lang, catalogue in self.catalogues.items():
+            broken = [key for key in catalogue if '\\\\' in key]
+            self.assertEqual(broken, [], f'{lang}: buzilgan kalitlar')
+
+
+class ServerSpeaksTheRequestedLanguageTests(TestCase):
+    """Server xabarlari Accept-Language ga bo'ysunishi kerak.
+
+    Lug'atda tarjima bo'lsa-yu, `_()` chaqirilmasa — xabar baribir o'zbekcha
+    keladi va buni hech narsa ko'rsatmaydi. Shuning uchun eng ko'p
+    uchraydigan uch xabar shu yerda tekshiriladi.
+    """
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.cashier = User.objects.create_user(
+            'cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.category = Category.objects.create(branch=self.branch, name='Taom')
+        self.osh = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('50000'))
+        self.client = APIClient()
+
+    def test_a_failed_login_answers_in_the_requested_language(self):
+        response = self.client.post(
+            '/api/v1/auth/login/', {'username': 'cashier', 'password': 'wrong'},
+            format='json', HTTP_ACCEPT_LANGUAGE='ru')
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data['detail'], 'Неверный логин или пароль.')
+
+    def test_a_conflict_answers_in_the_requested_language(self):
+        order = create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': '',
+            'lines': [{'dish': self.osh.id, 'quantity': 1, 'note': ''}],
+        })
+        self.client.force_authenticate(self.cashier)
+        only = order.lines.first()
+        # Oxirgi qatorni olib tashlab bo'lmaydi -> Conflict.
+        response = self.client.delete(
+            f'/api/v1/orders/{order.id}/lines/{only.id}/', HTTP_ACCEPT_LANGUAGE='ru')
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(str(response.data['detail']), 'Это последняя строка. Отмените счёт целиком.')
+
+    def test_a_validation_error_answers_in_english_too(self):
+        self.client.force_authenticate(self.cashier)
+        response = self.client.post('/api/v1/dish-prep/', {
+            'lines': [{'dish': self.osh.id, 'quantity': 5}, {'dish': self.osh.id, 'quantity': 3}],
+        }, format='json', HTTP_ACCEPT_LANGUAGE='en')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('Enter each dish only once.', str(response.data))
+
+    def test_uzbek_stays_the_default_when_nothing_is_asked_for(self):
+        response = self.client.post(
+            '/api/v1/auth/login/', {'username': 'cashier', 'password': 'wrong'}, format='json')
+        self.assertEqual(response.data['detail'], 'Login yoki parol noto‘g‘ri.')

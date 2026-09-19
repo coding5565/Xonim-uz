@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ru } from './ru'
 import { en } from './en'
 
@@ -62,9 +62,15 @@ const Context = createContext<Bundle>(FALLBACK)
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>(stored)
 
+  // <html lang> saqlangan tilga qaytarilishi kerak: ilgari u faqat tugma
+  // bosilganda yangilanardi, ya'ni sahifa qayta yuklangach brauzer va
+  // skrinrider ruscha sahifani o'zbekcha deb o'qirdi.
+  useEffect(() => {
+    document.documentElement.lang = lang
+  }, [lang])
+
   const setLang = useCallback((next: Lang) => {
     setLangState(next)
-    document.documentElement.lang = next
     try {
       localStorage.setItem(STORAGE_KEY, next)
     } catch {
@@ -101,6 +107,11 @@ export function useI18n() {
 /** Til kodini API so'rovlariga qo'shish uchun — server xabarlari ham tarjima bo'ladi. */
 export function currentLang(): Lang {
   return stored()
+}
+
+/** Sana va raqam formati uchun. React'dan tashqarida ham kerak (api.ts). */
+export function currentLocale(): string {
+  return LOCALES[stored()]
 }
 
 /**

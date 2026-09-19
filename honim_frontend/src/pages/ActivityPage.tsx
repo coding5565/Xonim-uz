@@ -179,7 +179,7 @@ export default function ActivityPage() {
               {byGroup(data?.actions || []).map(([group, items]) => (
                 <optgroup key={group} label={group}>
                   {items.map(item => (
-                    <option key={item.action} value={item.action}>{item.label} ({item.count})</option>
+                    <option key={item.action} value={item.action}>{t(item.label)} ({item.count})</option>
                   ))}
                 </optgroup>
               ))}
@@ -219,7 +219,7 @@ export default function ActivityPage() {
                 <tr key={row.id}>
                   <td className="log-time">{stamp(row.created_at, locale)}</td>
                   <td>
-                    <span className="log-action" data-group={row.group}>{row.label}</span>
+                    <span className="log-action" data-group={row.group}>{t(row.label)}</span>
                     <small>{row.group}</small>
                   </td>
                   <td className="log-detail">{row.description || '—'}</td>

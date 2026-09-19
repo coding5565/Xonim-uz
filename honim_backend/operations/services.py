@@ -17,7 +17,11 @@ from .printing import print_prep_tickets, print_receipt_quietly, print_void_tick
 
 class Conflict(APIException):
     status_code = 409
-    default_detail = 'Amal holati o‘zgargan. Ma’lumotni yangilang.'
+
+    def __init__(self, detail=None, code=None):
+        # Tarjima aynan shu yerda bajariladi: sinf maydonida yozilsa matn
+        # modul yuklanayotganda muzlab qolardi va doim o'zbekcha chiqardi.
+        super().__init__(detail or _('Amal holati o‘zgargan. Ma’lumotni yangilang.'), code)
 
 
 def fingerprint(data):

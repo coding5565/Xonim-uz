@@ -27,6 +27,13 @@ const monthName = (key: string, t: Translate) => {
   return t('{year}-yil {month}', { year, month: t(MONTHS[Number(month) - 1]) })
 }
 
+// Server oy nomini o'zbekcha yuboradi, shuning uchun qisqartma kalitdan
+// qayta yig'iladi: «Sen 2026» -> «сен 2026».
+const shortMonth = (key: string, t: Translate) => {
+  const [year, month] = key.split('-')
+  return `${t(MONTHS[Number(month) - 1]).slice(0, 3)} ${year}`
+}
+
 export default function PayrollPage() {
   const { t, tn } = useI18n()
   // Oy manzil satrida turadi: «shu oyning oyliklari» havolasi ishlashi uchun.
@@ -166,7 +173,7 @@ export default function PayrollPage() {
                         <strong>{row.name}</strong>
                         <small>{row.username}{row.active ? '' : ` · ${t('ishdan bo‘shagan')}`}</small>
                       </td>
-                      <td><span className="pill subtle">{row.role_label}</span></td>
+                      <td><span className="pill subtle">{t(row.role_label)}</span></td>
                       <td className="number">
                         {Number(row.agreed)
                           ? `${money(row.agreed)} ${t('so‘m')}`
@@ -185,7 +192,7 @@ export default function PayrollPage() {
                       </td>
                       <td>
                         {row.paid_on
-                          ? <>{row.paid_on}<small>{row.payment_label}</small></>
+                          ? <>{row.paid_on}<small>{t(row.payment_label)}</small></>
                           : <span className="muted">—</span>}
                       </td>
                       <td>
@@ -217,7 +224,7 @@ export default function PayrollPage() {
                     onClick={() => pick(point.period)}
                   >
                     <div><span style={{ height: `${Number(point.total) / maxTrend * 100}%` }} /></div>
-                    <small>{point.label}</small>
+                    <small>{shortMonth(point.period, t)}</small>
                   </button>
                 ))}
                 {!Number(data.all_time.total) && (

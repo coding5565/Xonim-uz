@@ -18,6 +18,12 @@ const monthName = (key: string, t: Translate) => {
   const [year, month] = key.split('-')
   return t('{year}-yil {month}', { year, month: t(MONTHS[Number(month) - 1]) })
 }
+// Grafik ustuni tagidagi qisqa yozuv: «Sen 2026». Server o'zbekchasini
+// yuboradi, shuning uchun bu yerda kalitdan qayta yig'iladi.
+const shortMonth = (key: string, t: Translate) => {
+  const [year, month] = key.split('-')
+  return `${t(MONTHS[Number(month) - 1]).slice(0, 3)} ${year}`
+}
 
 /** Xarajat kategoriyasi qaysi sahifada batafsil ko‘rinadi. */
 function expenseLink(category: string, start: string, end: string, month: string | null) {
@@ -102,7 +108,8 @@ export default function FinancePage() {
       {error && <p className="alert error">{error}</p>}
 
       <p className="period-note">
-        <strong>{filters.label}</strong> · {tn('{count} kun', Number(filters.days))}
+        {/* Oy nomi serverdan o'zbekcha keladi; sana oralig'i esa tilga bog'liq emas. */}
+        <strong>{filters.month ? monthName(filters.month, t) : filters.label}</strong> · {tn('{count} kun', Number(filters.days))}
         {' '}· {tn('{count} ta to‘langan chek', Number(profit.orders))}
       </p>
 
@@ -176,7 +183,7 @@ export default function FinancePage() {
             <b>{money(profit.net_profit)} <em>{t('so‘m')}</em></b>
           </div>
         </div>
-        <p className="data-note">{data.basis}</p>
+        <p className="data-note">{t(data.basis)}</p>
       </section>
 
       {lowCoverage && (
@@ -269,7 +276,7 @@ export default function FinancePage() {
                 <Link key={row.category} to={expenseLink(row.category, filters.start, filters.end, filters.month)}>
                   <div>
                     <div>
-                      <strong>{row.category}</strong>
+                      <strong>{t(row.category)}</strong>
                       <span>{tn('{count} ta yozuv', Number(row.count))} · {row.share}%</span>
                       <b>{money(row.amount)}</b>
                     </div>
@@ -380,7 +387,7 @@ export default function FinancePage() {
               onClick={() => pickMonth(point.period)}
             >
               <div><span style={{ height: `${(Number(point.revenue) / maxTrend) * 100}%` }} /></div>
-              <small>{point.label}</small>
+              <small>{shortMonth(point.period, t)}</small>
             </button>
           ))}
         </div>
