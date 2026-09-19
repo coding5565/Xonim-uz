@@ -11,9 +11,10 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from catalog.models import Dish
-from users.models import User
-from .models import Expense, Ingredient, Order, OrderLine
 from core.i18n import _
+from users.models import User
+
+from .models import Expense, Ingredient, Order, OrderLine
 
 
 class AssistantQuestion(serializers.Serializer):

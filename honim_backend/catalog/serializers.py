@@ -1,10 +1,13 @@
 from io import BytesIO
 from uuid import uuid4
-from PIL import Image, UnidentifiedImageError
+
 from django.core.files.base import ContentFile
+from PIL import Image, UnidentifiedImageError
 from rest_framework import serializers
-from .models import Category, Dish
+
 from core.i18n import _
+
+from .models import Category, Dish
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -50,4 +53,4 @@ class DishSerializer(serializers.ModelSerializer):
             source.save(output, 'JPEG', quality=85)
             return ContentFile(output.getvalue(), name=f'{uuid4().hex}.jpg')
         except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
-            raise serializers.ValidationError(_('Rasm formati noto‘g‘ri.'))
+            raise serializers.ValidationError(_('Rasm formati noto‘g‘ri.')) from None

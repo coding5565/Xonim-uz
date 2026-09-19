@@ -1,8 +1,24 @@
 from decimal import Decimal
+
 from django.utils import timezone
 from rest_framework import serializers
-from .models import SALE_CHANNELS, SALE_CHANNEL_LABELS, SALE_PAYMENT_CHOICES, Order, OrderLine, Table, Expense, Ingredient, Recipe, RecipeLine, StockMovement, Waiter
+
 from core.i18n import _
+
+from .models import (
+    SALE_CHANNEL_LABELS,
+    SALE_CHANNELS,
+    SALE_PAYMENT_CHOICES,
+    Expense,
+    Ingredient,
+    Order,
+    OrderLine,
+    Recipe,
+    RecipeLine,
+    StockMovement,
+    Table,
+    Waiter,
+)
 
 
 class LineInput(serializers.Serializer):

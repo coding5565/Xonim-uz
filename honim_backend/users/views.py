@@ -4,11 +4,11 @@ from html import escape
 from io import BytesIO
 from uuid import uuid4
 from zipfile import ZIP_DEFLATED, ZipFile
-from django.contrib.auth import authenticate, login, logout
-from django.http import HttpResponse
-from django.contrib.auth import password_validation
+
+from django.contrib.auth import authenticate, login, logout, password_validation
 from django.db import transaction
 from django.db.models import Count
+from django.http import HttpResponse
 from django.middleware.csrf import get_token
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -18,11 +18,13 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
+
+from core.i18n import _
 from operations.models import SALE_PAYMENT_METHODS, SalaryPayment
 from operations.services import Conflict, audit, create_expense
+
 from .models import AuditEvent, User, audit_group, audit_label
 from .permissions import OwnerOnly
-from core.i18n import _
 
 
 def salary_register_xlsx(payments):
@@ -247,7 +249,7 @@ class SalaryPaymentInput(serializers.Serializer):
         try:
             period = datetime.strptime(value, '%Y-%m').date().replace(day=1)
         except ValueError:
-            raise serializers.ValidationError(_('Oy noto‘g‘ri.'))
+            raise serializers.ValidationError(_('Oy noto‘g‘ri.')) from None
         if period > timezone.localdate().replace(day=1):
             raise serializers.ValidationError(_('Kelajak oyi uchun to‘lov kiritib bo‘lmaydi.'))
         return period

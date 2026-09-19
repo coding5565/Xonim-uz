@@ -1,12 +1,11 @@
+import re
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 from io import BytesIO
+from pathlib import Path
+from unittest.mock import patch
 from uuid import uuid4
 from zipfile import ZipFile
-import re
-from pathlib import Path
-
-from unittest.mock import patch
 
 from django.conf import settings
 from django.db import connection
@@ -15,11 +14,29 @@ from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient
-from users.models import AuditEvent, Branch, User
+
 from catalog.models import Category, Dish
-from .models import AssistantChat, AssistantMessage, DailyUsage, DishPrep, Order, OrderLine, Expense, Ingredient, Recipe, RecipeLine, SalaryPayment, ShiftClose, StockMovement, Table, Waiter
+from users.models import AuditEvent, Branch, User
+
+from .models import (
+    AssistantChat,
+    AssistantMessage,
+    DailyUsage,
+    DishPrep,
+    Expense,
+    Ingredient,
+    Order,
+    OrderLine,
+    Recipe,
+    RecipeLine,
+    SalaryPayment,
+    ShiftClose,
+    StockMovement,
+    Table,
+    Waiter,
+)
 from .money import money, percent, quantity, share
-from .services import append_order_lines, create_order, move_stock, Conflict
+from .services import Conflict, append_order_lines, create_order, move_stock
 
 
 def prepare(user, *dishes, quantity=999):
@@ -552,7 +569,7 @@ class WorkflowTests(TestCase):
         with ZipFile(BytesIO(export.content)) as workbook:
             self.assertIsNone(workbook.testzip())
             self.assertIn('xl/worksheets/sheet4.xml', workbook.namelist())
-            self.assertIn('Tort'.encode(), workbook.read('xl/worksheets/sheet4.xml'))
+            self.assertIn(b'Tort', workbook.read('xl/worksheets/sheet4.xml'))
 
         # Savdo hisoboti endi faqat superadminda.
         self.client.force_authenticate(self.cashier)
@@ -665,8 +682,8 @@ class ActivityLogTests(TestCase):
 
     def test_tables_reprint_and_sessions_all_reach_the_log(self):
         table = self.client.post('/api/v1/tables/', {'number': 7, 'name': '', 'seats': 4, 'zone': 'hall_left', 'seating': 'divan'}, format='json').data
-        self.client.patch('/api/v1/tables/%s/' % table['id'], {'seats': 6}, format='json')
-        self.client.delete('/api/v1/tables/%s/' % table['id'])
+        self.client.patch(f'/api/v1/tables/{table["id"]}/', {'seats': 6}, format='json')
+        self.client.delete(f'/api/v1/tables/{table["id"]}/')
         self.assertEqual(
             list(AuditEvent.objects.filter(action__startswith='table.').order_by('id').values_list('action', flat=True)),
             ['table.create', 'table.update', 'table.remove'],
@@ -2213,7 +2230,7 @@ class WaiterTests(TestCase):
         order.refresh_from_db()
         self.assertEqual(order.waiter_ref_id, waiter['id'])
         # Faolsiz ofitsiantni yangi buyurtmaga bog'lab bo'lmaydi.
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValidationError):
             self.sell(waiter_id=waiter['id'])
 
     def test_a_duplicate_name_is_refused(self):
@@ -3088,7 +3105,10 @@ class TranslationCoverageTests(SimpleTestCase):
 
     def test_every_label_the_server_sends_has_a_translation(self):
         from operations.models import (
-            ORDER_STATUS_LABELS, SALE_CHANNEL_LABELS, SALE_PAYMENT_LABELS, Ingredient,
+            ORDER_STATUS_LABELS,
+            SALE_CHANNEL_LABELS,
+            SALE_PAYMENT_LABELS,
+            Ingredient,
         )
         from users.models import AUDIT_GROUPS, AUDIT_LABELS
 

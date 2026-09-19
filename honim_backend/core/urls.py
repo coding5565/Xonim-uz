@@ -3,22 +3,49 @@ from django.conf.urls.static import static
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from users.payroll import PayrollView
-from users.views import AuditView, CsrfView, LoginView, LogoutView, MeView, SalaryPaymentExportView, SalaryPaymentView, StaffDetailView, StaffView
 from catalog.views import CategoryViewSet, DishViewSet, PublicMenuView
-from operations.views import (
-    AssistantChatView, DashboardView, ExpenseViewSet, IngredientViewSet, KitchenStatusView,
-    KitchenView, OrderLinesView, OrderViewSet, ReceiptPrintView, PayView, RecipeViewSet, SalesReportExportView,
-    OrderCancelView, OrderDiscountView, OrderLineDetailView, OrderRefundView,
-    SalesBoardView, SalesReportView, SalesSummaryView, StockView, TableViewSet,
-)
 from operations.assistant_chats import AssistantChatDetailView, AssistantChatListView
 from operations.daily_usage import DailyUsageView, UsageComparisonView
 from operations.dish_prep import DishPrepHistoryView, DishPrepLeftoverView, DishPrepView
 from operations.finance import FinanceView
-from operations.waiters import WaiterEarningsView, WaiterViewSet
 from operations.shift import ShiftHistoryView, ShiftView
 from operations.stock_usage import StockUsageView
+from operations.views import (
+    AssistantChatView,
+    DashboardView,
+    ExpenseViewSet,
+    IngredientViewSet,
+    KitchenStatusView,
+    KitchenView,
+    OrderCancelView,
+    OrderDiscountView,
+    OrderLineDetailView,
+    OrderLinesView,
+    OrderRefundView,
+    OrderViewSet,
+    PayView,
+    ReceiptPrintView,
+    RecipeViewSet,
+    SalesBoardView,
+    SalesReportExportView,
+    SalesReportView,
+    SalesSummaryView,
+    StockView,
+    TableViewSet,
+)
+from operations.waiters import WaiterEarningsView, WaiterViewSet
+from users.payroll import PayrollView
+from users.views import (
+    AuditView,
+    CsrfView,
+    LoginView,
+    LogoutView,
+    MeView,
+    SalaryPaymentExportView,
+    SalaryPaymentView,
+    StaffDetailView,
+    StaffView,
+)
 
 router = DefaultRouter()
 router.register('categories', CategoryViewSet, basename='category')

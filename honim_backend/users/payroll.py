@@ -9,7 +9,6 @@ oyning birinchi kuniga qadalgan sana, paid_on esa pul berilgan kun.
 Diqqat: oylik to'lovi «Ish haqi» kategoriyasida Expense ham yaratadi, shuning
 uchun moliya hisobida oylik xarajatlarning ICHIDA turadi, ustiga qo'shilmaydi.
 """
-from datetime import date, timedelta
 from decimal import Decimal
 
 from django.db.models import Count, Max, Min, Sum
@@ -18,12 +17,20 @@ from rest_framework import serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.i18n import _
 from operations.models import SalaryPayment
-from operations.money import MONTH_NAMES, last_months, money, month_key, month_label, next_month, parse_month, short_label
+from operations.money import (
+    last_months,
+    money,
+    month_key,
+    month_label,
+    next_month,
+    parse_month,
+    short_label,
+)
 
 from .models import User
 from .permissions import OwnerOnly
-from core.i18n import _
 
 METHOD_LABELS = {'cash': 'Naqd', 'card': 'Karta'}
 TREND_MONTHS = 12

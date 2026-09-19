@@ -1,8 +1,10 @@
 import secrets
 from pathlib import Path
+
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+
 from catalog.models import Category, Dish
 from operations.models import Ingredient
 from users.models import Branch, User

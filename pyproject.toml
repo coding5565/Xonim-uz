@@ -1,0 +1,30 @@
+[tool.ruff]
+# Django loyihasi: migratsiyalar avtomatik yaratiladi, ularni tekshirmaymiz.
+line-length = 100
+target-version = "py312"
+extend-exclude = ["*/migrations/*", ".venv"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle xatolari
+    "F",    # Pyflakes: ishlatilmagan import, aniqlanmagan nom
+    "I",    # importlar tartibi
+    "B",    # bugbear: keng tarqalgan mantiqiy tuzoqlar
+    "C4",   # ro'yxat/lug'at tushunchalarini soddalashtirish
+    "UP",   # eskirgan Python konstruksiyalari
+    "DJ",   # Django uchun maxsus tekshiruvlar
+]
+ignore = [
+    # Django modellarida __str__ har doim ham kerak emas: bu ichki tizim,
+    # admin paneli ishlatilmaydi.
+    "DJ008",
+    # Test fayllarida uzun tasdiqlar tabiiy.
+    "E501",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Sozlamalar fayli Django talabiga ko'ra yuqori registrda yoziladi.
+"honim_backend/core/settings.py" = ["E402"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["core", "users", "catalog", "operations"]

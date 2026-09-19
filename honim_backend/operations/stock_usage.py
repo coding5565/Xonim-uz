@@ -20,11 +20,11 @@ from rest_framework import serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.i18n import _
 from users.permissions import OwnerOnly
 
 from .models import Ingredient, StockMovement
 from .money import money, quantity, share
-from core.i18n import _
 
 OUT_KINDS = ['consumption', 'sale_consumption']
 KIND_LABELS = {

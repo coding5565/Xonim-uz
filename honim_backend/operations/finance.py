@@ -26,12 +26,31 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from catalog.models import Dish
+from core.i18n import _
 from users.permissions import OwnerOnly
 
-from .models import SALE_CHANNEL_LABELS, SALE_PAYMENT_LABELS, Expense, Ingredient, Order, OrderLine, SalaryPayment, StockMovement
-from .money import MONEY, day_window, money, month_key, month_label, next_month, parse_month, percent, short_label
+from .models import (
+    SALE_CHANNEL_LABELS,
+    SALE_PAYMENT_LABELS,
+    Expense,
+    Ingredient,
+    Order,
+    OrderLine,
+    SalaryPayment,
+    StockMovement,
+)
+from .money import (
+    MONEY,
+    day_window,
+    money,
+    month_key,
+    month_label,
+    next_month,
+    parse_month,
+    percent,
+    short_label,
+)
 from .reports import discount_cuts
-from core.i18n import _
 
 SALARY_CATEGORY = 'Ish haqi'
 TREND_MONTHS = 12
@@ -124,11 +143,13 @@ def cost_coverage(lines, revenue, branch):
 def monthly_trend(branch, today):
     """Oxirgi 12 oy: tushum, tannarx, xarajat va sof foyda."""
     months, cursor = [], today.replace(day=1)
-    for _ in range(TREND_MONTHS):
+    # `_` nomi bu modulda tarjima funksiyasi, shuning uchun bo'sh o'zgaruvchi
+    # sifatida ishlatilmaydi — aks holda u shu funksiya ichida bosilib ketadi.
+    for _step in range(TREND_MONTHS):
         months.append(cursor)
         cursor = (cursor - timedelta(days=1)).replace(day=1)
     months.reverse()
-    since, _ = day_window(months[0], today)
+    since, _until = day_window(months[0], today)
 
     paid = Order.objects.filter(branch=branch, status='paid', paid_at__gte=since)
     revenue_by = {

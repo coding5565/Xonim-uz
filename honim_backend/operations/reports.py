@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import timedelta
 from decimal import Decimal
 from html import escape
 from io import BytesIO
@@ -11,9 +11,10 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from catalog.models import Category, Dish
+from core.i18n import _
+
 from .models import SALE_CHANNEL_LABELS, SALE_PAYMENT_LABELS, Order, OrderLine
 from .money import CENT
-from core.i18n import _
 
 
 def discount_cuts(lines):

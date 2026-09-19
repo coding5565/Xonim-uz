@@ -1,17 +1,32 @@
 import hashlib
 import json
-from uuid import NAMESPACE_URL, uuid5
 from decimal import Decimal
+from uuid import NAMESPACE_URL, uuid5
+
 from django.conf import settings
 from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
-from rest_framework.exceptions import ValidationError, APIException
+from rest_framework.exceptions import APIException, ValidationError
 
-from core.i18n import _
 from catalog.models import Dish
+from core.i18n import _
 from users.models import AuditEvent
-from .models import CLOSED_STATUSES, DELIVERY_CHANNELS, ORDER_STATUS_LABELS, SALE_PAYMENT_LABELS, Order, OrderLine, Expense, Ingredient, Recipe, RecipeLine, StockMovement, Table, Waiter
+
+from .models import (
+    DELIVERY_CHANNELS,
+    ORDER_STATUS_LABELS,
+    SALE_PAYMENT_LABELS,
+    Expense,
+    Ingredient,
+    Order,
+    OrderLine,
+    Recipe,
+    RecipeLine,
+    StockMovement,
+    Table,
+    Waiter,
+)
 from .printing import print_prep_tickets, print_receipt_quietly, print_void_ticket
 
 

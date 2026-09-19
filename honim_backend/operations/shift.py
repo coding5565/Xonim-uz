@@ -17,12 +17,12 @@ from rest_framework import serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.i18n import _
 from users.permissions import OwnerOnly, SalesOnly
 
 from .models import SALE_PAYMENT_METHODS, Expense, Order, ShiftClose
 from .money import day_window, money
 from .services import audit
-from core.i18n import _
 
 # Shu summadan katta farq e'tibor talab qiladi.
 ALERT_SOM = Decimal('20000')

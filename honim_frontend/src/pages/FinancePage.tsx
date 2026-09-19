@@ -3,9 +3,9 @@ import { Link, useSearchParams } from 'react-router-dom'
 import {
   AlertTriangle, ArrowRight, Banknote, ChefHat, Coins, Package, PiggyBank, Receipt, RefreshCw, Wallet,
 } from 'lucide-react'
-import { api, money, today } from '../api'
+import { api, money } from '../api'
 import { useI18n } from '../i18n'
-import { CardsSkeleton, ChartSkeleton, PanelSkeleton } from '../components/Skeleton'
+import { ChartSkeleton, PanelSkeleton } from '../components/Skeleton'
 import type { Finance } from '../types'
 
 type Translate = (text: string, vars?: Record<string, string | number>) => string

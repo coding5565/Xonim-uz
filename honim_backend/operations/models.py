@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django.db import models
 from django.db.models import Q
+
 from users.models import Branch, User
 
 # Single source of truth for how a sale was settled. Adding a provider here is
@@ -266,10 +267,6 @@ class Ingredient(models.Model):
     # baholanadi, shuning uchun eski partiya narxi keyingi sarfga ta'sir qiladi.
     unit_cost = models.DecimalField(max_digits=14, decimal_places=4, default=0)
 
-    @property
-    def stock_value(self):
-        return (self.quantity * self.unit_cost).quantize(Decimal('0.01'))
-
     class Meta:
         ordering = ['name']
         # Qoldiq manfiy bo'lishiga ruxsat beriladi: retsept bo'yicha ayirish
@@ -279,6 +276,10 @@ class Ingredient(models.Model):
         # signal bo'ladi. Qo'lda chiqim yozishda tekshiruv o'z joyida qoladi
         # (services.move_stock), ya'ni xato kiritishdan himoya yo'qolmaydi.
         constraints = [models.UniqueConstraint(fields=['branch', 'name'], name='ingredient_branch_name')]
+
+    @property
+    def stock_value(self):
+        return (self.quantity * self.unit_cost).quantize(Decimal('0.01'))
 
 
 class StockMovement(models.Model):

@@ -1,5 +1,6 @@
 from django.db import models
 from django.db.models import Q
+
 from users.models import Branch
 
 
@@ -35,10 +36,10 @@ class Dish(models.Model):
     # uchun: masalan ichimliklar orasida oshxonada damlanadigan choy.
     station = models.CharField(max_length=10, choices=Station.choices, blank=True)
 
-    @property
-    def print_station(self):
-        return self.station or self.category.station
-
     class Meta:
         ordering = ['category__position', 'id']
         constraints = [models.CheckConstraint(condition=Q(price__gt=0), name='dish_positive_price')]
+
+    @property
+    def print_station(self):
+        return self.station or self.category.station

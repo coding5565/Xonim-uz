@@ -1,31 +1,77 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from decimal import Decimal
+
 from django.db import IntegrityError, OperationalError, transaction
-from django.db.models import Count, Prefetch, Sum, F
+from django.db.models import Count, F, Prefetch, Sum
 from django.db.models.functions import TruncDate
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import mixins, serializers, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from core.i18n import _
 from users.models import AuditEvent
 from users.permissions import BranchMember, KitchenOnly, OwnerOnly, SalesOnly
-from .models import DELIVERY_CHANNELS, ORDER_STATUSES, SALE_CHANNELS, SALE_PAYMENT_CHOICES, SALE_PAYMENT_LABELS, Order, OrderLine, Table, Expense, Ingredient, Recipe, StockMovement
-from .money import money, parse_month
-from .serializers import AppendLinesInput, OrderInput, OrderSerializer, TableSerializer, ExpenseSerializer, IngredientSerializer, MovementInput, MovementSerializer, RecipeSerializer
-from .printing import PrinterError, print_receipt
-from .services import append_order_lines, apply_discount, audit, cancel_order, create_order, pay_order, create_expense, move_stock, quantity_text, refund_order, remove_order_line, reprice_recipes, Conflict
-from .reports import ReportFilters, SalesBoardFilters, build_sales_board, build_sales_report, sales_report_xlsx
+
 from .ai_assistant import AssistantQuestion, ask_openai, business_snapshot, local_answer
 from .assistant_chats import remember
-from core.i18n import _
+from .models import (
+    DELIVERY_CHANNELS,
+    ORDER_STATUSES,
+    SALE_CHANNELS,
+    SALE_PAYMENT_CHOICES,
+    SALE_PAYMENT_LABELS,
+    Expense,
+    Ingredient,
+    Order,
+    OrderLine,
+    Recipe,
+    StockMovement,
+    Table,
+)
+from .money import money, parse_month
+from .printing import PrinterError, print_receipt
+from .reports import (
+    ReportFilters,
+    SalesBoardFilters,
+    build_sales_board,
+    build_sales_report,
+    sales_report_xlsx,
+)
+from .serializers import (
+    AppendLinesInput,
+    ExpenseSerializer,
+    IngredientSerializer,
+    MovementInput,
+    MovementSerializer,
+    OrderInput,
+    OrderSerializer,
+    RecipeSerializer,
+    TableSerializer,
+)
+from .services import (
+    Conflict,
+    append_order_lines,
+    apply_discount,
+    audit,
+    cancel_order,
+    create_expense,
+    create_order,
+    move_stock,
+    pay_order,
+    quantity_text,
+    refund_order,
+    remove_order_line,
+    reprice_recipes,
+)
 
 
 def safely(call, *args):
     try:
         return call(*args)
     except (IntegrityError, OperationalError):
-        raise Conflict(_('Amal boshqa so‘rov bilan to‘qnashdi. Shu amalni qayta tekshiring.'))
+        raise Conflict(_('Amal boshqa so‘rov bilan to‘qnashdi. Shu amalni qayta tekshiring.')) from None
 
 
 class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
@@ -182,7 +228,7 @@ class ReceiptPrintView(APIView):
         except PrinterError as error:
             # Bu qo'lda bosilgan tugma, shuning uchun kassir sababini ko'rishi kerak.
             audit(request.user, 'print.failed', f'#{order.id} · qayta chop etilmadi · {error}')
-            raise Conflict(str(error))
+            raise Conflict(str(error)) from None
         audit(request.user, 'order.print', f'#{order.id} · {order.total} so‘m')
         return Response({'detail': f'#{order.id} cheki chop etildi.'})
 
@@ -317,7 +363,7 @@ def dashboard_period(params, today):
     try:
         days = int(params.get('days', 7))
     except (TypeError, ValueError):
-        raise serializers.ValidationError(_('Davr noto‘g‘ri.'))
+        raise serializers.ValidationError(_('Davr noto‘g‘ri.')) from None
     if days not in (7, 30):
         raise serializers.ValidationError(_('7 yoki 30 kunni tanlang, yoki oyni belgilang.'))
     start = today - timedelta(days=days - 1)

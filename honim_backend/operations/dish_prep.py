@@ -31,7 +31,7 @@ from users.permissions import OwnerOnly, SalesOnly
 
 from .models import DishPrep, OrderLine
 from .money import day_window
-from .services import audit, audit_many
+from .services import audit_many
 
 # Qoldiq tayyorlanganning shu ulushiga tushsa «kam qoldi» deb belgilanadi.
 # Mutanosib: 20 ta pishirilgan bo'lsa 4 tada, 5 ta bo'lsa 1 tada ogohlantiradi.

@@ -4,8 +4,10 @@ from rest_framework import mixins, viewsets
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from users.models import Branch, AuditEvent
+
+from users.models import AuditEvent, Branch
 from users.permissions import BranchMember, OwnerOnly
+
 from .models import Category, Dish
 from .serializers import CategorySerializer, DishSerializer
 

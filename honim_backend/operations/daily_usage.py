@@ -15,18 +15,18 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Sum
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.i18n import _
 from users.permissions import OwnerOnly, SalesOnly
 
 from .models import DailyUsage, Ingredient, StockMovement
 from .money import CENT, money, quantity, share
 from .services import audit, audit_many, quantity_text
-from core.i18n import _
 
 # Shu foizdan katta farq e'tibor talab qiladi.
 ALERT_SHARE = Decimal('15')

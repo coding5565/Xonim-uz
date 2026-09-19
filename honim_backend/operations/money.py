@@ -88,7 +88,7 @@ def parse_month(value):
         year, month = value.split('-')
         first = date(int(year), int(month), 1)
     except (TypeError, ValueError):
-        raise serializers.ValidationError(_('Oy noto‘g‘ri. Format: YYYY-MM.'))
+        raise serializers.ValidationError(_('Oy noto‘g‘ri. Format: YYYY-MM.')) from None
     if not 2000 <= first.year <= 2100:
         raise serializers.ValidationError(_('Oy noto‘g‘ri. Format: YYYY-MM.'))
     return first

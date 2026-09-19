@@ -5,7 +5,6 @@ from catalog.models import Category, Dish
 from operations.models import DishPrep, Order, OrderLine
 from users.models import Branch
 
-
 MENU = [
     ('Mantilar', [('O‘rama manti', 13000, '1 dona'), ('Bozor manti', 7500, '1 dona'), ('Qovoq manti', 7000, '1 dona'), ('Ko‘k manti', 7000, '1 dona'), ('Oddiy manti', 10000, '1 dona')]),
     ('Milliy taomlar', [('Tuxum barak', 40000, '1 porsiya'), ('Uyg‘ur', 11000, '1 porsiya'), ('Qurtoba', 65000, '1 porsiya'), ('Mastava', 35000, '1 porsiya'), ('Chuchvara', 35000, '1 porsiya'), ('Ugra', 35000, '1 porsiya')]),
