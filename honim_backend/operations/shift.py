@@ -17,7 +17,7 @@ from rest_framework import serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from users.permissions import ManagerOnly, SalesOnly
+from users.permissions import OwnerOnly, SalesOnly
 
 from .models import SALE_PAYMENT_LABELS, Expense, Order, ShiftClose
 from .money import day_window, money
@@ -161,7 +161,7 @@ class ShiftView(APIView):
 class ShiftHistoryView(APIView):
     """Yopilgan kunlar tarixi — farq qayerda paydo bo‘lganini ko‘rish uchun."""
 
-    permission_classes = [ManagerOnly]
+    permission_classes = [OwnerOnly]
 
     def get(self, request):
         rows = ShiftClose.objects.filter(branch=request.user.branch).select_related('actor')[:60]

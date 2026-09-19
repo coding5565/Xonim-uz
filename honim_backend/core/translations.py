@@ -5,6 +5,8 @@ ishlayveradi: o'zbekchasi ko'rinadi.
 """
 
 RU = {
+    'Ofitsiant topilmadi.': 'Официант не найден.',
+    'Bu ismli ofitsiant allaqachon bor.': 'Официант с таким именем уже есть.',
     'Nom bo‘sh bo‘lishi mumkin emas.': 'Название не может быть пустым.',
     'Suhbat topilmadi.':
         'Диалог не найден.',
@@ -126,6 +128,8 @@ RU = {
 
 
 EN = {
+    'Ofitsiant topilmadi.': 'Waiter not found.',
+    'Bu ismli ofitsiant allaqachon bor.': 'A waiter with that name already exists.',
     'Nom bo‘sh bo‘lishi mumkin emas.': 'The name cannot be empty.',
     'Suhbat topilmadi.':
         'Chat not found.',

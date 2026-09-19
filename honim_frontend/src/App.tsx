@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
-  ArrowUpRight, BarChart3, Banknote, Bot, ChefHat, ChevronRight, Command, History, LayoutDashboard, LogOut, Menu, PiggyBank,
+  ArrowUpRight, BarChart3, Banknote, Bot, ChefHat, ChevronRight, Command, ConciergeBell, History, LayoutDashboard, LogOut, Menu, PiggyBank,
   LayoutGrid, Moon, Package, PanelLeftClose, ReceiptText, Settings2, ShoppingBag, Store, Sun, Users, UtensilsCrossed, Wallet,
 } from 'lucide-react'
 import { api } from './api'
@@ -23,25 +23,25 @@ interface NavItem {
 const navItems: NavItem[] = [
   { path: '/', name: 'Umumiy holat', icon: LayoutDashboard, roles: ['owner'] },
   { path: '/finance', name: 'Umumiy moliya', icon: PiggyBank, roles: ['owner'] },
-  { path: '/sales', name: 'Sotuv', icon: Store, roles: ['owner', 'admin', 'cashier'] },
-  { path: '/pos', name: 'Kassa', icon: ShoppingBag, roles: ['owner', 'admin', 'cashier'], badge: 'POS' },
-  { path: '/orders', name: 'Buyurtmalar', icon: ReceiptText, roles: ['owner', 'admin', 'cashier'] },
-  { path: '/reports', name: 'Savdo hisobotlari', icon: BarChart3, roles: ['owner', 'admin'] },
+  { path: '/sales', name: 'Sotuv', icon: Store, roles: ['owner', 'cashier'] },
+  { path: '/pos', name: 'Kassa', icon: ShoppingBag, roles: ['owner', 'cashier'], badge: 'POS' },
+  { path: '/orders', name: 'Buyurtmalar', icon: ReceiptText, roles: ['owner', 'cashier'] },
+  { path: '/reports', name: 'Savdo hisobotlari', icon: BarChart3, roles: ['owner'] },
   { path: '/assistant', name: 'AI yordamchi', icon: Bot, roles: ['owner'] },
-  { path: '/kitchen', name: 'Oshxona', icon: ChefHat, roles: ['owner', 'admin', 'kitchen'], badge: 'KDS' },
-  { path: '/tables', name: 'Stollar', icon: LayoutGrid, roles: ['owner', 'admin'] },
-  { path: '/catalog', name: 'Menyu boshqaruvi', icon: UtensilsCrossed, roles: ['owner', 'admin'] },
-  { path: '/expenses', name: 'Xarajatlar', icon: Wallet, roles: ['owner', 'admin'] },
-  { path: '/inventory', name: 'Ombor va sarf', icon: Package, roles: ['owner', 'admin'] },
-  { path: '/recipes', name: 'Retsept va foyda', icon: BarChart3, roles: ['owner', 'admin'] },
+  { path: '/kitchen', name: 'Oshxona', icon: ChefHat, roles: ['owner', 'kitchen'], badge: 'KDS' },
+  { path: '/tables', name: 'Stollar', icon: LayoutGrid, roles: ['owner', 'cashier'] },
+  { path: '/catalog', name: 'Menyu boshqaruvi', icon: UtensilsCrossed, roles: ['owner'] },
+  { path: '/expenses', name: 'Xarajatlar', icon: Wallet, roles: ['owner', 'cashier'] },
+  { path: '/inventory', name: 'Ombor va sarf', icon: Package, roles: ['owner', 'cashier'] },
+  { path: '/recipes', name: 'Retsept va foyda', icon: BarChart3, roles: ['owner'] },
   { path: '/staff', name: 'Xodimlar', icon: Users, roles: ['owner'] },
+  { path: '/waiters', name: 'Ofitsiantlar', icon: ConciergeBell, roles: ['owner'] },
   { path: '/payroll', name: 'Oyliklar', icon: Banknote, roles: ['owner'] },
   { path: '/activity', name: 'Harakatlar', icon: History, roles: ['owner'] },
 ]
 
 function roleName(role: Role | undefined) {
   if (role === 'owner') return 'Superadmin'
-  if (role === 'admin') return 'Admin'
   if (role === 'kitchen') return 'Oshxona'
   return 'Kassir'
 }

@@ -20,7 +20,7 @@ from rest_framework import serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from users.permissions import ManagerOnly
+from users.permissions import OwnerOnly
 
 from .models import Ingredient, StockMovement
 from .money import money, quantity, share
@@ -219,7 +219,7 @@ def build_usage(user, filters):
 class StockUsageView(APIView):
     """Masalliqlar sarfi: kunlik, oylik va ikki sana orasidagi kesim."""
 
-    permission_classes = [ManagerOnly]
+    permission_classes = [OwnerOnly]
 
     def get(self, request):
         filters = UsageFilters(data=request.query_params, context={'request': request})

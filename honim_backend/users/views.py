@@ -209,7 +209,7 @@ class AuditView(APIView):
 class StaffCreateInput(serializers.Serializer):
     name = serializers.CharField(max_length=150)
     username = serializers.RegexField(r'^[\w.@+-]+$', min_length=3, max_length=150)
-    role = serializers.ChoiceField(choices=[User.Role.ADMIN, User.Role.CASHIER, User.Role.KITCHEN])
+    role = serializers.ChoiceField(choices=[User.Role.CASHIER, User.Role.KITCHEN])
     password = serializers.CharField(min_length=12, max_length=128, trim_whitespace=False, write_only=True)
     phone = serializers.CharField(max_length=30, allow_blank=True, default='')
     salary = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal('0'), default=0)
@@ -228,7 +228,7 @@ class StaffCreateInput(serializers.Serializer):
 
 class StaffUpdateInput(serializers.Serializer):
     name = serializers.CharField(max_length=150, required=False)
-    role = serializers.ChoiceField(choices=[User.Role.ADMIN, User.Role.CASHIER, User.Role.KITCHEN], required=False)
+    role = serializers.ChoiceField(choices=[User.Role.CASHIER, User.Role.KITCHEN], required=False)
     phone = serializers.CharField(max_length=30, allow_blank=True, required=False)
     salary = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal('0'), required=False)
     hired_at = serializers.DateField(allow_null=True, required=False)

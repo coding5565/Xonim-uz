@@ -28,7 +28,7 @@ from rest_framework.views import APIView
 from catalog.models import Dish
 from users.permissions import OwnerOnly
 
-from .models import SALE_PAYMENT_LABELS, Expense, Ingredient, Order, OrderLine, SalaryPayment, StockMovement
+from .models import SALE_CHANNEL_LABELS, SALE_PAYMENT_LABELS, Expense, Ingredient, Order, OrderLine, SalaryPayment, StockMovement
 from .money import MONEY, day_window, money, month_key, month_label, next_month, percent, short_label
 from core.i18n import _
 
@@ -208,6 +208,16 @@ def build_finance(branch, start, end, today):
     # Expense.category erkin matn, shuning uchun 'Ish haqi' deb qo'lda yozilgan
     # qator oylik hisobiga kirib ketmasligi kerak — u alohida anomaliya sifatida
     # ko'rsatiladi.
+    # Kanal kesimi: zal, olib ketish, Uzum, Yandex — alohida va jami.
+    channels = [{
+        'channel': row['channel'],
+        'label': SALE_CHANNEL_LABELS.get(row['channel'], row['channel']),
+        'revenue': money(row['total']),
+        'orders': row['count'],
+        'share': percent(row['total'], revenue),
+        'delivery': row['channel'] in ('uzum', 'yandex'),
+    } for row in paid.values('channel').annotate(total=Sum('total'), count=Count('id')).order_by('-total')]
+
     salary_spend = spend.filter(salary_payment__isnull=False).aggregate(
         total=Coalesce(Sum('amount'), Decimal('0')), count=Count('id'),
     )
@@ -260,6 +270,7 @@ def build_finance(branch, start, end, today):
         },
         'expenses': categories,
         'methods': methods,
+        'channels': channels,
         'salary': {
             'total': money(salary_spend['total']),
             'payments': salary_spend['count'],

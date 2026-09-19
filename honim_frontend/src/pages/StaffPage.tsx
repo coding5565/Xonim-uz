@@ -11,7 +11,7 @@ interface Staff {
   id: number
   name: string
   username: string
-  role: 'owner' | 'admin' | 'cashier' | 'kitchen'
+  role: 'owner' | 'cashier' | 'kitchen'
   active: boolean
   phone: string
   salary: string
@@ -62,7 +62,7 @@ interface PayForm {
 }
 
 const roleName = (role: string) =>
-  role === 'owner' ? 'Superadmin' : role === 'admin' ? 'Admin' : role === 'kitchen' ? 'Oshxona' : 'Kassir'
+  role === 'owner' ? 'Superadmin' : role === 'kitchen' ? 'Oshxona' : 'Kassir'
 
 export default function StaffPage() {
   const { t, tn } = useI18n()
@@ -79,10 +79,10 @@ export default function StaffPage() {
   const [error, setError] = useState('')
   const [formError, setFormError] = useState('')
   const [createForm, setCreateForm] = useState<CreateForm>({
-    name: '', username: '', role: 'admin', password: '', phone: '', salary: '', hired_at: today(), notes: '',
+    name: '', username: '', role: 'cashier', password: '', phone: '', salary: '', hired_at: today(), notes: '',
   })
   const [editForm, setEditForm] = useState<EditForm>({
-    name: '', role: 'admin', phone: '', salary: '', hired_at: '', notes: '', active: true,
+    name: '', role: 'cashier', phone: '', salary: '', hired_at: '', notes: '', active: true,
   })
   const [payForm, setPayForm] = useState<PayForm>({
     period: currentMonth, amount: '', payment_method: 'cash', paid_on: today(), note: '',
@@ -114,7 +114,7 @@ export default function StaffPage() {
 
   function startCreate() {
     setCreateForm({
-      name: '', username: '', role: 'admin', password: '', phone: '', salary: '', hired_at: today(), notes: '',
+      name: '', username: '', role: 'cashier', password: '', phone: '', salary: '', hired_at: today(), notes: '',
     })
     setFormError('')
     setCreateOpen(true)

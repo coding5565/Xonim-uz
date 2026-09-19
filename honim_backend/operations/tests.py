@@ -8,7 +8,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 from users.models import AuditEvent, Branch, User
 from catalog.models import Category, Dish
-from .models import AssistantChat, AssistantMessage, DailyUsage, Order, OrderLine, Expense, Ingredient, Recipe, RecipeLine, SalaryPayment, ShiftClose, StockMovement, Table
+from .models import AssistantChat, AssistantMessage, DailyUsage, Order, OrderLine, Expense, Ingredient, Recipe, RecipeLine, SalaryPayment, ShiftClose, StockMovement, Table, Waiter
 from .money import money, percent, quantity, share
 from .services import append_order_lines, create_order, move_stock, Conflict
 
@@ -48,27 +48,42 @@ class WorkflowTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertNotIn(category.id, [item['id'] for item in self.client.get('/api/v1/categories/').data['results']])
 
-    def test_cashier_cannot_edit_menu_or_access_finance(self):
+    def test_cashier_runs_the_day_but_does_not_set_the_rules(self):
         self.client.force_authenticate(self.cashier)
+        # Kundalik ish — kassirda: xarajat, ombor, kunlik sarf, stollar.
+        self.assertEqual(self.client.get('/api/v1/expenses/').status_code, 200)
+        self.assertEqual(self.client.get('/api/v1/ingredients/').status_code, 200)
+        self.assertEqual(self.client.get('/api/v1/stock/').status_code, 200)
+        self.assertEqual(self.client.get('/api/v1/daily-usage/').status_code, 200)
+        self.assertEqual(self.client.post('/api/v1/tables/', {'number': 77}, format='json').status_code, 201)
+        # Qoida va nazorat — superadminda.
         self.assertEqual(self.client.post('/api/v1/categories/', {'name': 'No'}).status_code, 403)
+        self.assertEqual(self.client.get('/api/v1/recipes/').status_code, 403)
         self.assertEqual(self.client.get('/api/v1/dashboard/').status_code, 403)
-        self.assertEqual(self.client.get('/api/v1/expenses/').status_code, 403)
+        self.assertEqual(self.client.get('/api/v1/finance/').status_code, 403)
         self.assertEqual(self.client.get('/api/v1/staff/').status_code, 403)
+        self.assertEqual(self.client.get('/api/v1/shift/history/').status_code, 403)
+        self.assertEqual(self.client.get('/api/v1/daily-usage/compare/').status_code, 403)
 
-    def test_only_owner_creates_admin_and_password_is_never_returned(self):
+    def test_only_owner_creates_staff_and_password_is_never_returned(self):
         response = self.client.post('/api/v1/staff/', {
-            'name': 'Filial admini', 'username': 'branch_admin',
-            'role': 'admin', 'password': 'Safe-test-password-48!'
+            'name': 'Yangi kassir', 'username': 'branch_cashier',
+            'role': 'cashier', 'password': 'Safe-test-password-48!'
         }, format='json')
         self.assertEqual(response.status_code, 201)
         self.assertNotIn('password', response.data)
-        created = User.objects.get(username='branch_admin')
+        created = User.objects.get(username='branch_cashier')
         self.assertTrue(created.check_password('Safe-test-password-48!'))
         self.assertEqual(created.branch, self.branch)
+        # «Admin» roli olib tashlandi — uni tanlab bo'lmaydi.
+        self.assertEqual(self.client.post('/api/v1/staff/', {
+            'name': 'Eski rol', 'username': 'old_admin',
+            'role': 'admin', 'password': 'Safe-test-password-50!'
+        }, format='json').status_code, 400)
         self.client.force_authenticate(created)
         self.assertEqual(self.client.post('/api/v1/staff/', {
-            'name': 'No', 'username': 'no_admin',
-            'role': 'admin', 'password': 'Safe-test-password-49!'
+            'name': 'No', 'username': 'no_staff',
+            'role': 'cashier', 'password': 'Safe-test-password-49!'
         }, format='json').status_code, 403)
 
     def test_owner_updates_employee_and_salary_payment_hits_finance_once(self):
@@ -270,9 +285,7 @@ class WorkflowTests(TestCase):
         freed = next(row for row in self.client.get('/api/v1/tables/').data['results'] if row['id'] == table.id)
         self.assertIsNone(freed['open_order'])
 
-        # Stolni faqat admin qo'sha oladi, kassir ro'yxatni ko'radi xolos.
-        self.assertEqual(self.client.post('/api/v1/tables/', {'number': 99}, format='json').status_code, 403)
-        self.client.force_authenticate(self.owner)
+        # Stol endi kassirda: zalni qayta joylash kundalik ish.
         self.assertEqual(self.client.post('/api/v1/tables/', {'number': 99}, format='json').status_code, 201)
         self.assertEqual(self.client.post('/api/v1/tables/', {'number': 99}, format='json').status_code, 400)
 
@@ -512,9 +525,7 @@ class WorkflowTests(TestCase):
             self.assertIn('xl/worksheets/sheet4.xml', workbook.namelist())
             self.assertIn('Tort'.encode(), workbook.read('xl/worksheets/sheet4.xml'))
 
-        admin = User.objects.create_user('report_admin', password='Safe-test-password-52!', role='admin', branch=self.branch)
-        self.client.force_authenticate(admin)
-        self.assertEqual(self.client.get(url).status_code, 200)
+        # Savdo hisoboti endi faqat superadminda.
         self.client.force_authenticate(self.cashier)
         self.assertEqual(self.client.get(url).status_code, 403)
         self.client.force_authenticate(self.kitchen)
@@ -1216,7 +1227,8 @@ class DailyUsageTests(TestCase):
     def setUp(self):
         self.branch = Branch.objects.create(name='One', slug='one')
         self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
-        self.admin = User.objects.create_user('admin', password='test-only-long-password', role='admin', branch=self.branch, first_name='Admin')
+        # Kunlik sarfni endi kassir kiritadi — «admin» roli olib tashlandi.
+        self.admin = User.objects.create_user('admin', password='test-only-long-password', role='cashier', branch=self.branch, first_name='Admin')
         self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch)
         self.category = Category.objects.create(branch=self.branch, name='Taom')
         self.dish = Dish.objects.create(branch=self.branch, category=self.category, name='Manti', price=Decimal('12000'))
@@ -1299,7 +1311,7 @@ class DailyUsageTests(TestCase):
             'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': 'cash',
             'lines': [{'dish': self.dish.id, 'quantity': 100, 'note': ''}],
         })
-        # Admin esa 2 kg go'sht va 4 kg kartoshka ketgan deb yozdi.
+        # Kassir esa 2 kg go'sht va 4 kg kartoshka ketgan deb yozdi.
         self.report([
             {'ingredient': self.meat.id, 'quantity': '2', 'note': ''},
             {'ingredient': self.potato.id, 'quantity': '4', 'note': ''},
@@ -1337,13 +1349,22 @@ class DailyUsageTests(TestCase):
         self.assertEqual(data['summary']['alerts'], 0)
         self.assertGreater(data['summary']['missing_days'], 0)
 
-    def test_only_managers_write_and_only_owner_compares(self):
+    def test_the_cashier_writes_but_only_the_owner_compares(self):
         cashier = APIClient()
         cashier.force_authenticate(self.cashier)
-        self.assertEqual(cashier.get('/api/v1/daily-usage/').status_code, 403)
-        self.assertEqual(cashier.post('/api/v1/daily-usage/', {'date': str(self.today), 'lines': []}, format='json').status_code, 403)
-        # Admin kiritadi, lekin solishtirishni ko'rmaydi — bu superadmin nazorati.
-        self.assertEqual(self.client.get('/api/v1/daily-usage/compare/').status_code, 403)
+        # Kunlik sarfni kassir kiritadi.
+        self.assertEqual(cashier.get('/api/v1/daily-usage/').status_code, 200)
+        self.assertEqual(cashier.post('/api/v1/daily-usage/', {
+            'date': str(self.today),
+            'lines': [{'ingredient': self.potato.id, 'quantity': '3', 'note': ''}],
+        }, format='json').status_code, 201)
+        # Lekin solishtirishni ko'rmaydi — bu uning ustidan nazorat.
+        self.assertEqual(cashier.get('/api/v1/daily-usage/compare/').status_code, 403)
+        # Oshxona umuman kira olmaydi.
+        kitchen = APIClient()
+        kitchen.force_authenticate(User.objects.create_user(
+            'oshxona-x', password='test-only-long-password', role='kitchen', branch=self.branch))
+        self.assertEqual(kitchen.get('/api/v1/daily-usage/').status_code, 403)
         owner = APIClient()
         owner.force_authenticate(self.owner)
         self.assertEqual(owner.get('/api/v1/daily-usage/compare/').status_code, 200)
@@ -1355,7 +1376,7 @@ class FullSetupFlowTests(TestCase):
     def setUp(self):
         self.branch = Branch.objects.create(name='One', slug='one')
         self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
-        self.admin = User.objects.create_user('admin', password='test-only-long-password', role='admin', branch=self.branch, first_name='Admin')
+        self.admin = User.objects.create_user('admin', password='test-only-long-password', role='cashier', branch=self.branch, first_name='Admin')
         self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch)
         self.category = Category.objects.create(branch=self.branch, name='Milliy taomlar')
         self.client = APIClient()
@@ -1891,20 +1912,17 @@ class DiscountTests(TestCase):
         self.assertEqual(order.total, Decimal('200000.00'))
         self.assertEqual(order.discount_reason, '')
 
-    def test_cashier_cannot_give_more_than_the_limit_but_a_manager_can(self):
+    def test_a_cashier_may_discount_any_amount_but_it_is_always_recorded(self):
         order = self.open_bill()  # 200 000
-        # 25% — kassir chegarasidan yuqori.
-        refused = self.discount(order, 50000)
-        self.assertEqual(refused.status_code, 409)
-        order.refresh_from_db()
-        self.assertEqual(order.discount, Decimal('0.00'))
-
-        owner = APIClient()
-        owner.force_authenticate(self.owner)
-        allowed = self.discount(order, 50000, reason='Rahbar qarori', client=owner)
+        # Cheklov yo'q — egasining qarori. Yagona nazorat jurnal.
+        allowed = self.discount(order, 50000, reason='Doimiy mijoz')
         self.assertEqual(allowed.status_code, 200)
         order.refresh_from_db()
         self.assertEqual(order.total, Decimal('150000.00'))
+        entry = AuditEvent.objects.get(action='order.discount')
+        self.assertEqual(entry.actor, self.cashier)
+        self.assertIn('25.0%', entry.description)
+        self.assertIn('Doimiy mijoz', entry.description)
 
     def test_a_reason_is_required_and_a_full_discount_is_refused(self):
         order = self.open_bill()
@@ -2055,3 +2073,181 @@ class AssistantChatTests(TestCase):
         client.force_authenticate(self.admin)
         self.assertEqual(client.get('/api/v1/assistant/chats/').status_code, 403)
         self.assertEqual(client.post('/api/v1/assistant/chat/', {'question': 'Salom'}, format='json').status_code, 403)
+
+
+class WaiterTests(TestCase):
+    """Ofitsiant va uning ulushi: foizni egasi belgilaydi, kassir bog'laydi."""
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.category = Category.objects.create(branch=self.branch, name='Taom')
+        self.dish = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('50000'))
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+
+    def add_waiter(self, name='Fazliddin', commission='5'):
+        return self.client.post('/api/v1/waiters/', {
+            'name': name, 'phone': '', 'commission': commission, 'active': True,
+        }, format='json')
+
+    def sell(self, waiter_id=None, quantity=4, channel='hall'):
+        body = {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': 'cash',
+            'channel': channel,
+            'lines': [{'dish': self.dish.id, 'quantity': quantity, 'note': ''}],
+        }
+        if waiter_id:
+            body['waiter_id'] = waiter_id
+        return create_order(self.cashier, body)
+
+    def test_owner_adds_a_waiter_and_sets_the_share(self):
+        response = self.add_waiter()
+        self.assertEqual(response.status_code, 201)
+        waiter = Waiter.objects.get()
+        self.assertEqual(waiter.name, 'Fazliddin')
+        self.assertEqual(waiter.commission, Decimal('5.00'))
+        self.assertIn('5', AuditEvent.objects.get(action='waiter.create').description)
+
+    def test_a_cashier_may_pick_a_waiter_but_not_change_the_share(self):
+        waiter = self.add_waiter().data
+        cashier = APIClient()
+        cashier.force_authenticate(self.cashier)
+        # Ro'yxatni ko'radi — buyurtmaga bog'lash uchun kerak.
+        self.assertEqual(cashier.get('/api/v1/waiters/').status_code, 200)
+        # Lekin foizni o'zgartira olmaydi: bu pul masalasi.
+        self.assertEqual(
+            cashier.patch(f'/api/v1/waiters/{waiter["id"]}/', {'commission': '50'}, format='json').status_code, 403)
+        self.assertEqual(cashier.post('/api/v1/waiters/', {'name': 'O‘zi', 'commission': '90'}, format='json').status_code, 403)
+        self.assertEqual(Waiter.objects.get().commission, Decimal('5.00'))
+
+    def test_the_share_is_frozen_at_the_moment_of_sale(self):
+        waiter = self.add_waiter(commission='5').data
+        order = self.sell(waiter_id=waiter['id'])          # 200 000 × 5% = 10 000
+        self.assertEqual(order.waiter_commission, Decimal('5.00'))
+        self.assertEqual(order.waiter, 'Fazliddin')
+
+        # Foiz keyin oshirilsa ham o'tgan buyurtma o'zgarmaydi.
+        self.client.patch(f'/api/v1/waiters/{waiter["id"]}/', {'commission': '10'}, format='json')
+        order.refresh_from_db()
+        self.assertEqual(order.waiter_commission, Decimal('5.00'))
+        # Yangi buyurtma yangi foizda ketadi.
+        later = self.sell(waiter_id=waiter['id'])
+        self.assertEqual(later.waiter_commission, Decimal('10.00'))
+
+    def test_earnings_use_each_order_own_share(self):
+        waiter = self.add_waiter(commission='5').data
+        self.sell(waiter_id=waiter['id'])                       # 200 000 @ 5% = 10 000
+        self.client.patch(f'/api/v1/waiters/{waiter["id"]}/', {'commission': '10'}, format='json')
+        self.sell(waiter_id=waiter['id'], quantity=2)           # 100 000 @ 10% = 10 000
+
+        today = timezone.localdate()
+        data = self.client.get(f'/api/v1/reports/waiters/?start={today}&end={today}').data
+        row = data['waiters'][0]
+        self.assertEqual(row['name'], 'Fazliddin')
+        self.assertEqual(row['orders'], 2)
+        self.assertEqual(row['revenue'], '300000.00')
+        # Har buyurtma o'z foizida: 10 000 + 10 000
+        self.assertEqual(row['fee'], '20000.00')
+        self.assertEqual(data['summary']['fees'], '20000.00')
+
+    def test_orders_without_a_waiter_are_shown_separately(self):
+        waiter = self.add_waiter().data
+        self.sell(waiter_id=waiter['id'])
+        self.sell()  # ofitsiantsiz
+        today = timezone.localdate()
+        summary = self.client.get(f'/api/v1/reports/waiters/?start={today}&end={today}').data['summary']
+        self.assertEqual(summary['revenue'], '200000.00')
+        self.assertEqual(summary['unassigned_revenue'], '200000.00')
+        self.assertEqual(summary['unassigned_orders'], 1)
+
+    def test_removing_a_waiter_keeps_the_sales_history(self):
+        waiter = self.add_waiter().data
+        order = self.sell(waiter_id=waiter['id'])
+        self.assertEqual(self.client.delete(f'/api/v1/waiters/{waiter["id"]}/').status_code, 204)
+        # O'chirilmaydi — faolsizlantiriladi, buyurtma bog'liqligi saqlanadi.
+        self.assertFalse(Waiter.objects.get(pk=waiter['id']).active)
+        order.refresh_from_db()
+        self.assertEqual(order.waiter_ref_id, waiter['id'])
+        # Faolsiz ofitsiantni yangi buyurtmaga bog'lab bo'lmaydi.
+        with self.assertRaises(Exception):
+            self.sell(waiter_id=waiter['id'])
+
+    def test_a_duplicate_name_is_refused(self):
+        self.add_waiter()
+        self.assertEqual(self.add_waiter().status_code, 400)
+        self.assertEqual(self.add_waiter(name='FAZLIDDIN').status_code, 400)
+
+    def test_the_share_must_stay_between_zero_and_a_hundred(self):
+        self.assertEqual(self.add_waiter(commission='-1').status_code, 400)
+        self.assertEqual(self.add_waiter(commission='101').status_code, 400)
+        self.assertEqual(self.add_waiter(commission='0').status_code, 201)
+
+
+class SalesChannelTests(TestCase):
+    """Uzum va Yandex savdosi zal savdosidan ajratiladi."""
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.category = Category.objects.create(branch=self.branch, name='Taom')
+        self.dish = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('50000'))
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+
+    def sell(self, channel, method, quantity=2):
+        return create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': method,
+            'channel': channel,
+            'lines': [{'dish': self.dish.id, 'quantity': quantity, 'note': ''}],
+        })
+
+    def test_a_hall_order_defaults_to_the_hall_channel(self):
+        order = create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': 'cash',
+            'lines': [{'dish': self.dish.id, 'quantity': 1, 'note': ''}],
+        })
+        self.assertEqual(order.channel, 'hall')
+
+    def test_finance_splits_the_channels_and_totals_them(self):
+        self.sell('hall', 'cash')        # 100 000
+        self.sell('uzum', 'uzum')        # 100 000
+        self.sell('yandex', 'yandex', 1)  # 50 000
+        data = self.client.get('/api/v1/finance/').data
+        rows = {row['channel']: row for row in data['channels']}
+        self.assertEqual(rows['hall']['revenue'], '100000.00')
+        self.assertEqual(rows['uzum']['revenue'], '100000.00')
+        self.assertEqual(rows['yandex']['revenue'], '50000.00')
+        self.assertTrue(rows['uzum']['delivery'])
+        self.assertFalse(rows['hall']['delivery'])
+        # Jami hamma kanalni qamraydi.
+        self.assertEqual(data['profit']['revenue'], '250000.00')
+
+    def test_delivery_money_never_lands_in_the_cash_drawer(self):
+        self.sell('hall', 'cash')      # 100 000 naqd
+        self.sell('uzum', 'uzum')      # 100 000 Uzum hisobiga
+        cashier = APIClient()
+        cashier.force_authenticate(self.cashier)
+        day = cashier.get('/api/v1/shift/').data
+        self.assertEqual(day['revenue'], '200000.00')
+        # Kassada faqat naqd bo'lishi kerak.
+        self.assertEqual(day['expected_cash'], '100000.00')
+
+    def test_the_sales_board_shows_the_channel_split(self):
+        self.sell('hall', 'cash')
+        self.sell('uzum', 'uzum')
+        today = timezone.localdate()
+        board = self.client.get(f'/api/v1/sales/board/?start={today}&end={today}').data
+        rows = {row['channel']: row for row in board['channels']}
+        self.assertEqual(sorted(rows), ['hall', 'uzum'])
+        self.assertEqual(rows['uzum']['orders'], 1)
+
+    def test_an_unknown_channel_is_refused(self):
+        response = self.client.post('/api/v1/orders/', {
+            'key': str(uuid4()), 'table': '', 'waiter': '', 'payment_method': 'cash',
+            'channel': 'telegram',
+            'lines': [{'dish': self.dish.id, 'quantity': 1, 'note': ''}],
+        }, format='json')
+        self.assertEqual(response.status_code, 400)

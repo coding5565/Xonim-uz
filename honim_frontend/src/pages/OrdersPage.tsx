@@ -14,7 +14,7 @@ const statusTone = (status: Order['status']) =>
 export default function OrdersPage() {
   const { user } = useSession()
   const { t, tn } = useI18n()
-  const manager = user?.role === 'owner' || user?.role === 'admin'
+  const manager = user?.role === 'owner'
   const [orders, setOrders] = useState<Order[]>([])
   const [filter, setFilter] = useState('all')
   const [query, setQuery] = useState('')

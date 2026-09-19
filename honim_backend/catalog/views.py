@@ -5,14 +5,14 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from users.models import Branch, AuditEvent
-from users.permissions import BranchMember, ManagerOnly
+from users.permissions import BranchMember, OwnerOnly
 from .models import Category, Dish
 from .serializers import CategorySerializer, DishSerializer
 
 
 class CatalogViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):
     def get_permissions(self):
-        return [BranchMember() if self.action in ('list', 'retrieve') else ManagerOnly()]
+        return [BranchMember() if self.action in ('list', 'retrieve') else OwnerOnly()]
 
     def get_queryset(self):
         return self.queryset.filter(branch=self.request.user.branch)

@@ -8,7 +8,7 @@ import type { ShiftDay, ShiftHistory } from '../types'
 export default function ShiftClosePanel() {
   const { user } = useSession()
   const { t, tn } = useI18n()
-  const manager = user?.role === 'owner' || user?.role === 'admin'
+  const manager = user?.role === 'owner'
   const [day, setDay] = useState<ShiftDay>()
   const [history, setHistory] = useState<ShiftHistory>()
   const [counted, setCounted] = useState('')

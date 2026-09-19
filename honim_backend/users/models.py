@@ -10,9 +10,11 @@ class Branch(models.Model):
 class User(AbstractUser):
     class Role(models.TextChoices):
         OWNER = 'owner', 'Superadmin'
-        ADMIN = 'admin', 'Admin'
         CASHIER = 'cashier', 'Kassir'
         KITCHEN = 'kitchen', 'Oshxona'
+        # «Admin» roli olib tashlandi: kundalik ishlari kassirga, nazorati
+        # superadminga o'tdi. Eski hisoblar migratsiya bilan kassirga
+        # o'tkaziladi — o'chirilmaydi, chunki jurnal ularga bog'langan.
 
     role = models.CharField(max_length=12, choices=Role.choices, default=Role.CASHIER)
     branch = models.ForeignKey(Branch, on_delete=models.PROTECT, null=True)
@@ -55,6 +57,9 @@ AUDIT_LABELS = {
     'recipe.create': 'Retsept yaratildi',
     'recipe.update': 'Retsept yangilandi',
     'table.create': 'Stol qo‘shildi',
+    'waiter.create': 'Ofitsiant qo‘shildi',
+    'waiter.update': 'Ofitsiant ma’lumoti o‘zgardi',
+    'waiter.remove': 'Ofitsiant olib tashlandi',
     'table.update': 'Stol o‘zgartirildi',
     'table.remove': 'Stol olib tashlandi',
     'auth.login': 'Tizimga kirdi',
@@ -75,6 +80,7 @@ AUDIT_GROUPS = {
     'catalog': 'Menyu',
     'recipe': 'Retsept',
     'table': 'Stollar',
+    'waiter': 'Ofitsiantlar',
     'auth': 'Kirish-chiqish',
 }
 

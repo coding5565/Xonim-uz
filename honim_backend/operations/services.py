@@ -11,7 +11,7 @@ from rest_framework.exceptions import ValidationError, APIException
 from core.i18n import _
 from catalog.models import Dish
 from users.models import AuditEvent
-from .models import CLOSED_STATUSES, ORDER_STATUS_LABELS, SALE_PAYMENT_LABELS, Order, OrderLine, Expense, Ingredient, Recipe, RecipeLine, StockMovement, Table
+from .models import CLOSED_STATUSES, ORDER_STATUS_LABELS, SALE_PAYMENT_LABELS, Order, OrderLine, Expense, Ingredient, Recipe, RecipeLine, StockMovement, Table, Waiter
 from .printing import print_prep_tickets, print_receipt_quietly, print_void_ticket
 
 
@@ -191,8 +191,26 @@ def create_order(user, data):
             raise Conflict(_('Bu stolda ochiq hisob bor. Taomni o‘sha hisobga qo‘shing.'))
         table_text = str(table.number)
 
+    # Ofitsiant va uning foizi sotuv paytida muzlatiladi: keyin foiz
+    # o'zgarsa ham o'tgan buyurtmadagi ulush o'zgarmaydi.
+    waiter = None
+    waiter_text = data['waiter']
+    commission = Decimal('0')
+    if data.get('waiter_id'):
+        waiter = Waiter.objects.filter(branch=user.branch, pk=data['waiter_id'], active=True).first()
+        if not waiter:
+            raise ValidationError(_('Ofitsiant topilmadi.'))
+        waiter_text = waiter.name
+        commission = waiter.commission
+
     recipes = _recipes_for_dishes(user.branch, dishes)
-    order = Order.objects.create(branch=user.branch, cashier=user, key=data['key'], request_hash=fingerprint(data), table=table_text, table_ref=table, waiter=data['waiter'], total=total, status='paid' if paid else 'open', payment_method=data['payment_method'], paid_at=timezone.now() if paid else None)
+    order = Order.objects.create(
+        branch=user.branch, cashier=user, key=data['key'], request_hash=fingerprint(data),
+        table=table_text, table_ref=table, waiter=waiter_text, waiter_ref=waiter,
+        waiter_commission=commission, channel=data.get('channel', 'hall'),
+        total=total, status='paid' if paid else 'open',
+        payment_method=data['payment_method'], paid_at=timezone.now() if paid else None,
+    )
     for line in data['lines']:
         dish = dishes[line['dish']]
         recipe = recipes.get(dish.id)
@@ -385,11 +403,6 @@ def restore_order_stock(user, order):
     return len(rows)
 
 
-# Kassir shu foizgacha o'zi chegirma bera oladi; undan yuqorisi boshqaruv
-# qaroriga qoldiriladi. Cheksiz chegirma kassaga eng oson yo'l ochib qo'yardi.
-CASHIER_DISCOUNT_LIMIT = Decimal('20')
-
-
 @transaction.atomic
 def apply_discount(user, order_id, amount, reason):
     """Ochiq hisobga chegirma qo'yadi. Nol yuborilsa chegirma olib tashlanadi.
@@ -406,11 +419,8 @@ def apply_discount(user, order_id, amount, reason):
         raise ValidationError(_('To‘liq chegirma o‘rniga hisobni bekor qiling.'))
 
     percent = (amount / subtotal * 100) if subtotal else Decimal('0')
-    if user.role == 'cashier' and percent > CASHIER_DISCOUNT_LIMIT:
-        raise Conflict(
-            f'Kassir {CASHIER_DISCOUNT_LIMIT}% dan ortiq chegirma bera olmaydi. '
-            'Bundan kattasini admin kiritadi.'
-        )
+    # Chegirma miqdorida cheklov yo'q — egasining qarori. Yagona nazorat
+    # jurnal: kim, qancha va nima uchun bergani yozib boriladi.
     if amount and not reason:
         raise ValidationError(_('Chegirma sababini yozing.'))
 

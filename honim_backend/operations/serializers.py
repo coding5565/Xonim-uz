@@ -1,7 +1,7 @@
 from decimal import Decimal
 from django.utils import timezone
 from rest_framework import serializers
-from .models import SALE_PAYMENT_CHOICES, Order, OrderLine, Table, Expense, Ingredient, Recipe, RecipeLine, StockMovement
+from .models import SALE_CHANNELS, SALE_CHANNEL_LABELS, SALE_PAYMENT_CHOICES, Order, OrderLine, Table, Expense, Ingredient, Recipe, RecipeLine, StockMovement, Waiter
 from core.i18n import _
 
 
@@ -42,11 +42,30 @@ class TableSerializer(serializers.ModelSerializer):
         return value
 
 
+class WaiterSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Waiter
+        fields = ['id', 'name', 'phone', 'commission', 'active']
+        extra_kwargs = {'commission': {'min_value': 0, 'max_value': 100}}
+
+    def validate_name(self, value):
+        branch = self.context['request'].user.branch
+        query = Waiter.objects.filter(branch=branch, name__iexact=value)
+        if self.instance:
+            query = query.exclude(pk=self.instance.pk)
+        if query.exists():
+            raise serializers.ValidationError(_('Bu ismli ofitsiant allaqachon bor.'))
+        return value
+
+
 class OrderInput(serializers.Serializer):
     key = serializers.UUIDField()
     table = serializers.CharField(max_length=40, allow_blank=True, default='')
     table_id = serializers.IntegerField(min_value=1, required=False, allow_null=True)
     waiter = serializers.CharField(max_length=100, allow_blank=True, default='')
+    waiter_id = serializers.IntegerField(min_value=1, required=False, allow_null=True)
+    # Buyurtma qayerdan kelgani: zal, olib ketish yoki yetkazib berish platformasi.
+    channel = serializers.ChoiceField(choices=[key for key, _ in SALE_CHANNELS], default='hall')
     lines = LineInput(many=True, allow_empty=False)
     payment_method = serializers.ChoiceField(choices=SALE_PAYMENT_CHOICES + [''], default='')
 
@@ -81,12 +100,21 @@ class OrderSerializer(serializers.ModelSerializer):
     lines = OrderLineSerializer(many=True, read_only=True)
     cashier_name = serializers.CharField(source='cashier.first_name', read_only=True)
     status_label = serializers.CharField(source='get_status_display', read_only=True)
+    channel_label = serializers.SerializerMethodField()
+    waiter_fee = serializers.SerializerMethodField()
     voided_by_name = serializers.CharField(source='voided_by.first_name', read_only=True, default='')
     print_problems = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
-        fields = ['id', 'table', 'waiter', 'status', 'status_label', 'total', 'discount', 'discount_reason', 'payment_method', 'created_at', 'paid_at', 'preparation_status', 'started_at', 'ready_at', 'served_at', 'cashier_name', 'lines', 'print_problems', 'void_reason', 'voided_at', 'voided_by_name']
+        fields = ['id', 'table', 'waiter', 'waiter_ref', 'waiter_commission', 'waiter_fee', 'channel', 'channel_label', 'status', 'status_label', 'total', 'discount', 'discount_reason', 'payment_method', 'created_at', 'paid_at', 'preparation_status', 'started_at', 'ready_at', 'served_at', 'cashier_name', 'lines', 'print_problems', 'void_reason', 'voided_at', 'voided_by_name']
+
+    def get_channel_label(self, obj):
+        return SALE_CHANNEL_LABELS.get(obj.channel, obj.channel)
+
+    def get_waiter_fee(self, obj):
+        """Ofitsiant ulushi: sotuv paytida muzlatilgan foizdan hisoblanadi."""
+        return str((obj.total * obj.waiter_commission / 100).quantize(Decimal('0.01')))
 
     def get_print_problems(self, obj):
         """Talon chiqmagan bo'lsa kassir buni ko'rishi shart, aks holda ovqat pishmay qoladi."""

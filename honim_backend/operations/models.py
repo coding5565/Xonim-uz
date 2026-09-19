@@ -43,6 +43,45 @@ class TableSeating(models.TextChoices):
     CHAIR = 'chair', 'Stulli'
 
 
+# Buyurtma qayerdan kelgani. To'lov usulidan farqli: zaldagi mijoz ham Uzum
+# ilovasi bilan to'lashi mumkin, lekin u yetkazib berish buyurtmasi emas.
+SALE_CHANNELS = [
+    ('hall', 'Zal'),
+    ('takeaway', 'Olib ketish'),
+    ('uzum', 'Uzum'),
+    ('yandex', 'Yandex'),
+]
+SALE_CHANNEL_LABELS = dict(SALE_CHANNELS)
+# Yetkazib berish platformalari — puli kassaga tushmaydi, hisobga o'tadi.
+DELIVERY_CHANNELS = ['uzum', 'yandex']
+
+
+class Waiter(models.Model):
+    """Ofitsiant va uning hisobdan oladigan ulushi.
+
+    Ulush foizda yuriladi: ko'proq sotgan ko'proq oladi. Foizni superadmin
+    belgilaydi, kassir esa buyurtmaga ofitsiantni bog'laydi.
+    """
+
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT, related_name='waiters')
+    name = models.CharField(max_length=80)
+    phone = models.CharField(max_length=30, blank=True)
+    # Hisob summasidan necha foiz. 0 bo'lsa ulush hisoblanmaydi.
+    commission = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name']
+        constraints = [
+            models.UniqueConstraint(fields=['branch', 'name'], name='waiter_branch_name'),
+            models.CheckConstraint(
+                condition=Q(commission__gte=0) & Q(commission__lte=100),
+                name='waiter_commission_range',
+            ),
+        ]
+
+
 class Table(models.Model):
     """Zaldagi stol. Kassir ekranining asosi: bo'sh yoki ochiq hisobi bor."""
 
@@ -75,7 +114,14 @@ class Order(models.Model):
     key = models.UUIDField()
     request_hash = models.CharField(max_length=64)
     table = models.CharField(max_length=40, blank=True)
+    # Matnli `waiter` eski yozuvlar uchun qoladi; yangi buyurtmalar
+    # ofitsiant kartasiga bog'lanadi va ulush shundan hisoblanadi.
     waiter = models.CharField(max_length=100, blank=True)
+    waiter_ref = models.ForeignKey(Waiter, on_delete=models.PROTECT, null=True, blank=True, related_name='orders')
+    # Sotuv paytidagi foiz muzlatiladi: keyin foiz o'zgarsa ham
+    # o'tgan buyurtmadagi ulush o'zgarmaydi.
+    waiter_commission = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    channel = models.CharField(max_length=10, default='hall', choices=SALE_CHANNELS)
     status = models.CharField(max_length=10, default='open', choices=ORDER_STATUSES)
     # `total` — mijoz to'laydigan summa, ya'ni chegirma AYRILGANDAN keyingi
     # qiymat. Tushum shu maydondan hisoblanadi, shuning uchun chegirma

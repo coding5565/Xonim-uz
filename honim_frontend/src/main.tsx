@@ -57,10 +57,10 @@ function Allow({ roles, children }: { roles: Role[]; children: React.ReactNode }
   return <>{children}</>
 }
 
-const managers: Role[] = ['owner', 'admin']
-const sales: Role[] = ['owner', 'admin', 'cashier']
-const kitchen: Role[] = ['owner', 'admin', 'kitchen']
-const staffed: Role[] = ['owner', 'admin', 'cashier']
+const owners: Role[] = ['owner']
+const sales: Role[] = ['owner', 'cashier']
+const kitchen: Role[] = ['owner', 'kitchen']
+const staffed: Role[] = ['owner', 'cashier']
 
 createRoot(document.getElementById('app')!).render(
   <StrictMode>
@@ -73,20 +73,20 @@ createRoot(document.getElementById('app')!).render(
           <Route element={<RequireAuth />}>
             <Route element={<App />}>
               <Route path="/" element={<Allow roles={['owner']}><DashboardPage /></Allow>} />
-              <Route path="/catalog" element={<Allow roles={managers}><CatalogPage /></Allow>} />
+              <Route path="/catalog" element={<Allow roles={owners}><CatalogPage /></Allow>} />
               <Route path="/sales" element={<Allow roles={sales}><SalesPage /></Allow>} />
               <Route path="/pos" element={<Allow roles={sales}><TablesPage /></Allow>} />
               <Route path="/pos/tezkor" element={<Allow roles={sales}><PosPage /></Allow>} />
               <Route path="/pos/stol/:tableId" element={<Allow roles={sales}><PosPage /></Allow>} />
               <Route path="/pos/hisob/:orderId" element={<Allow roles={sales}><PosPage /></Allow>} />
-              <Route path="/tables" element={<Allow roles={managers}><TablesAdminPage /></Allow>} />
+              <Route path="/tables" element={<Allow roles={sales}><TablesAdminPage /></Allow>} />
               <Route path="/orders" element={<Allow roles={sales}><OrdersPage /></Allow>} />
-              <Route path="/reports" element={<Allow roles={managers}><ReportsPage /></Allow>} />
+              <Route path="/reports" element={<Allow roles={owners}><ReportsPage /></Allow>} />
               <Route path="/assistant" element={<Allow roles={['owner']}><AssistantPage /></Allow>} />
               <Route path="/kitchen" element={<Allow roles={kitchen}><KitchenPage /></Allow>} />
-              <Route path="/expenses" element={<Allow roles={managers}><ExpensesPage /></Allow>} />
-              <Route path="/inventory" element={<Allow roles={managers}><InventoryPage /></Allow>} />
-              <Route path="/recipes" element={<Allow roles={managers}><RecipesPage /></Allow>} />
+              <Route path="/expenses" element={<Allow roles={sales}><ExpensesPage /></Allow>} />
+              <Route path="/inventory" element={<Allow roles={sales}><InventoryPage /></Allow>} />
+              <Route path="/recipes" element={<Allow roles={owners}><RecipesPage /></Allow>} />
               <Route path="/staff" element={<Allow roles={['owner']}><StaffPage /></Allow>} />
               <Route path="/activity" element={<Allow roles={['owner']}><ActivityPage /></Allow>} />
               <Route path="/payroll" element={<Allow roles={['owner']}><PayrollPage /></Allow>} />

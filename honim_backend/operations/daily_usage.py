@@ -21,7 +21,7 @@ from rest_framework import serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from users.permissions import ManagerOnly, OwnerOnly
+from users.permissions import OwnerOnly, SalesOnly
 
 from .models import DailyUsage, Ingredient, StockMovement
 from .money import CENT, money, quantity, share
@@ -252,7 +252,7 @@ def build_comparison(branch, start, end):
 class DailyUsageView(APIView):
     """Admin kunlik haqiqiy sarfni kiritadi va o‘z tarixini ko‘radi."""
 
-    permission_classes = [ManagerOnly]
+    permission_classes = [SalesOnly]
 
     def get(self, request):
         filters = DailyUsageFilters(data=request.query_params)

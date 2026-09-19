@@ -9,7 +9,7 @@ from rest_framework import mixins, serializers, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from users.models import AuditEvent
-from users.permissions import BranchMember, KitchenOnly, ManagerOnly, OwnerOnly, SalesOnly
+from users.permissions import BranchMember, KitchenOnly, OwnerOnly, SalesOnly
 from .models import ORDER_STATUSES, SALE_PAYMENT_CHOICES, SALE_PAYMENT_LABELS, Order, OrderLine, Table, Expense, Ingredient, Recipe, StockMovement
 from .money import money
 from .serializers import AppendLinesInput, OrderInput, OrderSerializer, TableSerializer, ExpenseSerializer, IngredientSerializer, MovementInput, MovementSerializer, RecipeSerializer
@@ -60,7 +60,7 @@ class TableViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Crea
     serializer_class = TableSerializer
 
     def get_permissions(self):
-        return [BranchMember() if self.action in ('list', 'retrieve') else ManagerOnly()]
+        return [BranchMember() if self.action in ('list', 'retrieve') else SalesOnly()]
 
     def get_queryset(self):
         # Ochiq hisob har stol kartasida ko'rsatiladi, shuning uchun oldindan olinadi.
@@ -139,7 +139,7 @@ class OrderCancelView(APIView):
 class OrderRefundView(APIView):
     """To‘langan hisobni qaytaradi. Faqat admin va superadmin."""
 
-    permission_classes = [ManagerOnly]
+    permission_classes = [OwnerOnly]
 
     def post(self, request, pk):
         data = VoidInput(data=request.data)
@@ -229,7 +229,7 @@ class KitchenStatusView(APIView):
 
 
 class ExpenseViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
-    permission_classes = [ManagerOnly]
+    permission_classes = [SalesOnly]
     serializer_class = ExpenseSerializer
 
     def get_queryset(self):
@@ -242,7 +242,7 @@ class ExpenseViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
 
 
 class IngredientViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):
-    permission_classes = [ManagerOnly]
+    permission_classes = [SalesOnly]
     serializer_class = IngredientSerializer
 
     def get_queryset(self):
@@ -276,7 +276,7 @@ class IngredientViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.U
 
 
 class RecipeViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.RetrieveModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):
-    permission_classes = [ManagerOnly]
+    permission_classes = [OwnerOnly]
     serializer_class = RecipeSerializer
 
     def get_queryset(self):
@@ -294,7 +294,7 @@ class RecipeViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.Retri
 
 
 class StockView(APIView):
-    permission_classes = [ManagerOnly]
+    permission_classes = [SalesOnly]
 
     def get(self, request):
         return Response(MovementSerializer(StockMovement.objects.filter(branch=request.user.branch).select_related('ingredient')[:100], many=True).data)
@@ -426,7 +426,7 @@ class SalesBoardView(APIView):
 
 
 class SalesReportView(APIView):
-    permission_classes = [ManagerOnly]
+    permission_classes = [OwnerOnly]
 
     def get(self, request):
         serializer = ReportFilters(data=request.query_params, context={'request': request})
@@ -435,7 +435,7 @@ class SalesReportView(APIView):
 
 
 class SalesReportExportView(APIView):
-    permission_classes = [ManagerOnly]
+    permission_classes = [OwnerOnly]
 
     def get(self, request):
         serializer = ReportFilters(data=request.query_params, context={'request': request})

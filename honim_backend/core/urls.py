@@ -15,6 +15,7 @@ from operations.views import (
 from operations.assistant_chats import AssistantChatDetailView, AssistantChatListView
 from operations.daily_usage import DailyUsageView, UsageComparisonView
 from operations.finance import FinanceView
+from operations.waiters import WaiterEarningsView, WaiterViewSet
 from operations.shift import ShiftHistoryView, ShiftView
 from operations.stock_usage import StockUsageView
 
@@ -26,6 +27,7 @@ router.register('expenses', ExpenseViewSet, basename='expense')
 router.register('ingredients', IngredientViewSet, basename='ingredient')
 router.register('recipes', RecipeViewSet, basename='recipe')
 router.register('tables', TableViewSet, basename='table')
+router.register('waiters', WaiterViewSet, basename='waiter')
 
 urlpatterns = [
     path('api/v1/', include(router.urls)),
@@ -54,6 +56,7 @@ urlpatterns = [
     path('api/v1/shift/history/', ShiftHistoryView.as_view()),
     path('api/v1/sales/board/', SalesBoardView.as_view()),
     path('api/v1/reports/sales/', SalesReportView.as_view()),
+    path('api/v1/reports/waiters/', WaiterEarningsView.as_view()),
     path('api/v1/reports/sales/export/', SalesReportExportView.as_view()),
     path('api/v1/stock/', StockView.as_view()),
     path('api/v1/stock/usage/', StockUsageView.as_view()),

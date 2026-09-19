@@ -11,7 +11,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from catalog.models import Category, Dish
-from .models import SALE_PAYMENT_LABELS, Order, OrderLine
+from .models import SALE_CHANNEL_LABELS, SALE_PAYMENT_LABELS, Order, OrderLine
 from core.i18n import _
 
 
@@ -278,6 +278,14 @@ def build_sales_board(user, filters):
          'orders': row['orders'], 'revenue': cash(row['revenue'])}
         for row in grouped('order__payment_method')
     ]
+    # Kanal kesimi: buyurtma qayerdan kelgani — zal, olib ketish, Uzum, Yandex.
+    channels = [
+        {'channel': row['order__channel'],
+         'label': SALE_CHANNEL_LABELS.get(row['order__channel'], row['order__channel']),
+         'orders': row['orders'], 'revenue': cash(row['revenue']),
+         'delivery': row['order__channel'] in ('uzum', 'yandex')}
+        for row in grouped('order__channel')
+    ]
     hours = [
         {'hour': row['hour'], 'orders': row['orders'], 'revenue': cash(row['revenue'])}
         for row in lines.annotate(hour=ExtractHour('order__paid_at')).values('hour')
@@ -314,6 +322,7 @@ def build_sales_board(user, filters):
             'peak_hour_revenue': busiest['revenue'] if busiest else None,
         },
         'methods': methods,
+        'channels': channels,
         'hours': hours,
         'days': days,
         'dishes': dishes,
