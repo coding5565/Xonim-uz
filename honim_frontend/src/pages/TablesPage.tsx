@@ -4,6 +4,7 @@ import { BadgePercent, Ban, Plus, Printer, RefreshCw, ShoppingBag, Trash2, Users
 import { api, list, money } from '../api'
 import { useSession } from '../session'
 import { useI18n } from '../i18n'
+import { useLiveData } from '../live'
 import type { Order, SaleChannel, SalesSummary, Table, TableZone } from '../types'
 import AppModal from '../components/AppModal'
 
@@ -89,10 +90,11 @@ export default function TablesPage() {
 
   useEffect(() => {
     load()
-    // Boshqa kassir yoki ofitsiant hisobni o'zgartirsa, xarita o'zi yangilanadi.
-    const timer = window.setInterval(load, 10000)
-    return () => window.clearInterval(timer)
   }, [load])
+
+  // Boshqa kassir hisobni yopsa yoki stol bo'shasa, xarita o'zi yangilanadi —
+  // shu jumladan boshqa oynadan qaytilgan zahoti.
+  useLiveData(load, 10)
 
   async function openTable(table: Table) {
     if (!table.open_order) {

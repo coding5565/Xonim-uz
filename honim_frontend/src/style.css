@@ -1075,3 +1075,86 @@ td small{font-size:12px}
    kassir uning borligini bilsin, faqat hozir yo'qligini. */
 .pos-dish.not-ready{opacity:.55;filter:saturate(.4)}
 .pos-dish.not-ready .add-circle{display:none}
+
+/* ── 12. Savat ekranga sig'sin ─────────────────────────────────────────── */
+/* Savat yopishtirilgan (sticky), ya'ni sahifa siljiganda joyida turadi.
+   Lekin o'zi ekrandan uzun bo'lsa, pastki qismi — «Jami» va yuborish tugmasi
+   — hech qachon ko'rinmaydi: sahifani qancha pastga tushirmang, savat
+   o'sha joyda qotib turadi. Shuning uchun balandligi ekran bilan cheklanadi
+   va faqat taomlar ro'yxati siljiydi. */
+@media(min-width:651px){
+  .cart{max-height:calc(100vh - 40px);display:flex;flex-direction:column}
+  /* Sarlavha, ofitsiant maydoni va pastki qism qisqarmaydi... */
+  .cart>*{flex:0 0 auto}
+  /* ...siljiydigani faqat taomlar ro'yxati. */
+  .cart-lines{flex:1 1 auto;min-height:0;max-height:none;overflow-y:auto}
+}
+
+/* ── 13. Kassa: telefon va planshet ────────────────────────────────────── */
+
+/* Planshet: savat va taomlar yonma-yon qoladi, lekin savat torayadi va
+   taomlar uchun joy ochiladi. Barmoq uchun tugmalar kattalashadi. */
+@media(min-width:651px) and (max-width:1000px){
+  .pos-layout{grid-template-columns:minmax(0,1fr) 288px;gap:14px}
+  .pos-dish .dish-art{height:120px}
+  .pos-dish>div:last-child{padding:12px}
+  .cart{padding:15px}
+  .cart-line{padding:11px 0}
+}
+
+/* Barmoq bilan ishlanadigan ekranda nishonlar kattaroq: sichqoncha bilan
+   10px aniq, barmoq bilan esa yo'q. */
+@media(pointer:coarse){
+  .stepper button{width:40px;height:40px}
+  .stepper span{min-width:34px;font-size:15px}
+  .icon-button{min-width:40px;min-height:40px}
+  .pos-dish .add-circle{width:36px;height:36px}
+  .button{min-height:46px}
+  .pay-grid button{min-height:48px}
+  .line-note{min-height:40px}
+}
+
+/* Telefon: savat pastdan chiqadigan panel bo'ladi. Taomlar ro'yxati joyida
+   qoladi, ya'ni buyurtmani ko'rish uchun sahifani tark etish shart emas. */
+@media(max-width:650px){
+  .pos-layout .cart{
+    position:fixed;z-index:30;left:0;right:0;bottom:0;
+    max-height:86vh;max-height:86dvh;
+    display:flex;flex-direction:column;
+    border-radius:var(--r4) var(--r4) 0 0;border-bottom:0;
+    box-shadow:0 -14px 40px #16342826;
+    transform:translateY(102%);transition:transform .26s var(--ease);
+    padding:14px 16px calc(14px + env(safe-area-inset-bottom))
+  }
+  .pos-layout .cart.open{transform:translateY(0)}
+  .pos-layout .cart>*{flex:0 0 auto}
+  .pos-layout .cart-lines{flex:1 1 auto;min-height:0;max-height:none;overflow-y:auto}
+  /* Panel yopiq turganda savat egallagan joy kerak emas. */
+  .pos-layout{gap:0}
+  .sheet-backdrop{position:fixed;inset:0;z-index:29;border:0;background:#16342855}
+  .sheet-close{display:grid;place-items:center;width:38px;height:38px;border:0;
+    border-radius:var(--pill);background:var(--line-2);color:var(--muted)}
+  .cart-header{gap:10px}
+  /* Bo'sh savatda panel ochilmaydi, shuning uchun bu holat ko'rinmaydi. */
+  .empty-cart{display:none}
+}
+
+/* Kattaroq ekranda yopish tugmasi va fon kerak emas. */
+@media(min-width:651px){
+  .sheet-close,.sheet-backdrop{display:none}
+}
+/* Panel ochiq turganda orqadagi sahifa siljimaydi. */
+body.sheet-open{overflow:hidden}
+
+/* Telefonda uchta kirish joyi ustma-ust turса, stol xaritasi ekrandan
+   chiqib ketadi. Shuning uchun ular bir qatorda, ixcham ko'rinishda. */
+@media(max-width:800px){
+  .counter-entries{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:14px}
+  .counter-entry{grid-template-columns:minmax(0,1fr);justify-items:center;
+    text-align:center;padding:12px 8px;gap:4px}
+  .counter-icon{grid-row:auto;width:34px;height:34px}
+  .counter-name{font-size:12.5px}
+  .counter-total{font-size:15px}
+  .counter-total small{display:none}
+  .counter-note{grid-column:auto;font-size:11px}
+}

@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, CheckCircle2, Minus, Plus, Search, ShoppingBag, Trash2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, Minus, Plus, Search, ShoppingBag, Trash2 } from 'lucide-react'
 import { api, list, money } from '../api'
 import { useSession } from '../session'
 import { useI18n } from '../i18n'
+import { useLiveData } from '../live'
 import type { Category, Dish, Order, PrepStatus, SaleChannel, Table, Waiter } from '../types'
 import DishArt from '../components/DishArt'
 import AppModal from '../components/AppModal'
@@ -49,6 +50,10 @@ export default function PosPage() {
   const [waiterId, setWaiterId] = useState('')
   // Bugun tayyorlangan porsiyalar: kartada qoldiq ko'rinib tursin.
   const [prep, setPrep] = useState<PrepStatus>()
+  // Telefonda savat taomlar ostida emas, pastdan chiqadigan panelda ochiladi:
+  // aks holda buyurtmani ko'rish uchun pastga, taom qo'shish uchun yana
+  // yuqoriga siljish kerak bo'lardi.
+  const [sheet, setSheet] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [payModal, setPayModal] = useState(false)
@@ -89,6 +94,27 @@ export default function PosPage() {
     loadMenu()
   }, [])
 
+  // Qoldiq va hisob holati tirik turishi kerak: boshqa kassir sotib bo'lgan
+  // taom bu yerda «bor» bo'lib turса, kassir uni bosadi va server rad etadi —
+  // mijoz oldida keraksiz xato. Savat va yozilayotgan matnga tegilmaydi,
+  // faqat serverdan keladigan holat yangilanadi.
+  const refreshLive = useCallback(async () => {
+    try {
+      const [fresh, freshDishes] = await Promise.all([
+        api<PrepStatus>('dish-prep/'),
+        list<Dish>('dishes/'),
+      ])
+      setPrep(fresh)
+      // Menyu ham yangilanadi: egasi narxni o'zgartirsa yoki taomni
+      // vaqtincha o'chirsa, kassa ekrani buni darhol ko'rsatadi.
+      setDishes(freshDishes)
+      if (tableId) setTable(await api<Table>(`tables/${tableId}/`))
+      if (orderId) setBill(await api<Order>(`orders/${orderId}/`))
+    } catch {
+      // Tarmoq uzilsa ekrandagi eski holat qoladi — keyingi urinishda tiklanadi.
+    }
+  }, [tableId, orderId])
+
   useEffect(() => {
     async function loadContext() {
       try {
@@ -101,9 +127,20 @@ export default function PosPage() {
     loadContext()
   }, [tableId, orderId])
 
+  useLiveData(refreshLive, 15)
+
   useEffect(() => {
     if (!lockedRequest) setKey(crypto.randomUUID())
   }, [cart, waiter, waiterId, channel, lockedRequest])
+
+  useEffect(() => {
+    // Savat bo'shab qolsa panelning ochiq turishi ma'nosiz; ochiq turganda
+    // esa orqadagi sahifa siljimasligi kerak, aks holda barmoq panelni emas,
+    // taomlar ro'yxatini surib yuboradi.
+    if (!cart.length) setSheet(false)
+    document.body.classList.toggle('sheet-open', sheet && !!cart.length)
+    return () => document.body.classList.remove('sheet-open')
+  }, [sheet, cart.length])
 
   useEffect(() => {
     // Uzum/Yandex buyurtmasining puli o'sha platforma orqali keladi, shuning
@@ -215,10 +252,11 @@ export default function PosPage() {
       setCart([])
       setKey(crypto.randomUUID())
       setPayModal(false)
+      setSheet(false)
       setCashGiven('')
       setWaiterId('')
       // Qoldiq sotuvdan keyin kamayadi — keyingi buyurtmada yangisi ko'rinsin.
-      api<PrepStatus>('dish-prep/').then(setPrep).catch(() => {})
+      refreshLive()
       // Talon chiqmagan bo'lsa kassir buni ko'rishi shart, shuning uchun
       // xaritaga qaytmaymiz — ogohlantirish shu yerda qoladi.
       if ((tableId || appending) && !saved.print_problems?.length) {
@@ -371,10 +409,17 @@ export default function PosPage() {
           </div>
         </section>
 
-        <aside ref={cartPanel} className="cart panel">
+        <aside ref={cartPanel} className={`cart panel${sheet ? ' open' : ''}`}>
           <header className="cart-header">
             <div><ShoppingBag size={20} /><h2>{place}</h2></div>
             <span className="pill">{tn('{count} ta', count)}</span>
+            <button
+              className="sheet-close"
+              aria-label={t('Yopish')}
+              onClick={() => setSheet(false)}
+            >
+              <ChevronDown size={20} />
+            </button>
           </header>
 
           {bill && (
@@ -510,11 +555,10 @@ export default function PosPage() {
         </aside>
       </div>
 
-      {!!cart.length && (
-        <button
-          className="mobile-cart-cta"
-          onClick={() => cartPanel.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-        >
+      {sheet && <button className="sheet-backdrop" aria-label={t('Yopish')} onClick={() => setSheet(false)} />}
+
+      {!!cart.length && !sheet && (
+        <button className="mobile-cart-cta" onClick={() => setSheet(true)}>
           <span><ShoppingBag size={17} /> {tn('{count} ta buyurtma', count)}</span>
           <strong>{money(total)} →</strong>
         </button>

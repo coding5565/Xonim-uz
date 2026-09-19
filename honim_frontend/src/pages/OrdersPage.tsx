@@ -4,6 +4,7 @@ import { ArrowRight, Printer, ReceiptText, Search, Undo2 } from 'lucide-react'
 import { api, dateLabel, list, money } from '../api'
 import { useSession } from '../session'
 import { useI18n } from '../i18n'
+import { useLiveData } from '../live'
 import type { Order } from '../types'
 import AppModal from '../components/AppModal'
 
@@ -42,6 +43,11 @@ export default function OrdersPage() {
   useEffect(() => {
     load()
   }, [load])
+
+  // Boshqa kassir hisobni to'lasa yoki bekor qilsa, ro'yxat o'zi yangilanadi:
+  // «to'lov kutilmoqda» bo'lib turgan hisobni ikkinchi marta to'lashga
+  // urinish mumkin emas.
+  useLiveData(load, 15)
 
   const methods = user?.payment_methods || []
   const methodLabel = (value: string) =>

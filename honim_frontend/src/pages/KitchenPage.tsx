@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { CheckCircle2, ChefHat, Clock3, RefreshCw, Utensils } from 'lucide-react'
 import { api } from '../api'
 import { useI18n } from '../i18n'
+import { useLiveData } from '../live'
 import type { Order } from '../types'
 import KitchenTicket from '../components/KitchenTicket'
 
@@ -31,11 +32,17 @@ export default function KitchenPage() {
     }
   }, [])
 
+  // Jimgina yangilash: ekranda «yuklanmoqda» aylanmasin, oshxona taxtasi
+  // tinch tursin.
+  const quietLoad = useCallback(() => { load(true) }, [load])
+
   useEffect(() => {
     load()
-    const timer = window.setInterval(() => load(true), 4000)
-    return () => window.clearInterval(timer)
   }, [load])
+
+  // Oshxona taxtasi tez yangilanadi: yangi talon kechikib ko'rinsa ovqat
+  // kechikadi.
+  useLiveData(quietLoad, 4)
 
   async function advance(order: Order) {
     const next = order.preparation_status === 'queued' ? 'preparing'
