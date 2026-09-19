@@ -14,6 +14,7 @@ from operations.views import (
 )
 from operations.assistant_chats import AssistantChatDetailView, AssistantChatListView
 from operations.daily_usage import DailyUsageView, UsageComparisonView
+from operations.dish_prep import DishPrepHistoryView, DishPrepLeftoverView, DishPrepView
 from operations.finance import FinanceView
 from operations.waiters import WaiterEarningsView, WaiterViewSet
 from operations.shift import ShiftHistoryView, ShiftView
@@ -60,6 +61,9 @@ urlpatterns = [
     path('api/v1/reports/sales/export/', SalesReportExportView.as_view()),
     path('api/v1/stock/', StockView.as_view()),
     path('api/v1/stock/usage/', StockUsageView.as_view()),
+    path('api/v1/dish-prep/', DishPrepView.as_view()),
+    path('api/v1/dish-prep/history/', DishPrepHistoryView.as_view()),
+    path('api/v1/dish-prep/leftovers/', DishPrepLeftoverView.as_view()),
     path('api/v1/daily-usage/', DailyUsageView.as_view()),
     path('api/v1/daily-usage/compare/', UsageComparisonView.as_view()),
     path('api/v1/dashboard/', DashboardView.as_view()),

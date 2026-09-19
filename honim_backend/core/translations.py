@@ -5,6 +5,9 @@ ishlayveradi: o'zbekchasi ko'rinadi.
 """
 
 RU = {
+    'Bir taomni faqat bir marta kiriting.': 'Вносите каждое блюдо только один раз.',
+    'Bir martada ko‘pi bilan 100 ta taom.': 'За раз не более 100 блюд.',
+    'Ayrim taomlar topilmadi.': 'Некоторые блюда не найдены.',
     'Ofitsiant topilmadi.': 'Официант не найден.',
     'Bu ismli ofitsiant allaqachon bor.': 'Официант с таким именем уже есть.',
     'Nom bo‘sh bo‘lishi mumkin emas.': 'Название не может быть пустым.',
@@ -128,6 +131,9 @@ RU = {
 
 
 EN = {
+    'Bir taomni faqat bir marta kiriting.': 'Enter each dish only once.',
+    'Bir martada ko‘pi bilan 100 ta taom.': '100 dishes at most in one go.',
+    'Ayrim taomlar topilmadi.': 'Some dishes were not found.',
     'Ofitsiant topilmadi.': 'Waiter not found.',
     'Bu ismli ofitsiant allaqachon bor.': 'A waiter with that name already exists.',
     'Nom bo‘sh bo‘lishi mumkin emas.': 'The name cannot be empty.',

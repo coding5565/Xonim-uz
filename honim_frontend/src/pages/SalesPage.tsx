@@ -172,7 +172,7 @@ export default function SalesPage() {
           <p className="sales-note">
             {summary.today_by_method.map(row => (
               <span key={row.method}>
-                {t('Bugun {method}', { method: row.label.toLocaleLowerCase() })}: <b>{money(row.revenue)} {t('so‘m')}</b>
+                {t('Bugun {method}', { method: t(row.label).toLocaleLowerCase() })}: <b>{money(row.revenue)} {t('so‘m')}</b>
               </span>
             ))}
             <span>
@@ -279,7 +279,7 @@ export default function SalesPage() {
               </span>
             )}
             {data.methods.map(row => (
-              <span key={row.method}>{row.label}: <b>{money(row.revenue)} {t('so‘m')}</b></span>
+              <span key={row.method}>{t(row.label)}: <b>{money(row.revenue)} {t('so‘m')}</b></span>
             ))}
             {filters.mine && <span><b>{t('Faqat {name} savdolari', { name: user?.name || '' })}</b></span>}
           </p>
@@ -315,7 +315,7 @@ export default function SalesPage() {
               <footer>
                 {data.methods.length
                   ? data.methods.map(row => (
-                    <span key={row.method}>{row.label}: <strong>{money(row.revenue)}</strong></span>
+                    <span key={row.method}>{t(row.label)}: <strong>{money(row.revenue)}</strong></span>
                   ))
                   : <span>{t('To‘lov qayd etilmagan')}</span>}
               </footer>
@@ -345,6 +345,32 @@ export default function SalesPage() {
               )}
             </section>
           </div>
+
+          {/* Zal, olib ketish, Uzum va Yandex savdosi alohida ko'rinadi. */}
+          <section className="panel spaced">
+            <header className="panel-heading">
+              <div><h2>{t('Savdo kanallari')}</h2><p>{t('Buyurtma qayerdan kelgani bo‘yicha')}</p></div>
+              <span className="pill subtle">{money(data.summary.revenue)} {t('so‘m')}</span>
+            </header>
+            {data.channels.length ? (
+              <div className="category-ranking">
+                {data.channels.map(row => (
+                  <div key={row.channel}>
+                    <div>
+                      <strong>{t(row.label)}{row.delivery ? ` · ${t('yetkazib berish')}` : ''}</strong>
+                      <span>{tn('{count} chek', row.orders)}</span>
+                      <b>{money(row.revenue)}</b>
+                    </div>
+                    <div className="progress-track">
+                      <span style={{ width: `${Number(data.summary.revenue) ? Number(row.revenue) / Number(data.summary.revenue) * 100 : 0}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state compact">{t('Bu davrda savdo yo‘q.')}</div>
+            )}
+          </section>
 
           <section className="panel spaced">
             <header className="panel-heading">

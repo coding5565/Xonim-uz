@@ -291,6 +291,32 @@ class StockMovement(models.Model):
         indexes = [models.Index(fields=['branch', 'ingredient', 'date'], name='stock_branch_item_date_idx')]
 
 
+class DishPrep(models.Model):
+    """Bugun oshxonada nechta porsiya tayyorlangani.
+
+    Bir kunda bir taomga bir nechta yozuv bo'ladi — ertalab 20 ta, tushda
+    yana 15 ta. Ular qo'shiladi, ustiga yozilmaydi: shunda kun davomida
+    nima qo'shilgani ham ko'rinib turadi.
+
+    Diqqat: bu yozuv ombordan masalliq AYIRMAYDI. Masalliq sotuv paytida
+    retsept bo'yicha ayriladi va shundayligicha qoladi — aks holda bitta
+    porsiya ikki marta hisobdan chiqardi.
+    """
+
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT)
+    dish = models.ForeignKey('catalog.Dish', on_delete=models.PROTECT, related_name='preps')
+    actor = models.ForeignKey(User, on_delete=models.PROTECT)
+    date = models.DateField()
+    quantity = models.PositiveIntegerField()
+    note = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-date', '-id']
+        constraints = [models.CheckConstraint(condition=Q(quantity__gt=0), name='dish_prep_positive')]
+        indexes = [models.Index(fields=['branch', 'date'], name='dish_prep_branch_date_idx')]
+
+
 class AssistantChat(models.Model):
     """Saqlangan AI suhbati. Har foydalanuvchi faqat o'zinikini ko'radi."""
 
@@ -358,7 +384,8 @@ class Recipe(models.Model):
     name = models.CharField(max_length=120)
     yield_quantity = models.DecimalField(max_digits=12, decimal_places=3)
     yield_unit = models.CharField(max_length=20, default='porsiya')
-    selling_price = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    # Sotuv narxi bu yerda saqlanmaydi: u menyudagi taomning narxi. Ikki joyda
+    # turgan narx muqarrar ravishda bir-biridan uzoqlashardi.
     active = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
 

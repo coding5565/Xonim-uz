@@ -19,7 +19,6 @@ interface RecipeForm {
   name: string
   yield_quantity: string
   yield_unit: string
-  selling_price: string
   active: boolean
   lines: FormLine[]
 }
@@ -35,7 +34,7 @@ const wholeMoney = (value: string | number) => money(Math.round(Number(value)))
 const yieldLabel = (value: string) => Number(value).toLocaleString('uz-UZ', { maximumFractionDigits: 3 })
 
 export default function RecipesPage() {
-  const { t } = useI18n()
+  const { t, tn } = useI18n()
   const [recipes, setRecipes] = useState<Recipe[]>([])
   const [dishes, setDishes] = useState<Dish[]>([])
   const [ingredients, setIngredients] = useState<Ingredient[]>([])
@@ -47,7 +46,7 @@ export default function RecipesPage() {
   const [itemModal, setItemModal] = useState(false)
   const [editId, setEditId] = useState<number>()
   const [form, setForm] = useState<RecipeForm>({
-    dish: null, name: '', yield_quantity: '1', yield_unit: 'porsiya', selling_price: '0', active: true, lines: [],
+    dish: null, name: '', yield_quantity: '1', yield_unit: 'porsiya', active: true, lines: [],
   })
   const [item, setItem] = useState<ItemForm>(emptyItem)
 
@@ -95,7 +94,6 @@ export default function RecipesPage() {
         name: recipe.name,
         yield_quantity: String(Number(recipe.yield_quantity)),
         yield_unit: recipe.yield_unit,
-        selling_price: String(Number(recipe.selling_price)),
         active: recipe.active,
         // Kichik miqdorlar grammda ko'rsatiladi: 0.020 kg o'rniga 20 g.
         lines: recipe.lines.map(line => {
@@ -113,7 +111,6 @@ export default function RecipesPage() {
         name: '',
         yield_quantity: '1',
         yield_unit: 'porsiya',
-        selling_price: '0',
         active: true,
         lines: ingredients.length ? [{ ingredient: ingredients[0].id, quantity: '', small: ingredients[0].unit !== 'dona' }] : [],
       })
@@ -140,7 +137,10 @@ export default function RecipesPage() {
     return total + Number(chosen?.unit_cost || 0) * amount
   }, 0)
   const perUnit = Number(form.yield_quantity) ? formCost / Number(form.yield_quantity) : 0
-  const formProfit = Number(form.selling_price) - perUnit
+  // Sotuv narxi kiritilmaydi: u menyudagi taomniki. Taom tanlanmagan bo'lsa
+  // (masalan, bulyon) foyda ham ko'rsatilmaydi — u sotilmaydi.
+  const formPrice = Number(dishes.find(dish => dish.id === form.dish)?.price || 0)
+  const formProfit = formPrice - perUnit
 
   async function saveRecipe(event: FormEvent) {
     event.preventDefault()
@@ -246,8 +246,11 @@ export default function RecipesPage() {
               <span className="eyebrow">{recipe.dish_name || t('MENYUGA HALI BOG‘LANMAGAN')}</span>
               <h2>{recipe.name}</h2>
               <p>
-                {yieldLabel(recipe.yield_quantity)} {recipe.yield_unit} · {t('sotuv narxi')}{' '}
-                {wholeMoney(recipe.selling_price)} {t('so‘m')}
+                {yieldLabel(recipe.yield_quantity)} {recipe.yield_unit}
+                {/* Narx menyudagi taomniki — retseptda alohida narx yo'q. */}
+                {recipe.dish
+                  ? ` · ${t('menyu narxi')} ${wholeMoney(recipe.selling_price)} ${t('so‘m')}`
+                  : ` · ${t('sotilmaydi')}`}
               </p>
             </div>
             <div className="recipe-card-actions">
@@ -348,19 +351,8 @@ export default function RecipesPage() {
                 {t('Birlik')}
                 <select value={form.yield_unit} onChange={event => updateForm({ yield_unit: event.target.value })}>
                   <option value="dona">{t('dona')}</option>
-                  <option value="porsiya">{t('porsiya')}</option>
+                  <option value="porsiya">{tn('porsiya', 1)}</option>
                 </select>
-              </label>
-              <label>
-                {t('1 birlik sotuv narxi')}
-                <input
-                  value={form.selling_price}
-                  onChange={event => updateForm({ selling_price: event.target.value })}
-                  required
-                  type="number"
-                  min="0"
-                  step="1"
-                />
               </label>
             </div>
             <div className="recipe-form-lines">
@@ -447,9 +439,10 @@ export default function RecipesPage() {
                     1 {form.yield_unit} = {wholeMoney(formCost / Number(form.yield_quantity))} {t('so‘m')}
                   </small>
                 )}
-                {Number(form.selling_price) > 0 && (
+                {formPrice > 0 && (
                   <small className={formProfit < 0 ? 'owed' : undefined}>
-                    {t('Foyda')}: {wholeMoney(formProfit)} {t('so‘m')}
+                    {t('Foyda')}: {wholeMoney(formProfit)} {t('so‘m')}{' '}
+                    ({t('narxi {price} so‘m', { price: wholeMoney(formPrice) })})
                   </small>
                 )}
               </div>

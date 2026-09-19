@@ -213,7 +213,7 @@ export default function DashboardPage() {
                 {data.by_method.map(row => (
                   <div key={row.method}>
                     <div>
-                      <strong>{row.label}</strong>
+                      <strong>{t(row.label)}</strong>
                       <span>
                         {Number(data.revenue)
                           ? t('{percent}% umumiy tushumdan', {

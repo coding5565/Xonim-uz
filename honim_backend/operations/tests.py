@@ -8,7 +8,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 from users.models import AuditEvent, Branch, User
 from catalog.models import Category, Dish
-from .models import AssistantChat, AssistantMessage, DailyUsage, Order, OrderLine, Expense, Ingredient, Recipe, RecipeLine, SalaryPayment, ShiftClose, StockMovement, Table, Waiter
+from .models import AssistantChat, AssistantMessage, DailyUsage, DishPrep, Order, OrderLine, Expense, Ingredient, Recipe, RecipeLine, SalaryPayment, ShiftClose, StockMovement, Table, Waiter
 from .money import money, percent, quantity, share
 from .services import append_order_lines, create_order, move_stock, Conflict
 
@@ -1399,7 +1399,7 @@ class FullSetupFlowTests(TestCase):
         }, format='json').data
         recipe = self.client.post('/api/v1/recipes/', {
             'dish': dish['id'], 'name': 'Manti', 'yield_quantity': 1, 'yield_unit': 'porsiya',
-            'selling_price': 12000, 'active': True,
+            'active': True,
             # 1 ta manti: 20 g go'sht + 15 g un (frontend grammni kg ga aylantirib yuboradi).
             'lines': [
                 {'ingredient': meat['id'], 'quantity': 0.020},
@@ -1474,7 +1474,7 @@ class FullSetupFlowTests(TestCase):
             }, format='json').data
             self.client.post('/api/v1/recipes/', {
                 'dish': dish['id'], 'name': name, 'yield_quantity': 1, 'yield_unit': 'porsiya',
-                'selling_price': 12000, 'active': True,
+                'active': True,
                 'lines': [{'ingredient': meat['id'], 'quantity': 0.020}],
             }, format='json')
         self.assertEqual(set(RecipeLine.objects.values_list('batch_cost', flat=True)), {Decimal('1600.00')})
@@ -1498,7 +1498,7 @@ class FullSetupFlowTests(TestCase):
         }, format='json').data
         self.client.post('/api/v1/recipes/', {
             'dish': dish['id'], 'name': 'Manti', 'yield_quantity': 1, 'yield_unit': 'porsiya',
-            'selling_price': 12000, 'active': True,
+            'active': True,
             'lines': [{'ingredient': meat['id'], 'quantity': 0.020}],
         }, format='json')
         self.client.post('/api/v1/stock/', {
@@ -2251,3 +2251,239 @@ class SalesChannelTests(TestCase):
             'lines': [{'dish': self.dish.id, 'quantity': 1, 'note': ''}],
         }, format='json')
         self.assertEqual(response.status_code, 400)
+
+
+class DishPrepTests(TestCase):
+    """Bugun tayyorlangan taomlar va ularning qoldig'i."""
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.category = Category.objects.create(branch=self.branch, name='Taom')
+        self.manti = Dish.objects.create(branch=self.branch, category=self.category, name='Manti', price=Decimal('25000'))
+        self.somsa = Dish.objects.create(branch=self.branch, category=self.category, name='Somsa', price=Decimal('12000'))
+        self.client = APIClient()
+        self.client.force_authenticate(self.cashier)
+
+    def prepare(self, dish, quantity, note=''):
+        return self.client.post('/api/v1/dish-prep/', {
+            'lines': [{'dish': dish.id, 'quantity': quantity, 'note': note}],
+        }, format='json')
+
+    def sell(self, dish, quantity, method='cash'):
+        return create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': method,
+            'lines': [{'dish': dish.id, 'quantity': quantity, 'note': ''}],
+        })
+
+    def row(self, dish):
+        data = self.client.get('/api/v1/dish-prep/').data
+        return next(item for item in data['dishes'] if item['dish'] == dish.id)
+
+    def test_what_is_left_is_what_was_made_minus_what_went_out(self):
+        self.assertEqual(self.prepare(self.manti, 20).status_code, 201)
+        self.sell(self.manti, 8)
+        row = self.row(self.manti)
+        self.assertEqual(row['prepared'], 20)
+        self.assertEqual(row['sold'], 8)
+        self.assertEqual(row['remaining'], 12)
+        self.assertFalse(row['out'])
+        self.assertFalse(row['low'])
+
+    def test_a_second_batch_adds_rather_than_replaces(self):
+        self.prepare(self.manti, 20, 'ertalab')
+        self.prepare(self.manti, 15, 'tushda')
+        self.assertEqual(self.row(self.manti)['prepared'], 35)
+        # Ikkala yozuv ham tarixda qoladi: kun davomida nima qo'shilgani ko'rinsin.
+        history = self.client.get('/api/v1/dish-prep/history/').data['rows']
+        self.assertEqual([item['quantity'] for item in history], [15, 20])
+        self.assertEqual(history[0]['note'], 'tushda')
+
+    def test_a_dish_without_an_entry_is_never_limited(self):
+        self.prepare(self.manti, 5)
+        self.sell(self.somsa, 100)
+        row = self.row(self.somsa)
+        # Kassir ertalab kiritishni unutgan bo'lishi mumkin - restoran to'xtamaydi.
+        self.assertFalse(row['tracked'])
+        self.assertFalse(row['out'])
+        self.assertFalse(row['low'])
+        self.assertEqual(self.client.get('/api/v1/dish-prep/').data['summary']['tracked'], 1)
+
+    def test_the_low_warning_is_proportional_to_the_batch(self):
+        self.prepare(self.manti, 20)   # 20% -> 4 tada ogohlantiradi
+        self.sell(self.manti, 15)
+        self.assertFalse(self.row(self.manti)['low'])   # 5 qoldi
+        self.sell(self.manti, 1)
+        self.assertTrue(self.row(self.manti)['low'])    # 4 qoldi
+
+        # Kichik partiyada chegara ham kichik: 3 tadan 1 ta qolganda.
+        self.prepare(self.somsa, 3)
+        self.sell(self.somsa, 2)
+        self.assertTrue(self.row(self.somsa)['low'])
+
+    def test_running_out_is_flagged_but_selling_still_works(self):
+        self.prepare(self.manti, 5)
+        self.sell(self.manti, 5)
+        row = self.row(self.manti)
+        self.assertEqual(row['remaining'], 0)
+        self.assertTrue(row['out'])
+        self.assertFalse(row['low'])
+
+        # Sotuv to'xtatilmaydi: oshxona qo'shimcha pishirgan bo'lishi mumkin.
+        self.sell(self.manti, 2)
+        self.assertEqual(self.row(self.manti)['remaining'], -2)
+        # Lekin ortiqcha sotilgani jurnalga tushadi - egasi ko'rib tursin.
+        entry = AuditEvent.objects.filter(action='prep.oversell').last()
+        self.assertIn('Manti', entry.description)
+        self.assertIn('2 porsiya ortiqcha', entry.description)
+
+    def test_an_open_bill_already_counts_as_gone(self):
+        self.prepare(self.manti, 10)
+        create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': '',
+            'lines': [{'dish': self.manti.id, 'quantity': 4, 'note': ''}],
+        })
+        # Ovqat oshxonaga ketgan; sanalmasa qoldiq yolg'on ko'rsatardi.
+        self.assertEqual(self.row(self.manti)['remaining'], 6)
+
+    def test_a_cancelled_bill_gives_the_portions_back(self):
+        self.prepare(self.manti, 10)
+        order = create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': '',
+            'lines': [{'dish': self.manti.id, 'quantity': 4, 'note': ''}],
+        })
+        self.assertEqual(self.row(self.manti)['remaining'], 6)
+        response = self.client.post(f'/api/v1/orders/{order.id}/cancel/', {'reason': 'Mijoz ketdi'}, format='json')
+        self.assertEqual(response.status_code, 200)
+        # Oshxonaga BEKOR taloni ketgan - pishirilmaydi, porsiya qaytadi.
+        self.assertEqual(self.row(self.manti)['remaining'], 10)
+
+    def test_a_refund_does_not_give_the_portion_back(self):
+        self.prepare(self.manti, 10)
+        order = self.sell(self.manti, 4)
+        owner = APIClient()
+        owner.force_authenticate(self.owner)
+        response = owner.post(f'/api/v1/orders/{order.id}/refund/', {'reason': 'Shikoyat'}, format='json')
+        self.assertEqual(response.status_code, 200)
+        # Pul qaytdi, lekin ovqat yeyilgan - porsiya qaytmaydi.
+        self.assertEqual(self.row(self.manti)['remaining'], 6)
+
+    def test_the_summary_counts_what_needs_attention(self):
+        self.prepare(self.manti, 10)
+        self.prepare(self.somsa, 10)
+        self.sell(self.manti, 10)   # tugadi
+        self.sell(self.somsa, 8)    # 2 qoldi -> kam
+        summary = self.client.get('/api/v1/dish-prep/').data['summary']
+        self.assertEqual(summary['tracked'], 2)
+        self.assertEqual(summary['out'], 1)
+        self.assertEqual(summary['low'], 1)
+        self.assertEqual(summary['prepared'], 20)
+        self.assertEqual(summary['sold'], 18)
+        self.assertEqual(summary['remaining'], 2)
+
+    def test_yesterday_batch_does_not_carry_into_today(self):
+        # Kecha pishirilgani bugun sotilmaydi - har kun noldan boshlanadi.
+        DishPrep.objects.create(
+            branch=self.branch, dish=self.manti, actor=self.cashier,
+            date=timezone.localdate() - timedelta(days=1), quantity=30,
+        )
+        self.assertFalse(self.row(self.manti)['tracked'])
+        self.assertEqual(self.client.get('/api/v1/dish-prep/history/').data['rows'], [])
+
+    def test_the_owner_sees_what_was_left_unsold(self):
+        self.prepare(self.manti, 20)
+        self.prepare(self.somsa, 6)
+        self.sell(self.manti, 12)
+        self.sell(self.somsa, 6)
+        owner = APIClient()
+        owner.force_authenticate(self.owner)
+        data = owner.get('/api/v1/dish-prep/leftovers/').data
+        # Sotilib bitgani ro'yxatda turmaydi - faqat qolgani.
+        self.assertEqual([row['name'] for row in data['leftovers']], ['Manti'])
+        self.assertEqual(data['leftovers'][0]['remaining'], 8)
+        # Kassir bu ro'yxatni ko'rmaydi: bu egasining nazorati.
+        self.assertEqual(self.client.get('/api/v1/dish-prep/leftovers/').status_code, 403)
+
+    def test_entering_a_batch_is_written_to_the_activity_log(self):
+        self.prepare(self.manti, 20, 'ertalab')
+        entry = AuditEvent.objects.get(action='prep.record')
+        self.assertEqual(entry.actor, self.cashier)
+        self.assertIn('Manti', entry.description)
+        self.assertIn('+20 porsiya', entry.description)
+
+    def test_bad_input_is_refused(self):
+        self.assertEqual(self.client.post('/api/v1/dish-prep/', {'lines': []}, format='json').status_code, 400)
+        self.assertEqual(self.prepare(self.manti, 0).status_code, 400)
+        self.assertEqual(self.prepare(self.manti, -5).status_code, 400)
+        # Bitta taom ro'yxatda ikki marta kelsa qaysi biri to'g'ri ekani noaniq.
+        self.assertEqual(self.client.post('/api/v1/dish-prep/', {
+            'lines': [{'dish': self.manti.id, 'quantity': 5}, {'dish': self.manti.id, 'quantity': 3}],
+        }, format='json').status_code, 400)
+        self.assertEqual(self.client.post('/api/v1/dish-prep/', {
+            'lines': [{'dish': 999999, 'quantity': 5}],
+        }, format='json').status_code, 400)
+        self.assertEqual(DishPrep.objects.count(), 0)
+
+    def test_another_branch_dish_cannot_be_entered(self):
+        other = Branch.objects.create(name='Two', slug='two')
+        category = Category.objects.create(branch=other, name='Taom')
+        theirs = Dish.objects.create(branch=other, category=category, name='Lagmon', price=Decimal('30000'))
+        self.assertEqual(self.prepare(theirs, 5).status_code, 400)
+        self.assertEqual(DishPrep.objects.count(), 0)
+
+    def test_the_kitchen_role_cannot_reach_it(self):
+        kitchen = APIClient()
+        kitchen.force_authenticate(User.objects.create_user(
+            'oshxona', password='test-only-long-password', role='kitchen', branch=self.branch))
+        self.assertEqual(kitchen.get('/api/v1/dish-prep/').status_code, 403)
+        self.assertEqual(kitchen.post('/api/v1/dish-prep/', {
+            'lines': [{'dish': self.manti.id, 'quantity': 5}],
+        }, format='json').status_code, 403)
+
+
+class RecipePriceTests(TestCase):
+    """Sotuv narxi retseptga emas, menyudagi taomga yoziladi."""
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.category = Category.objects.create(branch=self.branch, name='Taom')
+        self.dish = Dish.objects.create(branch=self.branch, category=self.category, name='Manti', price=Decimal('12000'))
+        self.meat = Ingredient.objects.create(
+            branch=self.branch, name='Go‘sht', unit='kg', quantity=Decimal('10'), unit_cost=Decimal('80000'))
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+
+    def create(self, **extra):
+        body = {
+            'dish': self.dish.id, 'name': 'Manti', 'yield_quantity': 1, 'yield_unit': 'porsiya',
+            'active': True, 'lines': [{'ingredient': self.meat.id, 'quantity': '0.020'}],
+        }
+        body.update(extra)
+        return self.client.post('/api/v1/recipes/', body, format='json')
+
+    def test_the_price_comes_from_the_dish(self):
+        recipe = self.create().data
+        # 0.020 × 80 000 = 1 600 tannarx, taom narxi 12 000.
+        self.assertEqual(Decimal(recipe['selling_price']), Decimal('12000'))
+        self.assertEqual(Decimal(recipe['gross_profit']), Decimal('10400'))
+
+    def test_a_price_sent_by_hand_is_ignored(self):
+        # Eski mijoz yuborsa ham qabul qilinmaydi: narx bitta joyda turadi.
+        recipe = self.create(selling_price='99000').data
+        self.assertEqual(Decimal(recipe['selling_price']), Decimal('12000'))
+
+    def test_changing_the_dish_price_moves_the_recipe_profit(self):
+        created = self.create().data
+        self.client.patch(f'/api/v1/dishes/{self.dish.id}/', {'price': '15000'}, format='json')
+        recipe = self.client.get(f'/api/v1/recipes/{created["id"]}/').data
+        # Narx menyuda o'zgardi — retsept foydasi o'zi ergashdi.
+        self.assertEqual(Decimal(recipe['selling_price']), Decimal('15000'))
+        self.assertEqual(Decimal(recipe['gross_profit']), Decimal('13400'))
+
+    def test_a_preparation_without_a_dish_has_no_profit(self):
+        # Bulyon kabi yarim tayyor mahsulot sotilmaydi, shuning uchun foydasi yo'q.
+        recipe = self.create(dish=None, name='Bulyon').data
+        self.assertEqual(Decimal(recipe['selling_price']), Decimal('0'))
+        self.assertEqual(Decimal(recipe['gross_profit']), Decimal('0'))

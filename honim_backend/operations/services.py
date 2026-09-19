@@ -222,6 +222,11 @@ def create_order(user, data):
     # Tayyorlash talonlari har doim chiqadi: ovqat to'lovni kutmaydi.
     order.print_problems = print_prep_tickets(order)
     _log_print_problems(user, order, order.print_problems)
+    # Tayyorlangan miqdordan oshib ketilgan bo'lsa jurnalga tushadi.
+    # Import shu yerda: dish_prep moduli services'ga tayanadi, aylanma
+    # bog'liqlik bo'lmasligi uchun chaqirilganda yuklanadi.
+    from .dish_prep import note_oversell
+    note_oversell(user, order)
     audit(user, 'order.create', f'#{order.id} · {table.label if table else (table_text or "olib ketish")} · {total} so‘m · {len(data["lines"])} qator')
     return order
 
@@ -283,6 +288,8 @@ def append_order_lines(user, order_id, data):
     fresh = list(OrderLine.objects.filter(order=order, batch_key=data['key']).select_related('dish__category'))
     order.print_problems = print_prep_tickets(order, fresh, addition=True)
     _log_print_problems(user, order, order.print_problems)
+    from .dish_prep import note_oversell
+    note_oversell(user, order)
     names = ', '.join(f'{dishes[line["dish"]].name} x{line["quantity"]}' for line in data['lines'])
     audit(user, 'order.append', f'#{order.id} · +{added} so‘m · {names}')
     return order

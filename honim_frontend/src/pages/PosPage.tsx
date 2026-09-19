@@ -4,7 +4,7 @@ import { ArrowLeft, ArrowRight, CheckCircle2, Minus, Plus, Search, ShoppingBag, 
 import { api, list, money } from '../api'
 import { useSession } from '../session'
 import { useI18n } from '../i18n'
-import type { Category, Dish, Order, Table } from '../types'
+import type { Category, Dish, Order, PrepStatus, SaleChannel, Table, Waiter } from '../types'
 import DishArt from '../components/DishArt'
 import AppModal from '../components/AppModal'
 
@@ -14,8 +14,17 @@ interface CartLine {
   note: string
 }
 
+/** Sotuv kanallari. Zal stol bilan kelgan hisobga qo'yiladi, qolgani
+ *  tezkor savdoda tanlanadi. Uzum va Yandex puli kassaga tushmaydi. */
+const CHANNELS: { value: SaleChannel; name: string }[] = [
+  { value: 'takeaway', name: 'Olib ketish' },
+  { value: 'uzum', name: 'Uzum' },
+  { value: 'yandex', name: 'Yandex' },
+  { value: 'hall', name: 'Zal' },
+]
+
 /** Buyurtma yig'ish ekrani. Nima uchun ochilgani marshrutdan aniqlanadi:
- *  /pos/tezkor          - olib ketish
+ *  /pos/tezkor          - olib ketish yoki yetkazib berish (kanal tanlanadi)
  *  /pos/stol/:tableId   - stolga yangi hisob
  *  /pos/hisob/:orderId  - ochiq hisobga qo'shish
  *  Shu sababli kassirda rejim tanlaydigan tugmalar yo'q.
@@ -31,6 +40,12 @@ export default function PosPage() {
   const [category, setCategory] = useState(0)
   const [search, setSearch] = useState('')
   const [waiter, setWaiter] = useState('')
+  const [waiters, setWaiters] = useState<Waiter[]>([])
+  const [waiterId, setWaiterId] = useState('')
+  // Zal hisobi stoldan kelgani uchun kanal tanlanmaydi.
+  const [pickedChannel, setPickedChannel] = useState<SaleChannel>('takeaway')
+  // Bugun tayyorlangan porsiyalar: kartada qoldiq ko'rinib tursin.
+  const [prep, setPrep] = useState<PrepStatus>()
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [payModal, setPayModal] = useState(false)
@@ -47,16 +62,23 @@ export default function PosPage() {
   const cartPanel = useRef<HTMLElement>(null)
 
   const appending = !!orderId
+  // Zal hisobi stoldan kelgani uchun kanal so'ralmaydi; tezkor savdoda tanlanadi.
+  const channel: SaleChannel = tableId ? 'hall' : pickedChannel
+  const delivery = channel === 'uzum' || channel === 'yandex'
 
   useEffect(() => {
     async function loadMenu() {
       try {
-        const [loadedCategories, loadedDishes] = await Promise.all([
+        const [loadedCategories, loadedDishes, loadedWaiters, loadedPrep] = await Promise.all([
           list<Category>('categories/'),
           list<Dish>('dishes/'),
+          list<Waiter>('waiters/'),
+          api<PrepStatus>('dish-prep/'),
         ])
         setCategories(loadedCategories)
         setDishes(loadedDishes)
+        setWaiters(loadedWaiters.filter(item => item.active))
+        setPrep(loadedPrep)
       } catch (exception) {
         setError((exception as Error).message)
       }
@@ -78,7 +100,15 @@ export default function PosPage() {
 
   useEffect(() => {
     if (!lockedRequest) setKey(crypto.randomUUID())
-  }, [cart, waiter, lockedRequest])
+  }, [cart, waiter, waiterId, pickedChannel, lockedRequest])
+
+  useEffect(() => {
+    // Uzum/Yandex buyurtmasining puli o'sha platforma orqali keladi, shuning
+    // uchun to'lov turi kanal bilan birga tanlanadi.
+    setPayment(previous => delivery
+      ? channel
+      : previous === 'uzum' || previous === 'yandex' ? 'cash' : previous)
+  }, [channel, delivery])
 
   const total = cart.reduce((sum, line) => sum + Math.round(Number(line.dish.price) * 100) * line.quantity, 0) / 100
   const filtered = dishes.filter(dish =>
@@ -92,12 +122,31 @@ export default function PosPage() {
   const methods = user?.payment_methods || []
   const paymentLabel = methods.find(item => item.method === payment)?.label || payment
 
+  const stock = new Map((prep?.dishes || []).map(row => [row.dish, row]))
+  // Miqdori kiritilmagan taom cheklanmaydi — u haqda hech narsa da'vo qilmaymiz.
+  const left = (id: number) => {
+    const row = stock.get(id)
+    return row?.tracked ? row.remaining : Infinity
+  }
+  // Savatdagi miqdor hali sotilmagan, shuning uchun qoldiqdan alohida ayiriladi.
+  const inCart = (id: number) => cart.find(line => line.dish.id === id)?.quantity || 0
+  const oversold = cart
+    .map(line => ({ name: line.dish.name, over: line.quantity - left(line.dish.id) }))
+    .filter(item => item.over > 0)
+  const pickedWaiter = waiters.find(item => String(item.id) === waiterId)
+  const waiterFee = pickedWaiter ? (total * Number(pickedWaiter.commission)) / 100 : 0
+
   const place = appending
     ? t('#{id} hisobiga qo‘shish', { id: bill?.id ?? orderId ?? '' })
     : table ? t('{table} · yangi hisob', { table: table.label }) : t('Tezkor savdo')
 
   function add(dish: Dish) {
     if (busy || locked || !dish.available) return
+    // Qoldiq tugaganda ogohlantiriladi, lekin to'xtatilmaydi: oshxona
+    // qo'shimcha pishirgan bo'lishi mumkin. Faqat nolni kesib o'tgan
+    // paytda so'raladi — keyingi har bosishda takrorlanmaydi.
+    if (left(dish.id) - inCart(dish.id) === 0
+      && !confirm(t('«{name}» tizimda tugagan. Baribir qo‘shilsinmi?', { name: dish.name }))) return
     setCart(previous => previous.some(line => line.dish.id === dish.id)
       ? previous.map(line => line.dish.id === dish.id
         ? { ...line, quantity: Math.min(999, line.quantity + 1) }
@@ -130,7 +179,11 @@ export default function PosPage() {
           key,
           table: '',
           table_id: tableId ? Number(tableId) : null,
-          waiter: tableId ? waiter : '',
+          // Ro'yxatdan tanlangan bo'lsa ism serverda qo'yiladi; qo'lda
+          // yozilgani esa ofitsiantlar ro'yxati bo'sh bo'lgandagina yuboriladi.
+          waiter: waiterId ? '' : waiter,
+          waiter_id: waiterId ? Number(waiterId) : null,
+          channel,
           payment_method: method,
           lines,
         }),
@@ -143,6 +196,9 @@ export default function PosPage() {
       setKey(crypto.randomUUID())
       setPayModal(false)
       setCashGiven('')
+      setWaiterId('')
+      // Qoldiq sotuvdan keyin kamayadi — keyingi buyurtmada yangisi ko'rinsin.
+      api<PrepStatus>('dish-prep/').then(setPrep).catch(() => {})
       // Talon chiqmagan bo'lsa kassir buni ko'rishi shart, shuning uchun
       // xaritaga qaytmaymiz — ogohlantirish shu yerda qoladi.
       if ((tableId || appending) && !saved.print_problems?.length) {
@@ -206,6 +262,26 @@ export default function PosPage() {
         </div>
       )}
 
+      {!tableId && !appending && (
+        <div className="channel-switch" role="group" aria-label={t('Savdo kanali')}>
+          {CHANNELS.map(item => (
+            <button
+              key={item.value}
+              className={channel === item.value ? 'selected' : undefined}
+              disabled={locked}
+              onClick={() => setPickedChannel(item.value)}
+            >
+              {t(item.name)}
+            </button>
+          ))}
+          <span className="muted">
+            {delivery
+              ? t('Yetkazib berish — puli kassaga tushmaydi, platforma hisobiga o‘tadi.')
+              : t('Puli kassaga tushadi.')}
+          </span>
+        </div>
+      )}
+
       <div className="pos-layout">
         <section>
           <div className="search-field wide">
@@ -230,7 +306,10 @@ export default function PosPage() {
             ))}
           </div>
           <div className="pos-dishes">
-            {filtered.map(dish => (
+            {filtered.map(dish => {
+              const row = stock.get(dish.id)
+              const remaining = row?.tracked ? row.remaining - inCart(dish.id) : null
+              return (
               <button
                 key={dish.id}
                 className="pos-dish"
@@ -238,6 +317,11 @@ export default function PosPage() {
                 onClick={() => add(dish)}
               >
                 <DishArt name={dish.name} category={dish.category_name} image={dish.image} />
+                {remaining !== null && (
+                  <span className={`prep-badge${remaining <= 0 ? ' out' : remaining <= row!.warn_at ? ' low' : ''}`}>
+                    {remaining <= 0 ? t('Tugadi') : tn('{count} ta qoldi', remaining)}
+                  </span>
+                )}
                 <div>
                   <span>{dish.portion}</span>
                   <h3>{dish.name}</h3>
@@ -248,7 +332,8 @@ export default function PosPage() {
                   {!dish.available && <small>{t('Hozir mavjud emas')}</small>}
                 </div>
               </button>
-            ))}
+              )
+            })}
           </div>
         </section>
 
@@ -265,7 +350,23 @@ export default function PosPage() {
             </p>
           )}
 
-          {!!tableId && (
+          {/* Yetkazib berishda ofitsiant yo'q — buyurtmani platforma oladi. */}
+          {!appending && !delivery && (waiters.length ? (
+            <label className="table-fields">
+              {t('Ofitsiant')}
+              <select value={waiterId} onChange={event => setWaiterId(event.target.value)} disabled={locked}>
+                <option value="">{t('Belgilanmagan')}</option>
+                {waiters.map(item => (
+                  <option key={item.id} value={item.id}>{item.name} · {item.commission}%</option>
+                ))}
+              </select>
+              {!!pickedWaiter && !!waiterFee && (
+                <small className="muted">
+                  {t('Ulushi: {fee} so‘m ({percent}%)', { fee: money(waiterFee), percent: pickedWaiter.commission })}
+                </small>
+              )}
+            </label>
+          ) : !!tableId && (
             <label className="table-fields">
               {t('Ofitsiant')}
               <input
@@ -276,6 +377,13 @@ export default function PosPage() {
                 placeholder={t('Ism (ixtiyoriy)')}
               />
             </label>
+          ))}
+
+          {!!oversold.length && (
+            <p className="alert" role="status">
+              {t('Tayyorlangan miqdordan ko‘p:')}{' '}
+              {oversold.map(item => t('{name} +{count}', { name: item.name, count: item.over })).join(' · ')}
+            </p>
           )}
 
           {!cart.length && (
@@ -388,10 +496,11 @@ export default function PosPage() {
                 key={item.method}
                 type="button"
                 className={payment === item.method ? 'selected' : undefined}
-                disabled={locked}
+                // Uzum buyurtmasi naqd bo'lolmaydi: pul platformadan keladi.
+                disabled={locked || (delivery && item.method !== channel)}
                 onClick={() => setPayment(item.method)}
               >
-                {item.label}
+                {t(item.label)}
               </button>
             ))}
           </div>

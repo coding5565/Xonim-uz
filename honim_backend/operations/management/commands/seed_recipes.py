@@ -49,7 +49,7 @@ class Command(BaseCommand):
                 dish = Dish.objects.filter(branch=branch, name=recipe_data["dish"]).first() if recipe_data["dish"] else None
                 recipe, _ = Recipe.objects.update_or_create(
                     branch=branch, name=recipe_data["name"],
-                    defaults={"dish": dish, "yield_quantity": Decimal(recipe_data["yield"]), "yield_unit": recipe_data["yield_unit"], "selling_price": Decimal(recipe_data["price"]), "active": True},
+                    defaults={"dish": dish, "yield_quantity": Decimal(recipe_data["yield"]), "yield_unit": recipe_data["yield_unit"], "active": True},
                 )
                 recipe.lines.all().delete()
                 RecipeLine.objects.bulk_create([

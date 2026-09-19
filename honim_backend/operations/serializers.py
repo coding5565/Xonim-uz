@@ -212,13 +212,14 @@ class RecipeSerializer(serializers.ModelSerializer):
     batch_cost = serializers.SerializerMethodField()
     unit_cost = serializers.SerializerMethodField()
     gross_profit = serializers.SerializerMethodField()
+    # Kiritilmaydi, o'qiladi: narx menyudagi taomdan keladi.
+    selling_price = serializers.SerializerMethodField()
 
     class Meta:
         model = Recipe
         fields = ['id', 'dish', 'dish_name', 'name', 'yield_quantity', 'yield_unit', 'selling_price', 'active', 'updated_at', 'lines', 'batch_cost', 'unit_cost', 'gross_profit']
         extra_kwargs = {
             'dish': {'required': False, 'allow_null': True},
-            'selling_price': {'min_value': 0},
             'yield_quantity': {'min_value': Decimal('0.001')},
         }
 
@@ -231,8 +232,15 @@ class RecipeSerializer(serializers.ModelSerializer):
     def get_unit_cost(self, obj):
         return self._cost(obj) / obj.yield_quantity
 
+    def get_selling_price(self, obj):
+        """Taom narxi. Retseptga alohida narx yozilmaydi."""
+        return obj.dish.price if obj.dish else Decimal('0')
+
     def get_gross_profit(self, obj):
-        return obj.selling_price - self.get_unit_cost(obj)
+        """Taomga bog'lanmagan retsept yarim tayyor mahsulot — foydasi yo'q."""
+        if not obj.dish:
+            return Decimal('0')
+        return obj.dish.price - self.get_unit_cost(obj)
 
     def validate(self, attrs):
         request = self.context['request']

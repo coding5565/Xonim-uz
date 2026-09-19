@@ -33,6 +33,8 @@ const StaffPage = lazy(() => import('./pages/StaffPage'))
 const ActivityPage = lazy(() => import('./pages/ActivityPage'))
 const PayrollPage = lazy(() => import('./pages/PayrollPage'))
 const FinancePage = lazy(() => import('./pages/FinancePage'))
+const WaitersPage = lazy(() => import('./pages/WaitersPage'))
+const PrepPage = lazy(() => import('./pages/PrepPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 
 /** Resolves the session before any protected page renders. */
@@ -91,6 +93,8 @@ createRoot(document.getElementById('app')!).render(
               <Route path="/activity" element={<Allow roles={['owner']}><ActivityPage /></Allow>} />
               <Route path="/payroll" element={<Allow roles={['owner']}><PayrollPage /></Allow>} />
               <Route path="/finance" element={<Allow roles={['owner']}><FinancePage /></Allow>} />
+              <Route path="/waiters" element={<Allow roles={['owner']}><WaitersPage /></Allow>} />
+              <Route path="/tayyor" element={<Allow roles={sales}><PrepPage /></Allow>} />
               <Route path="/settings" element={<Allow roles={staffed}><SettingsPage /></Allow>} />
             </Route>
           </Route>

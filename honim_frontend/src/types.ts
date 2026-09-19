@@ -19,10 +19,18 @@ export interface Category { id: number; name: string; position: number; station:
 export interface Dish { id: number; category: number; category_name: string; name: string; description: string; price: string; portion: string; image: string | null; available: boolean; archived: boolean; station: Station | ''; print_station: Station }
 export interface Line { id: number; dish: number; name: string; price: string; quantity: number; note: string; added: boolean }
 export type OrderStatus = 'open' | 'paid' | 'cancelled' | 'refunded'
+export type SaleChannel = 'hall' | 'takeaway' | 'uzum' | 'yandex'
 export interface Order {
   id: number
   table: string
   waiter: string
+  /** Ro‘yxatdagi ofitsiant; qo‘lda yozilgan ism bo‘lsa bo‘sh qoladi. */
+  waiter_ref: number | null
+  /** Sotuv paytida muzlatilgan foiz — keyin o‘zgarsa ham bu o‘zgarmaydi. */
+  waiter_commission: string
+  waiter_fee: string
+  channel: SaleChannel
+  channel_label: string
   status: OrderStatus
   status_label: string
   total: string
@@ -57,6 +65,7 @@ export interface SalesBoard {
   days: { date: string; orders: number; revenue: string }[]
   dishes: { dish_id: number; dish: string; category: string; quantity: number; orders: number; revenue: string }[]
   categories: { category_id: number; category: string; quantity: number; orders: number; revenue: string }[]
+  channels: ChannelRow[]
   cashiers: { name: string; orders: number; quantity: number; revenue: string }[]
   checks: { id: number; table: string; waiter: string; total: string; payment_method: string; payment_label: string; paid_at: string; cashier_name: string; items: number }[]
 }
@@ -195,6 +204,7 @@ export interface Finance {
   }
   expenses: { category: string; amount: string; share: string; count: number; salary: boolean }[]
   methods: { method: string; label: string; revenue: string; orders: number; share: string }[]
+  channels: ChannelRow[]
   salary: {
     total: string
     payments: number
@@ -300,4 +310,60 @@ export interface ShiftDay {
 export interface ShiftHistory {
   days: ShiftDay[]
   summary: { closed_days: number; total_difference: string; alerts: number; alert_som: string }
+}
+/** Kanal kesimi: zal, olib ketish, Uzum, Yandex. */
+export interface ChannelRow {
+  channel: SaleChannel
+  label: string
+  revenue: string
+  orders: number
+  share?: string
+  /** Yetkazib berish platformasi — puli kassaga tushmaydi. */
+  delivery: boolean
+}
+export interface Waiter {
+  id: number
+  name: string
+  phone: string
+  /** Foizda: 5 -> hisobning 5 foizi. */
+  commission: string
+  active: boolean
+}
+export interface WaiterEarnings {
+  filters: { start: string; end: string }
+  summary: {
+    revenue: string
+    fees: string
+    waiters: number
+    unassigned_revenue: string
+    unassigned_orders: number
+  }
+  waiters: { id: number; name: string; orders: number; revenue: string; fee: string; share: string }[]
+}
+export interface PrepRow {
+  dish: number
+  name: string
+  prepared: number
+  sold: number
+  remaining: number
+  /** Miqdori kiritilmagan taom cheklanmaydi. */
+  tracked: boolean
+  out: boolean
+  low: boolean
+  /** Necha donada ogohlantirish boshlanadi; chegarani server belgilaydi. */
+  warn_at: number
+}
+export interface PrepStatus {
+  date: string
+  summary: { tracked: number; out: number; low: number; prepared: number; sold: number; remaining: number }
+  dishes: PrepRow[]
+}
+export interface PrepHistory {
+  date: string
+  rows: { id: number; dish: number; name: string; quantity: number; note: string; actor: string; created_at: string }[]
+}
+export interface PrepLeftovers {
+  date: string
+  summary: PrepStatus['summary']
+  leftovers: PrepRow[]
 }

@@ -154,7 +154,7 @@ export default function OrdersPage() {
                   <td className="number">{money(order.total)} {t('so‘m')}</td>
                   <td>
                     <span className={`status ${statusTone(order.status)}`}>
-                      {order.status === 'open' ? t('To‘lov kutilmoqda') : order.status_label}
+                      {order.status === 'open' ? t('To‘lov kutilmoqda') : t(order.status_label)}
                     </span>
                     {order.void_reason && <small>{order.void_reason}</small>}
                   </td>
@@ -209,7 +209,7 @@ export default function OrdersPage() {
                 <label>
                   {t('To‘lov usuli')}
                   <select value={method} onChange={event => setMethod(event.target.value)}>
-                    {methods.map(item => <option key={item.method} value={item.method}>{item.label}</option>)}
+                    {methods.map(item => <option key={item.method} value={item.method}>{t(item.label)}</option>)}
                   </select>
                 </label>
                 <button className="button primary full" disabled={busy}>

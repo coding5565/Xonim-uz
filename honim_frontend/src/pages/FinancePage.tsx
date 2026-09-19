@@ -290,7 +290,7 @@ export default function FinancePage() {
       <div className="finance-grid">
         <section className="panel">
           <header className="panel-heading">
-            <div><h2>{t('Pul qaysi yo‘l bilan tushdi')}</h2><p>{t('To‘lov turlari bo‘yicha')}</p></div>
+            <div><h2>{t('Pul qaysi yo‘l bilan tushdi')}</h2><p>{t('To‘lov turi va savdo kanali bo‘yicha')}</p></div>
             <Coins size={18} />
           </header>
           <div className="category-ranking">
@@ -298,7 +298,7 @@ export default function FinancePage() {
               <Link key={row.method} to={`/sales?${range}`}>
                 <div>
                   <div>
-                    <strong>{row.label}</strong>
+                    <strong>{t(row.label)}</strong>
                     <span>{tn('{count} ta chek', Number(row.orders))} · {row.share}%</span>
                     <b>{money(row.revenue)}</b>
                   </div>
@@ -308,6 +308,19 @@ export default function FinancePage() {
             ))}
             {!data.methods.length && <div className="empty-state compact">{t('Bu davrda savdo yo‘q.')}</div>}
           </div>
+          {/* Yetkazib berish puli kassaga tushmaydi — bu farq ko'rinib tursin. */}
+          {!!data.channels.length && (
+            <div className="cash-rows">
+              <p className="nav-caption">{t('SAVDO KANALLARI')}</p>
+              {data.channels.map(row => (
+                <Link key={row.channel} to={`/sales?${range}`} className="cash-row">
+                  <span>{t(row.label)}{row.delivery ? ` · ${t('yetkazib berish')}` : ''}</span>
+                  <b>{money(row.revenue)}</b>
+                  <ArrowRight size={14} />
+                </Link>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="panel">

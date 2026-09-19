@@ -921,3 +921,54 @@ td strong,.chat-row-open strong{overflow-wrap:anywhere}
     scroll-behavior:auto !important;
   }
 }
+
+/* ── 8. Tayyor taomlar, kanal va ofitsiant ─────────────────────────────── */
+/* Tugagan taom — xato emas, ogohlantirish. Shuning uchun issiq rang,
+   qip-qizil emas: kassir baribir sotishi mumkin. */
+.status.alert{background:#fdf0ec;color:#a8492f}
+.theme-dark .status.alert{background:#38231f;color:#f0b6a6}
+
+/* Kiritish maydoni: bir ekranda ko'p taom, har birida bitta raqam */
+.prep-form{padding:0 var(--s5) var(--s5)}
+.prep-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:var(--s3);margin-bottom:var(--s5)}
+.prep-tile{display:grid;grid-template-columns:minmax(0,1fr) 84px;align-items:center;
+  gap:2px var(--s3);margin:0;padding:var(--s3) var(--s4);
+  border:1px solid var(--line);border-radius:var(--r2);background:var(--surface);
+  transition:border-color var(--fast) var(--ease),background var(--fast) var(--ease)}
+.prep-tile:focus-within{border-color:var(--green)}
+.prep-name{font-size:var(--f-md);font-weight:600;color:var(--ink);overflow-wrap:anywhere}
+.prep-state{font-size:var(--f-xs);color:var(--muted)}
+.prep-tile input{grid-column:2;grid-row:1/3;text-align:center;font-variant-numeric:tabular-nums}
+.prep-tile.low{border-color:var(--warm-200);background:var(--warm-50)}
+.prep-tile.low .prep-state{color:var(--warm-700)}
+.prep-tile.out{border-color:#f0d2c7;background:#fdf1ed}
+.prep-tile.out .prep-state{color:#a8492f}
+.theme-dark .prep-tile.out{border-color:#5f3a30;background:#2f1f1b}
+.theme-dark .prep-tile.out .prep-state{color:#e8a794}
+.prep-note{max-width:420px}
+
+/* Kassa kartasidagi qoldiq belgisi — rasm ustida turadi */
+.pos-dish{position:relative}
+.prep-badge{position:absolute;top:9px;left:9px;z-index:1;
+  padding:4px 9px;border-radius:var(--pill);
+  font-size:var(--f-xs);font-weight:600;font-variant-numeric:tabular-nums;
+  background:#ffffffee;color:var(--green-800);box-shadow:var(--sh1)}
+.prep-badge.low{background:var(--warm-500);color:#fff}
+.prep-badge.out{background:#b35437;color:#fff}
+.theme-dark .prep-badge{background:#1d2c26ee;color:#a9dcc0}
+
+/* Sotuv kanali: zal, olib ketish, Uzum, Yandex */
+.channel-switch{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s2);margin-bottom:var(--s5)}
+.channel-switch button{border:1px solid var(--line);background:var(--surface);color:var(--muted);
+  border-radius:var(--pill);padding:9px 17px;font-size:var(--f-sm);font-weight:600;
+  transition:background var(--fast) var(--ease),color var(--fast) var(--ease),border-color var(--fast) var(--ease)}
+.channel-switch button:hover:not(:disabled){border-color:var(--green-200);color:var(--green-800)}
+.channel-switch button.selected{background:var(--green);border-color:var(--green);color:#fff}
+.channel-switch .muted{margin-left:auto;font-size:var(--f-xs)}
+.theme-dark .channel-switch button.selected{color:#0f1f1a}
+
+@media(max-width:650px){
+  .prep-grid{grid-template-columns:1fr}
+  .prep-form{padding:0 var(--s4) var(--s4)}
+  .channel-switch .muted{margin-left:0;flex-basis:100%}
+}

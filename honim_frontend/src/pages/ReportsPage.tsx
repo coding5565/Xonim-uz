@@ -242,7 +242,7 @@ export default function ReportsPage() {
               <footer>
                 {data.summary.by_method.length
                   ? data.summary.by_method.map(row => (
-                    <span key={row.method}>{row.label}: <strong>{money(row.revenue)}</strong></span>
+                    <span key={row.method}>{t(row.label)}: <strong>{money(row.revenue)}</strong></span>
                   ))
                   : <span>{t('To‘lov qayd etilmagan')}</span>}
               </footer>
