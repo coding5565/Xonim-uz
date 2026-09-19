@@ -254,7 +254,12 @@ export default function PosPage() {
       <div className="page-heading">
         <div>
           <span className="eyebrow">{place.toUpperCase()}</span>
-          <h1>{t('Buyurtma')}<span className="heading-dot">.</span></h1>
+          <h1>
+            {t('Buyurtma')}<span className="heading-dot">.</span>
+            {/* Platforma nishoni buyurtma yig'ilayotganda doim ko'rinib turadi:
+                kassir qaysi kanalda ishlayotganini eslab qolishga majbur emas. */}
+            {delivery && <span className={`channel-mark ${channel}`}>{channel}</span>}
+          </h1>
           <p>{t('Taomni tanlang. Hisobni tizim hisoblaydi.')}</p>
         </div>
         <button className="button secondary" onClick={() => navigate('/pos')}>

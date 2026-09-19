@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BadgePercent, Ban, Bike, Plus, Printer, RefreshCw, ShoppingBag, Trash2, Users } from 'lucide-react'
+import { BadgePercent, Ban, Plus, Printer, RefreshCw, ShoppingBag, Trash2, Users } from 'lucide-react'
 import { api, list, money } from '../api'
 import { useSession } from '../session'
 import { useI18n } from '../i18n'
@@ -16,10 +16,12 @@ const ZONES: { key: TableZone; title: string }[] = [
 /** Stol bilan bog'liq bo'lmagan savdo joylari. Har biri alohida kiriladi va
  *  alohida hisoblanadi: kanal marshrutda yozilgani uchun kassir uni tanlashni
  *  unuta olmaydi. */
-const COUNTERS: { channel: SaleChannel; path: string; name: string; icon: typeof ShoppingBag }[] = [
-  { channel: 'takeaway', path: '/pos/tezkor', name: 'Olib ketish', icon: ShoppingBag },
-  { channel: 'uzum', path: '/pos/uzum', name: 'Uzum', icon: Bike },
-  { channel: 'yandex', path: '/pos/yandex', name: 'Yandex', icon: Bike },
+const COUNTERS: { channel: SaleChannel; path: string; name: string; mark?: string }[] = [
+  { channel: 'takeaway', path: '/pos/tezkor', name: 'Olib ketish' },
+  // Platformalar o'z rangi va nomi bilan ajralib turadi: kassir shoshib
+  // turganda ham qaysi tugmani bosayotganini o'ylab o'tirmasligi kerak.
+  { channel: 'uzum', path: '/pos/uzum', name: 'Uzum', mark: 'uzum' },
+  { channel: 'yandex', path: '/pos/yandex', name: 'Yandex', mark: 'yandex' },
 ]
 
 /** Matn tarjimoni — modul darajasidagi funksiyalarga hook o'rniga uzatiladi. */
@@ -237,15 +239,16 @@ export default function TablesPage() {
       {/* Stolsiz savdo: har kanal alohida kiriladi va alohida hisoblanadi. */}
       <div className="counter-entries">
         {COUNTERS.map(item => {
-          const Icon = item.icon
           const today = summary?.today_by_channel.find(row => row.channel === item.channel)
           return (
             <button
               key={item.channel}
-              className={`counter-entry${item.channel === 'takeaway' ? ' primary' : ''}`}
+              className={`counter-entry ${item.channel}`}
               onClick={() => navigate(item.path)}
             >
-              <span className="counter-icon"><Icon size={19} /></span>
+              <span className="counter-icon">
+                {item.mark ? <b>{item.mark}</b> : <ShoppingBag size={19} />}
+              </span>
               <span className="counter-name">{t(item.name)}</span>
               <span className="counter-total">
                 {money(today?.revenue || 0)} <small>{t('so‘m')}</small>

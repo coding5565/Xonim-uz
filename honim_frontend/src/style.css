@@ -990,14 +990,36 @@ td strong,.chat-row-open strong{overflow-wrap:anywhere}
 .counter-total{font-size:var(--f-lg);font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
 .counter-total small{font-size:var(--f-xs);font-weight:500;color:var(--muted)}
 .counter-note{grid-column:2;font-size:var(--f-xs);color:var(--muted)}
-.counter-entry.primary{background:var(--green);border-color:var(--green)}
-.counter-entry.primary .counter-name,.counter-entry.primary .counter-total{color:#fff}
-.counter-entry.primary .counter-total small,.counter-entry.primary .counter-note{color:#cfe4d9}
-.counter-entry.primary .counter-icon{background:#ffffff22;color:#eaf5ef}
-.theme-dark .counter-entry.primary .counter-name,
-.theme-dark .counter-entry.primary .counter-total{color:#0f1f1a}
-.theme-dark .counter-entry.primary .counter-total small,
-.theme-dark .counter-entry.primary .counter-note{color:#1d4536}
+.counter-entry.takeaway{background:var(--green);border-color:var(--green)}
+.counter-entry.takeaway .counter-name,.counter-entry.takeaway .counter-total{color:#fff}
+.counter-entry.takeaway .counter-total small,.counter-entry.takeaway .counter-note{color:#cfe4d9}
+.counter-entry.takeaway .counter-icon{background:#ffffff22;color:#eaf5ef}
+.theme-dark .counter-entry.takeaway .counter-name,
+.theme-dark .counter-entry.takeaway .counter-total{color:#0f1f1a}
+.theme-dark .counter-entry.takeaway .counter-total small,
+.theme-dark .counter-entry.takeaway .counter-note{color:#1d4536}
+
+/* Platformalar o'z rangida turadi — kassir uzoqdan ham adashmasin.
+   Logotip fayllari qo'yilmaydi (o'zganing tovar belgisi), rang va nom
+   ajratish uchun yetarli. */
+.counter-icon b{font-family:'Manrope',sans-serif;font-weight:800;font-size:12px;
+  letter-spacing:-.4px;line-height:1;text-transform:lowercase}
+.counter-entry.uzum{border-color:#7000ff59;background:linear-gradient(180deg,#f7f2ff,var(--surface))}
+.counter-entry.uzum:hover{border-color:#7000ff}
+.counter-entry.uzum .counter-icon{background:#7000ff;color:#fff}
+.counter-entry.yandex{border-color:#fc3f1d4d;background:linear-gradient(180deg,#fff7ec,var(--surface))}
+.counter-entry.yandex:hover{border-color:#fc3f1d}
+.counter-entry.yandex .counter-icon{background:#ffcc00;color:#1c1c1c}
+.theme-dark .counter-entry.uzum{background:linear-gradient(180deg,#241a38,var(--surface))}
+.theme-dark .counter-entry.yandex{background:linear-gradient(180deg,#32250f,var(--surface))}
 @media(max-width:800px){
   .counter-entries{grid-template-columns:1fr}
 }
+
+/* Kassa sarlavhasidagi platforma nishoni */
+.channel-mark{display:inline-flex;align-items:center;vertical-align:middle;
+  margin-left:var(--s3);padding:5px 11px;border-radius:var(--pill);
+  font-family:'Manrope',sans-serif;font-size:13px;font-weight:800;letter-spacing:-.3px;
+  text-transform:lowercase}
+.channel-mark.uzum{background:#7000ff;color:#fff}
+.channel-mark.yandex{background:#ffcc00;color:#1c1c1c}
