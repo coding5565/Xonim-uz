@@ -470,7 +470,7 @@ export default function SalesPage() {
                         <small>{tn('{count} ta porsiya', check.items)}</small>
                       </td>
                       <td>
-                        {check.table ? t('{table}-stol', { table: check.table }) : t('Tezkor savdo')}
+                        {check.table ? t('{table}-stol', { table: check.table }) : t(check.channel_label)}
                         <small>{check.waiter || '—'}</small>
                       </td>
                       <td>{dateLabel(check.paid_at)}</td>

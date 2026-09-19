@@ -1060,6 +1060,7 @@ export const en: Record<string, string> = {
   '{label}: tushum {revenue}, sof foyda {profit} so‘m': '{label}: revenue {revenue}, net profit {profit} so‘m',
   '{label}: {value} so‘m sarflandi, {received} so‘m kirim': '{label}: {value} so‘m used, {received} so‘m received',
   '{label}: {value} so‘m · {used} sarflandi, {received} kirim': '{label}: {value} so‘m · {used} used, {received} received',
+  '{method} hisobiga tushadi — kassaga naqd kelmaydi.': 'Goes to the {method} account — no cash reaches the till.',
   '{month} da to‘langan': 'Paid for {month}',
   '{name} +{count}': '{name} +{count}',
   '{name} ni olib tashlash': 'Remove {name}',

@@ -67,10 +67,10 @@ export interface SalesBoard {
   categories: { category_id: number; category: string; quantity: number; orders: number; revenue: string }[]
   channels: ChannelRow[]
   cashiers: { name: string; orders: number; quantity: number; revenue: string }[]
-  checks: { id: number; table: string; waiter: string; total: string; payment_method: string; payment_label: string; paid_at: string; cashier_name: string; items: number }[]
+  checks: { id: number; table: string; waiter: string; total: string; payment_method: string; payment_label: string; channel: SaleChannel; channel_label: string; paid_at: string; cashier_name: string; items: number }[]
 }
 export interface SalesTotals { revenue: string; orders: number }
-export interface SalesSummary { today: SalesTotals; yesterday: SalesTotals; last_7_days: SalesTotals; mine_today: SalesTotals; open: SalesTotals; today_by_method: {method: string; label: string; revenue: string}[]; as_of: string }
+export interface SalesSummary { today: SalesTotals; yesterday: SalesTotals; last_7_days: SalesTotals; mine_today: SalesTotals; open: SalesTotals; today_by_method: {method: string; label: string; revenue: string}[]; today_by_channel: ChannelRow[]; as_of: string }
 export interface RecipeLine { id:number; ingredient:number; ingredient_name:string; unit:string; unit_price:string; quantity:string; batch_cost:string }
 export interface Recipe { id:number; dish:number|null; dish_name:string; name:string; yield_quantity:string; yield_unit:string; selling_price:string; active:boolean; updated_at:string; lines:RecipeLine[]; batch_cost:string; unit_cost:string; gross_profit:string }
 export interface ActivityEvent { id: number; action: string; label: string; group: string; description: string; created_at: string; actor_id: number; actor: string }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, CheckCircle2, Minus, Plus, Search, ShoppingBag, Trash2 } from 'lucide-react'
 import { api, list, money } from '../api'
 import { useSession } from '../session'
@@ -14,23 +14,28 @@ interface CartLine {
   note: string
 }
 
-/** Sotuv kanallari. Zal stol bilan kelgan hisobga qo'yiladi, qolgani
- *  tezkor savdoda tanlanadi. Uzum va Yandex puli kassaga tushmaydi. */
-const CHANNELS: { value: SaleChannel; name: string }[] = [
-  { value: 'takeaway', name: 'Olib ketish' },
-  { value: 'uzum', name: 'Uzum' },
-  { value: 'yandex', name: 'Yandex' },
-  { value: 'hall', name: 'Zal' },
-]
+/** Yetkazib berish platformalari — kanal ham, to'lov turi ham shu nom bilan. */
+const DELIVERY_METHODS = ['uzum', 'yandex']
+
+/** Sotuv kanali marshrutdan aniqlanadi. */
+const ROUTE_CHANNELS: Record<string, SaleChannel> = {
+  '/pos/uzum': 'uzum',
+  '/pos/yandex': 'yandex',
+  '/pos/tezkor': 'takeaway',
+}
 
 /** Buyurtma yig'ish ekrani. Nima uchun ochilgani marshrutdan aniqlanadi:
- *  /pos/tezkor          - olib ketish yoki yetkazib berish (kanal tanlanadi)
- *  /pos/stol/:tableId   - stolga yangi hisob
+ *  /pos/tezkor          - olib ketish
+ *  /pos/uzum            - Uzum yetkazib berish
+ *  /pos/yandex          - Yandex yetkazib berish
+ *  /pos/stol/:tableId   - stolga yangi hisob (zal)
  *  /pos/hisob/:orderId  - ochiq hisobga qo'shish
- *  Shu sababli kassirda rejim tanlaydigan tugmalar yo'q.
+ *  Shu sababli kassirda rejim yoki kanal tanlaydigan tugmalar yo'q: har biri
+ *  o'z kirish joyidan ochiladi va noto'g'ri belgilab qo'yish imkoni yo'qoladi.
  */
 export default function PosPage() {
   const { tableId, orderId } = useParams()
+  const { pathname } = useLocation()
   const navigate = useNavigate()
   const { user } = useSession()
   const { t, tn } = useI18n()
@@ -42,8 +47,6 @@ export default function PosPage() {
   const [waiter, setWaiter] = useState('')
   const [waiters, setWaiters] = useState<Waiter[]>([])
   const [waiterId, setWaiterId] = useState('')
-  // Zal hisobi stoldan kelgani uchun kanal tanlanmaydi.
-  const [pickedChannel, setPickedChannel] = useState<SaleChannel>('takeaway')
   // Bugun tayyorlangan porsiyalar: kartada qoldiq ko'rinib tursin.
   const [prep, setPrep] = useState<PrepStatus>()
   const [error, setError] = useState('')
@@ -62,8 +65,8 @@ export default function PosPage() {
   const cartPanel = useRef<HTMLElement>(null)
 
   const appending = !!orderId
-  // Zal hisobi stoldan kelgani uchun kanal so'ralmaydi; tezkor savdoda tanlanadi.
-  const channel: SaleChannel = tableId ? 'hall' : pickedChannel
+  // Stol bilan kelgan hisob — zal; qolgani marshrutda yozilgan.
+  const channel: SaleChannel = tableId ? 'hall' : (ROUTE_CHANNELS[pathname] || 'takeaway')
   const delivery = channel === 'uzum' || channel === 'yandex'
 
   useEffect(() => {
@@ -100,7 +103,7 @@ export default function PosPage() {
 
   useEffect(() => {
     if (!lockedRequest) setKey(crypto.randomUUID())
-  }, [cart, waiter, waiterId, pickedChannel, lockedRequest])
+  }, [cart, waiter, waiterId, channel, lockedRequest])
 
   useEffect(() => {
     // Uzum/Yandex buyurtmasining puli o'sha platforma orqali keladi, shuning
@@ -125,7 +128,11 @@ export default function PosPage() {
   const change = Math.max(0, Number(cashGiven) - total)
   const count = cart.reduce((sum, line) => sum + line.quantity, 0)
   const locked = !!lockedRequest
-  const methods = user?.payment_methods || []
+  // Uzum va Yandex endi alohida kanal: ularga o'z kirish joyidan kiriladi va
+  // to'lov turi avtomatik qo'yiladi. Zal va olib ketish savdosida ular
+  // ro'yxatda turishi kassirni chalg'itardi.
+  const methods = (user?.payment_methods || [])
+    .filter(item => delivery ? item.method === channel : !DELIVERY_METHODS.includes(item.method))
   const paymentLabel = methods.find(item => item.method === payment)?.label || payment
 
   const stock = new Map((prep?.dishes || []).map(row => [row.dish, row]))
@@ -142,9 +149,14 @@ export default function PosPage() {
   const pickedWaiter = waiters.find(item => String(item.id) === waiterId)
   const waiterFee = pickedWaiter ? (total * Number(pickedWaiter.commission)) / 100 : 0
 
+  // Sarlavhada kanal ko'rinib tursin: kassir qaysi joydan sotayotganini
+  // ekranga qarab bilishi kerak, yozib qo'yilgandan keyin emas.
+  const CHANNEL_NAMES: Record<SaleChannel, string> = {
+    hall: 'Zal', takeaway: 'Olib ketish', uzum: 'Uzum', yandex: 'Yandex',
+  }
   const place = appending
     ? t('#{id} hisobiga qo‘shish', { id: bill?.id ?? orderId ?? '' })
-    : table ? t('{table} · yangi hisob', { table: table.label }) : t('Tezkor savdo')
+    : table ? t('{table} · yangi hisob', { table: table.label }) : t(CHANNEL_NAMES[channel])
 
   function add(dish: Dish) {
     if (busy || locked || !dish.available) return
@@ -275,24 +287,10 @@ export default function PosPage() {
         </div>
       )}
 
-      {!tableId && !appending && (
-        <div className="channel-switch" role="group" aria-label={t('Savdo kanali')}>
-          {CHANNELS.map(item => (
-            <button
-              key={item.value}
-              className={channel === item.value ? 'selected' : undefined}
-              disabled={locked}
-              onClick={() => setPickedChannel(item.value)}
-            >
-              {t(item.name)}
-            </button>
-          ))}
-          <span className="muted">
-            {delivery
-              ? t('Yetkazib berish — puli kassaga tushmaydi, platforma hisobiga o‘tadi.')
-              : t('Puli kassaga tushadi.')}
-          </span>
-        </div>
+      {delivery && (
+        <p className="alert" role="status">
+          {t('Yetkazib berish — puli kassaga tushmaydi, platforma hisobiga o‘tadi.')}
+        </p>
       )}
 
       <div className="pos-layout">
@@ -502,21 +500,30 @@ export default function PosPage() {
       <AppModal open={payModal} title={t('To‘lovni qayd etish')} onClose={() => { if (!busy) setPayModal(false) }}>
         <div className="payment-amount">{money(total)} <small>{t('so‘m')}</small></div>
         <form onSubmit={(event: FormEvent) => { event.preventDefault(); submit(payment) }}>
-          <p className="nav-caption">{t('TO‘LOV USULI')}</p>
-          <div className="pay-grid">
-            {methods.map(item => (
-              <button
-                key={item.method}
-                type="button"
-                className={payment === item.method ? 'selected' : undefined}
-                // Uzum buyurtmasi naqd bo'lolmaydi: pul platformadan keladi.
-                disabled={locked || (delivery && item.method !== channel)}
-                onClick={() => setPayment(item.method)}
-              >
-                {t(item.label)}
-              </button>
-            ))}
-          </div>
+          {/* Yetkazib berishda tanlanadigan narsa yo'q: pul o'sha platformadan
+              keladi, shuning uchun bitta tugmali ro'yxat ko'rsatilmaydi. */}
+          {delivery ? (
+            <p className="alert">
+              {t('{method} hisobiga tushadi — kassaga naqd kelmaydi.', { method: paymentLabel })}
+            </p>
+          ) : (
+            <>
+              <p className="nav-caption">{t('TO‘LOV USULI')}</p>
+              <div className="pay-grid">
+                {methods.map(item => (
+                  <button
+                    key={item.method}
+                    type="button"
+                    className={payment === item.method ? 'selected' : undefined}
+                    disabled={locked}
+                    onClick={() => setPayment(item.method)}
+                  >
+                    {t(item.label)}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
           {payment === 'cash' ? (
             <>
               <label>

@@ -972,3 +972,32 @@ td strong,.chat-row-open strong{overflow-wrap:anywhere}
   .prep-form{padding:0 var(--s4) var(--s4)}
   .channel-switch .muted{margin-left:0;flex-basis:100%}
 }
+
+/* ── 9. Stolsiz savdo kirish joylari ───────────────────────────────────── */
+/* Tezkor savdo, Uzum va Yandex — har biri alohida kiriladi va bugungi
+   tushumi shu yerda ko'rinib turadi, chunki ular alohida hisoblanadi. */
+.counter-entries{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s3);margin-bottom:var(--s5)}
+.counter-entry{display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto auto;
+  gap:2px var(--s3);align-items:center;text-align:left;
+  padding:var(--s4) var(--s5);border:1px solid var(--line);border-radius:var(--r3);
+  background:var(--surface);box-shadow:var(--sh1);
+  transition:border-color var(--fast) var(--ease),box-shadow var(--fast) var(--ease),transform var(--fast) var(--ease)}
+.counter-entry:hover{border-color:var(--green-200);box-shadow:var(--sh2)}
+.counter-entry:active{transform:translateY(1px)}
+.counter-icon{grid-row:1/3;display:grid;place-items:center;width:42px;height:42px;
+  border-radius:var(--r2);background:var(--green-50);color:var(--green-600)}
+.counter-name{font-size:var(--f-md);font-weight:650;color:var(--ink)}
+.counter-total{font-size:var(--f-lg);font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
+.counter-total small{font-size:var(--f-xs);font-weight:500;color:var(--muted)}
+.counter-note{grid-column:2;font-size:var(--f-xs);color:var(--muted)}
+.counter-entry.primary{background:var(--green);border-color:var(--green)}
+.counter-entry.primary .counter-name,.counter-entry.primary .counter-total{color:#fff}
+.counter-entry.primary .counter-total small,.counter-entry.primary .counter-note{color:#cfe4d9}
+.counter-entry.primary .counter-icon{background:#ffffff22;color:#eaf5ef}
+.theme-dark .counter-entry.primary .counter-name,
+.theme-dark .counter-entry.primary .counter-total{color:#0f1f1a}
+.theme-dark .counter-entry.primary .counter-total small,
+.theme-dark .counter-entry.primary .counter-note{color:#1d4536}
+@media(max-width:800px){
+  .counter-entries{grid-template-columns:1fr}
+}

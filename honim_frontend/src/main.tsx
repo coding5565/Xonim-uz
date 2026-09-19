@@ -79,6 +79,10 @@ createRoot(document.getElementById('app')!).render(
               <Route path="/sales" element={<Allow roles={sales}><SalesPage /></Allow>} />
               <Route path="/pos" element={<Allow roles={sales}><TablesPage /></Allow>} />
               <Route path="/pos/tezkor" element={<Allow roles={sales}><PosPage /></Allow>} />
+              {/* Uzum va Yandex savdosi alohida kiriladi — kanal marshrutdan
+                  aniqlanadi, ya'ni kassir uni tanlashni unuta olmaydi. */}
+              <Route path="/pos/uzum" element={<Allow roles={sales}><PosPage /></Allow>} />
+              <Route path="/pos/yandex" element={<Allow roles={sales}><PosPage /></Allow>} />
               <Route path="/pos/stol/:tableId" element={<Allow roles={sales}><PosPage /></Allow>} />
               <Route path="/pos/hisob/:orderId" element={<Allow roles={sales}><PosPage /></Allow>} />
               <Route path="/tables" element={<Allow roles={sales}><TablesAdminPage /></Allow>} />

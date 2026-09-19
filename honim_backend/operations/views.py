@@ -10,7 +10,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from users.models import AuditEvent
 from users.permissions import BranchMember, KitchenOnly, OwnerOnly, SalesOnly
-from .models import ORDER_STATUSES, SALE_PAYMENT_CHOICES, SALE_PAYMENT_LABELS, Order, OrderLine, Table, Expense, Ingredient, Recipe, StockMovement
+from .models import DELIVERY_CHANNELS, ORDER_STATUSES, SALE_CHANNELS, SALE_PAYMENT_CHOICES, SALE_PAYMENT_LABELS, Order, OrderLine, Table, Expense, Ingredient, Recipe, StockMovement
 from .money import money, parse_month
 from .serializers import AppendLinesInput, OrderInput, OrderSerializer, TableSerializer, ExpenseSerializer, IngredientSerializer, MovementInput, MovementSerializer, RecipeSerializer
 from .printing import PrinterError, print_receipt
@@ -406,6 +406,17 @@ class SalesSummaryView(APIView):
             {'method': row['payment_method'], 'label': SALE_PAYMENT_LABELS.get(row['payment_method'], row['payment_method']), 'revenue': money(row['total'])}
             for row in today_paid.values('payment_method').annotate(total=Sum('total')).order_by('-total')
         ]
+        # Kanal kesimi kassirga ham kerak: Uzum va Yandex savdosi alohida
+        # kiritiladi, demak kun davomida qanchaligini ham alohida ko'rishi kerak.
+        counted = {row['channel']: row for row in
+                   today_paid.values('channel').annotate(total=Sum('total'), orders=Count('id'))}
+        by_channel = [{
+            'channel': channel,
+            'label': label,
+            'revenue': money(counted.get(channel, {}).get('total')),
+            'orders': counted.get(channel, {}).get('orders', 0),
+            'delivery': channel in DELIVERY_CHANNELS,
+        } for channel, label in SALE_CHANNELS]
         open_row = Order.objects.filter(branch=branch, status='open').aggregate(total=Sum('total'), orders=Count('id'))
         return Response({
             'today': totals(today_paid),
@@ -414,6 +425,7 @@ class SalesSummaryView(APIView):
             'mine_today': totals(today_paid.filter(cashier=request.user)),
             'open': {'revenue': money(open_row['total']), 'orders': open_row['orders']},
             'today_by_method': by_method,
+            'today_by_channel': by_channel,
             'as_of': timezone.now(),
         })
 

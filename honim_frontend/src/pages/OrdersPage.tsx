@@ -8,6 +8,9 @@ import type { Order } from '../types'
 import AppModal from '../components/AppModal'
 
 /** Bekor qilingan va qaytarilgan hisob to'langanidan boshqa rangda turadi. */
+/** Yetkazib berish platformalari — kanal ham, to'lov turi ham shu nom bilan. */
+const DELIVERY_METHODS = ['uzum', 'yandex']
+
 const statusTone = (status: Order['status']) =>
   status === 'paid' ? 'paid' : status === 'open' ? 'open' : 'neutral'
 
@@ -149,7 +152,7 @@ export default function OrdersPage() {
               {visible.map(order => (
                 <tr key={order.id}>
                   <td><strong>#{String(order.id).padStart(4, '0')}</strong><small>{tn('{count} xil taom', order.lines.length)}</small></td>
-                  <td>{order.table ? t('{table}-stol', { table: order.table }) : t('Tezkor savdo')}<small>{order.waiter || '—'}</small></td>
+                  <td>{order.table ? t('{table}-stol', { table: order.table }) : t(order.channel_label)}<small>{order.waiter || '—'}</small></td>
                   <td>{dateLabel(order.created_at)}</td>
                   <td className="number">{money(order.total)} {t('so‘m')}</td>
                   <td>
@@ -209,7 +212,14 @@ export default function OrdersPage() {
                 <label>
                   {t('To‘lov usuli')}
                   <select value={method} onChange={event => setMethod(event.target.value)}>
-                    {methods.map(item => <option key={item.method} value={item.method}>{t(item.label)}</option>)}
+                    {/* Yetkazib berish hisobi faqat o'z platformasi orqali
+                        to'lanadi; qolgan savdoda esa platforma turlari
+                        umuman ko'rinmaydi — ular alohida kanal. */}
+                    {methods
+                      .filter(item => DELIVERY_METHODS.includes(selected.channel)
+                        ? item.method === selected.channel
+                        : !DELIVERY_METHODS.includes(item.method))
+                      .map(item => <option key={item.method} value={item.method}>{t(item.label)}</option>)}
                   </select>
                 </label>
                 <button className="button primary full" disabled={busy}>

@@ -417,6 +417,10 @@ def build_sales_board(user, filters):
             {'id': order.id, 'table': order.table, 'waiter': order.waiter, 'total': str(order.total),
              'payment_method': order.payment_method,
              'payment_label': SALE_PAYMENT_LABELS.get(order.payment_method, order.payment_method or '—'),
+             # Stolsiz chek qaysi kanaldan kelgani ko'rinib tursin: ilgari
+             # hammasi «Tezkor savdo» deb bir xil yozilardi.
+             'channel': order.channel,
+             'channel_label': SALE_CHANNEL_LABELS.get(order.channel, order.channel),
              'paid_at': order.paid_at,
              'cashier_name': order.cashier.first_name or order.cashier.username,
              'items': sum(line.quantity for line in order.lines.all())}

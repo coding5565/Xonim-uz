@@ -1,16 +1,25 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BadgePercent, Ban, Plus, Printer, RefreshCw, ShoppingBag, Trash2, Users } from 'lucide-react'
+import { BadgePercent, Ban, Bike, Plus, Printer, RefreshCw, ShoppingBag, Trash2, Users } from 'lucide-react'
 import { api, list, money } from '../api'
 import { useSession } from '../session'
 import { useI18n } from '../i18n'
-import type { Order, Table, TableZone } from '../types'
+import type { Order, SaleChannel, SalesSummary, Table, TableZone } from '../types'
 import AppModal from '../components/AppModal'
 
 /** Zal chizmasi: kirganda chapda divanlar, o'ngda stulli stollar, tashqarida alohida. */
 const ZONES: { key: TableZone; title: string }[] = [
   { key: 'hall_left', title: 'Chap tomon · divan' },
   { key: 'hall_right', title: 'O‘ng tomon · stulli' },
+]
+
+/** Stol bilan bog'liq bo'lmagan savdo joylari. Har biri alohida kiriladi va
+ *  alohida hisoblanadi: kanal marshrutda yozilgani uchun kassir uni tanlashni
+ *  unuta olmaydi. */
+const COUNTERS: { channel: SaleChannel; path: string; name: string; icon: typeof ShoppingBag }[] = [
+  { channel: 'takeaway', path: '/pos/tezkor', name: 'Olib ketish', icon: ShoppingBag },
+  { channel: 'uzum', path: '/pos/uzum', name: 'Uzum', icon: Bike },
+  { channel: 'yandex', path: '/pos/yandex', name: 'Yandex', icon: Bike },
 ]
 
 /** Matn tarjimoni — modul darajasidagi funksiyalarga hook o'rniga uzatiladi. */
@@ -51,6 +60,7 @@ export default function TablesPage() {
   const { user } = useSession()
   const { t, tn } = useI18n()
   const [tables, setTables] = useState<Table[]>([])
+  const [summary, setSummary] = useState<SalesSummary>()
   const [selected, setSelected] = useState<Table>()
   const [bill, setBill] = useState<Order>()
   const [method, setMethod] = useState('')
@@ -61,7 +71,12 @@ export default function TablesPage() {
 
   const load = useCallback(async () => {
     try {
-      setTables((await list<Table>('tables/')).filter(item => item.active))
+      const [loadedTables, loadedSummary] = await Promise.all([
+        list<Table>('tables/'),
+        api<SalesSummary>('sales/summary/'),
+      ])
+      setTables(loadedTables.filter(item => item.active))
+      setSummary(loadedSummary)
       setError('')
     } catch (exception) {
       setError((exception as Error).message)
@@ -216,10 +231,29 @@ export default function TablesPage() {
           <button className="button secondary icon-button" aria-label={t('Yangilash')} onClick={load}>
             <RefreshCw size={17} className={loading ? 'spin' : undefined} />
           </button>
-          <button className="button primary" onClick={() => navigate('/pos/tezkor')}>
-            <ShoppingBag size={17} />{t('Tezkor savdo')}
-          </button>
         </div>
+      </div>
+
+      {/* Stolsiz savdo: har kanal alohida kiriladi va alohida hisoblanadi. */}
+      <div className="counter-entries">
+        {COUNTERS.map(item => {
+          const Icon = item.icon
+          const today = summary?.today_by_channel.find(row => row.channel === item.channel)
+          return (
+            <button
+              key={item.channel}
+              className={`counter-entry${item.channel === 'takeaway' ? ' primary' : ''}`}
+              onClick={() => navigate(item.path)}
+            >
+              <span className="counter-icon"><Icon size={19} /></span>
+              <span className="counter-name">{t(item.name)}</span>
+              <span className="counter-total">
+                {money(today?.revenue || 0)} <small>{t('so‘m')}</small>
+              </span>
+              <span className="counter-note">{tn('{count} ta chek', today?.orders || 0)}</span>
+            </button>
+          )
+        })}
       </div>
 
       {error && <p className="alert error" role="alert">{error}</p>}

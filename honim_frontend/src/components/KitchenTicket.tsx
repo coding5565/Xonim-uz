@@ -13,7 +13,7 @@ export default function KitchenTicket({ order }: { order: Order }) {
       <div className="ticket-place">
         {order.table
           ? `${t('{table}-stol', { table: order.table })} · ${order.waiter || t('Ofitsiant')}`
-          : t('Tezkor savdo')}
+          : t(order.channel_label)}
       </div>
       <div className="ticket-lines">
         {order.lines.map(line => (

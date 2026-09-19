@@ -2292,6 +2292,34 @@ class SalesChannelTests(TestCase):
         self.assertEqual(
             cashier.post(f'/api/v1/orders/{order.id}/pay/', {'payment_method': 'uzum'}).status_code, 200)
 
+    def test_the_till_sees_each_channel_counted_on_its_own(self):
+        # Kassir stollar sahifasida Uzum va Yandex tugmalarida bugungi
+        # tushumni ko'radi, shuning uchun kesim shu javobda kelishi kerak.
+        self.sell('hall', 'cash')          # 100 000
+        self.sell('uzum', 'uzum')          # 100 000
+        self.sell('yandex', 'yandex', 1)   # 50 000
+
+        cashier = APIClient()
+        cashier.force_authenticate(self.cashier)
+        summary = cashier.get('/api/v1/sales/summary/').data
+        rows = {row['channel']: row for row in summary['today_by_channel']}
+
+        # To'rt kanal ham doim keladi: savdosi bo'lmagani nol bo'lib turadi,
+        # aks holda tugma ekrandan yo'qolib qolardi.
+        self.assertEqual(sorted(rows), ['hall', 'takeaway', 'uzum', 'yandex'])
+        self.assertEqual(Decimal(rows['uzum']['revenue']), Decimal('100000'))
+        self.assertEqual(rows['uzum']['orders'], 1)
+        self.assertEqual(Decimal(rows['yandex']['revenue']), Decimal('50000'))
+        self.assertEqual(Decimal(rows['takeaway']['revenue']), Decimal('0'))
+        self.assertEqual(rows['takeaway']['orders'], 0)
+        self.assertTrue(rows['uzum']['delivery'])
+        self.assertFalse(rows['takeaway']['delivery'])
+
+        # Kanallar yig'indisi bugungi jamiga teng bo'lishi shart.
+        self.assertEqual(
+            sum(Decimal(row['revenue']) for row in summary['today_by_channel']),
+            Decimal(summary['today']['revenue']))
+
     def test_an_unknown_channel_is_refused(self):
         response = self.client.post('/api/v1/orders/', {
             'key': str(uuid4()), 'table': '', 'waiter': '', 'payment_method': 'cash',

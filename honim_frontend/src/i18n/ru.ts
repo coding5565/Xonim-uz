@@ -1060,6 +1060,7 @@ export const ru: Record<string, string> = {
   '{label}: tushum {revenue}, sof foyda {profit} so‘m': '{label}: выручка {revenue}, чистая прибыль {profit} сум',
   '{label}: {value} so‘m sarflandi, {received} so‘m kirim': '{label}: израсходовано {value} сум, приход {received} сум',
   '{label}: {value} so‘m · {used} sarflandi, {received} kirim': '{label}: {value} сум · израсходовано {used}, приход {received}',
+  '{method} hisobiga tushadi — kassaga naqd kelmaydi.': 'Поступит на счёт {method} — наличные в кассу не приходят.',
   '{month} da to‘langan': 'Выплачено за {month}',
   '{name} +{count}': '{name} +{count}',
   '{name} ni olib tashlash': 'Убрать {name}',

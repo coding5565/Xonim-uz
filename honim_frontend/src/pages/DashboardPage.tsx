@@ -247,7 +247,7 @@ export default function DashboardPage() {
                       <tr key={order.id}>
                         <td>
                           <strong>#{String(order.id).padStart(4, '0')}</strong>
-                          <small>{order.table ? t('{table}-stol', { table: order.table }) : t('Tezkor savdo')}</small>
+                          <small>{order.table ? t('{table}-stol', { table: order.table }) : t(order.channel_label)}</small>
                         </td>
                         <td>{dateLabel(order.created_at)}</td>
                         <td className="number">{money(order.total)}</td>
