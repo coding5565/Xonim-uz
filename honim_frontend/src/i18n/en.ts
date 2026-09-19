@@ -194,6 +194,7 @@ export const en: Record<string, string> = {
   'Filtrlar': 'Filters',
   'Filtrlarni tozalash': 'Clear filters',
   'Filtrni tozalash': 'Clear the filter',
+  'Foiz hisob ochilganda o‘sha paytdagi qiymatda muzlatiladi — keyin o‘zgartirsangiz eski hisobotlar o‘zgarmaydi.': 'The rate is frozen when the bill is opened — changing it later does not alter past reports.',
   'Foiz hisob to‘langanda o‘sha paytdagi qiymatda muzlatiladi — keyin o‘zgartirsangiz eski hisobotlar o‘zgarmaydi.': 'The rate is frozen when the bill is paid — changing it later does not alter past reports.',
   'Foiz sotuv paytida qanday bo‘lsa, shunday hisoblanadi': 'Calculated at the rate in force at the time of sale',
   'Foizni faqat superadmin o‘zgartiradi': 'Only the superadmin changes the rate',

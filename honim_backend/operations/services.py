@@ -172,11 +172,38 @@ def _log_print_problems(user, order, problems):
     audit_many(user, [('print.failed', f'#{order.id} · {problem}') for problem in problems])
 
 
-@transaction.atomic
 def create_order(user, data):
+    """Buyurtmani yozadi, so'ng talonlarni chiqaradi.
+
+    Chop etish ATAYLAB tranzaksiyadan tashqarida: printer javob bermasa
+    ulanish 4, yuborish 6 soniya kutadi, ikkita printer bilan bu 20 soniyagacha
+    cho'ziladi. O'sha vaqt ichida taom qatorlari `select_for_update` bilan
+    qulflangan bo'lardi — SQLite'da esa butun baza yozuvga yopiladi, ya'ni
+    printer o'chib qolsa butun kassa to'xtab qolardi.
+
+    Talon natijasi baribir javobda qaytadi: kassir «talon chiqmadi» ogohini
+    darhol ko'rishi shart, aks holda oshxona buyurtmani ko'rmay qoladi.
+    """
+    order, fresh = _record_order(user, data)
+    if not fresh:
+        # Takroriy so'rov: hisob allaqachon yozilgan, talon ham chiqqan.
+        return order
+    order.print_problems = print_prep_tickets(order)
+    _log_print_problems(user, order, order.print_problems)
+    # Tayyorlangan miqdordan oshib ketilgan bo'lsa jurnalga tushadi.
+    # Import shu yerda: dish_prep moduli services'ga tayanadi, aylanma
+    # bog'liqlik bo'lmasligi uchun chaqirilganda yuklanadi.
+    from .dish_prep import note_oversell
+    note_oversell(user, order)
+    return order
+
+
+@transaction.atomic
+def _record_order(user, data):
+    """Hisobni bazaga yozadi. Qaytaradi: (hisob, yangi yozildimi)."""
     previous = existing(Order, user, data)
     if previous:
-        return previous
+        return previous, False
     dishes = {dish.id: dish for dish in Dish.objects.select_for_update().filter(branch=user.branch, archived=False, available=True, id__in=[line['dish'] for line in data['lines']])}
     if len(dishes) != len(data['lines']):
         raise ValidationError(_('Ayrim taomlar mavjud emas. Menyuni yangilang.'))
@@ -224,28 +251,37 @@ def create_order(user, data):
     if paid:
         consume_order_stock(user, order)
         _autoprint(order)
-    # Tayyorlash talonlari har doim chiqadi: ovqat to'lovni kutmaydi.
-    order.print_problems = print_prep_tickets(order)
-    _log_print_problems(user, order, order.print_problems)
-    # Tayyorlangan miqdordan oshib ketilgan bo'lsa jurnalga tushadi.
-    # Import shu yerda: dish_prep moduli services'ga tayanadi, aylanma
-    # bog'liqlik bo'lmasligi uchun chaqirilganda yuklanadi.
-    from .dish_prep import note_oversell
-    note_oversell(user, order)
     audit(user, 'order.create', f'#{order.id} · {table.label if table else (table_text or "olib ketish")} · {total} so‘m · {len(data["lines"])} qator')
-    return order
+    return order, True
 
 
 def _line_unit_cost(recipe):
     return (recipe_cost(recipe) / recipe.yield_quantity).quantize(Decimal('0.01')) if recipe else Decimal('0')
 
 
-@transaction.atomic
 def append_order_lines(user, order_id, data):
-    """Add what the guest asked for after the bill was opened.
+    """Hisobga qo'shimcha taom yozadi, so'ng talonini chiqaradi.
 
-    The row lock serialises concurrent adds to the same bill, so checking the
-    batch key before inserting is enough to make a retried request a no-op.
+    Chop etish tranzaksiyadan tashqarida — sababi `create_order` dagi bilan
+    bir xil: javob bermagan printer hisob qatorini qulflab turmasligi kerak.
+    """
+    order, fresh = _record_extra_lines(user, order_id, data)
+    if not fresh:
+        return order
+    order.print_problems = print_prep_tickets(order, fresh, addition=True)
+    _log_print_problems(user, order, order.print_problems)
+    from .dish_prep import note_oversell
+    note_oversell(user, order)
+    return order
+
+
+@transaction.atomic
+def _record_extra_lines(user, order_id, data):
+    """Qatorlarni yozadi. Qaytaradi: (hisob, yangi qatorlar yoki None).
+
+    Qator qulfi bir vaqtdagi qo'shishlarni navbatga soladi, shuning uchun
+    yozishdan oldin partiya kalitini tekshirish takroriy so'rovni bekor
+    qilish uchun yetarli.
     """
     order = Order.objects.select_for_update().filter(branch=user.branch, id=order_id).first()
     if not order:
@@ -253,8 +289,9 @@ def append_order_lines(user, order_id, data):
     if order.status != 'open':
         raise Conflict(_('To‘langan hisobga taom qo‘shib bo‘lmaydi. Yangi hisob oching.'))
     if OrderLine.objects.filter(order=order, batch_key=data['key']).exists():
+        # Takroriy so'rov: qatorlar allaqachon yozilgan, talon ham chiqqan.
         order.refresh_from_db()
-        return order
+        return order, None
 
     dishes = {
         dish.id: dish
@@ -291,13 +328,9 @@ def append_order_lines(user, order_id, data):
     order.save(update_fields=fields)
     # Faqat shu qo'shimchadagi qatorlar chiqadi, butun buyurtma qayta emas.
     fresh = list(OrderLine.objects.filter(order=order, batch_key=data['key']).select_related('dish__category'))
-    order.print_problems = print_prep_tickets(order, fresh, addition=True)
-    _log_print_problems(user, order, order.print_problems)
-    from .dish_prep import note_oversell
-    note_oversell(user, order)
     names = ', '.join(f'{dishes[line["dish"]].name} x{line["quantity"]}' for line in data['lines'])
     audit(user, 'order.append', f'#{order.id} · +{added} so‘m · {names}')
-    return order
+    return order, fresh
 
 
 def _open_order(user, order_id):

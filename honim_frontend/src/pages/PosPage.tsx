@@ -213,8 +213,15 @@ export default function PosPage() {
       }
       setResult(saved)
     } catch (exception) {
-      // Tarmoq noaniq tugasa ham xuddi shu so'rov saqlanib qoladi.
+      // Tarmoq noaniq tugasa xuddi shu so'rov saqlanib qoladi: qayta
+      // bosilganda ikkinchi hisob ochilmasligi uchun. Lekin 400 — serverning
+      // aniq javobi, ya'ni hisob umuman yozilmagan. Qulfni ochmasak, kassir
+      // xatoni tuzatib qayta yubora olmay qolardi.
       setError((exception as Error).message)
+      if ((exception as { status?: number }).status === 400) {
+        setLockedRequest(undefined)
+        setKey(crypto.randomUUID())
+      }
     } finally {
       setBusy(false)
     }

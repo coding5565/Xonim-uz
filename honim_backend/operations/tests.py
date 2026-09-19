@@ -6,9 +6,12 @@ from zipfile import ZipFile
 import re
 from pathlib import Path
 
+from unittest.mock import patch
+
 from django.conf import settings
+from django.db import connection
 from django.db.models import Sum
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 from users.models import AuditEvent, Branch, User
@@ -3080,3 +3083,86 @@ class ServerSpeaksTheRequestedLanguageTests(TestCase):
         response = self.client.post(
             '/api/v1/auth/login/', {'username': 'cashier', 'password': 'wrong'}, format='json')
         self.assertEqual(response.data['detail'], 'Login yoki parol noto‘g‘ri.')
+
+
+class PrintingStaysOutsideTheTransactionTests(TransactionTestCase):
+    """Printer javob bermasa butun kassa to'xtab qolmasligi kerak.
+
+    Talon chop etish tarmoq amali: ulanish 4, yuborish 6 soniya kutadi. Agar
+    u tranzaksiya ichida bajarilsa, taom qatorlari `select_for_update` bilan
+    qulflangan holda o'sha vaqt ushlab turiladi — SQLite'da esa butun baza
+    yozuvga yopiladi. Ya'ni oshxona printeri o'chib qolsa, hech kim hech narsa
+    sota olmaydi.
+
+    Shuning uchun bu test chop etish chaqirilgan paytda tranzaksiya OCHIQ
+    EMASLIGINI tekshiradi. TransactionTestCase kerak: oddiy TestCase har bir
+    testni tranzaksiyaga o'raydi va tekshiruv ma'nosini yo'qotadi.
+    """
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.cashier = User.objects.create_user(
+            'cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.category = Category.objects.create(branch=self.branch, name='Taom')
+        self.osh = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('50000'))
+
+    def test_the_kitchen_ticket_is_printed_after_the_transaction_closes(self):
+        seen = []
+
+        def watcher(order, lines=None, *, addition=False):
+            seen.append(connection.in_atomic_block)
+            return []
+
+        with patch('operations.services.print_prep_tickets', watcher):
+            order = create_order(self.cashier, {
+                'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': 'cash',
+                'lines': [{'dish': self.osh.id, 'quantity': 2, 'note': ''}],
+            })
+        self.assertEqual(seen, [False], 'talon tranzaksiya ichida chop etilyapti')
+        self.assertEqual(order.total, Decimal('100000'))
+
+    def test_the_addition_ticket_is_printed_after_the_transaction_closes(self):
+        order = create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': '',
+            'lines': [{'dish': self.osh.id, 'quantity': 1, 'note': ''}],
+        })
+        seen = []
+
+        def watcher(order, lines=None, *, addition=False):
+            seen.append(connection.in_atomic_block)
+            return []
+
+        with patch('operations.services.print_prep_tickets', watcher):
+            append_order_lines(self.cashier, order.id, {
+                'key': uuid4(), 'lines': [{'dish': self.osh.id, 'quantity': 1, 'note': ''}],
+            })
+        self.assertEqual(seen, [False], 'qo‘shimcha taloni tranzaksiya ichida chop etilyapti')
+
+    def test_a_retried_request_does_not_print_the_ticket_twice(self):
+        # Talon endi tranzaksiyadan tashqarida chiqadi, ya'ni takroriy so'rov
+        # uni ikkinchi marta chiqarib yuborishi mumkin edi.
+        key = uuid4()
+        body = {'key': key, 'table': '', 'waiter': '', 'payment_method': 'cash',
+                'lines': [{'dish': self.osh.id, 'quantity': 1, 'note': ''}]}
+        printed = []
+        with patch('operations.services.print_prep_tickets', lambda *a, **k: printed.append(1) or []):
+            first = create_order(self.cashier, dict(body))
+            second = create_order(self.cashier, dict(body))
+        self.assertEqual(first.id, second.id)
+        self.assertEqual(len(printed), 1)
+
+    def test_a_retried_addition_does_not_print_twice_either(self):
+        order = create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': '',
+            'lines': [{'dish': self.osh.id, 'quantity': 1, 'note': ''}],
+        })
+        batch = uuid4()
+        printed = []
+        with patch('operations.services.print_prep_tickets', lambda *a, **k: printed.append(1) or []):
+            append_order_lines(self.cashier, order.id, {
+                'key': batch, 'lines': [{'dish': self.osh.id, 'quantity': 1, 'note': ''}]})
+            append_order_lines(self.cashier, order.id, {
+                'key': batch, 'lines': [{'dish': self.osh.id, 'quantity': 1, 'note': ''}]})
+        order.refresh_from_db()
+        self.assertEqual(order.total, Decimal('100000'))
+        self.assertEqual(len(printed), 1)

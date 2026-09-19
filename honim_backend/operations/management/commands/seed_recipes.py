@@ -41,8 +41,18 @@ class Command(BaseCommand):
         for branch in Branch.objects.all():
             ingredients = {}
             for recipe_data in recipes:
-                for name, _, _ in recipe_data["lines"]:
-                    ingredient, _ = Ingredient.objects.get_or_create(branch=branch, name=name, defaults={"unit": "kg", "minimum": Decimal("0")})
+                for name, quantity, cost in recipe_data["lines"]:
+                    # Masalliq narxi ham yoziladi: retsept qatorining tannarxi
+                    # birinchi tahrirdayoq masalliq narxidan qayta hisoblanadi,
+                    # narx nol bo'lsa esa butun tannarx nolga tushib ketardi.
+                    unit_cost = (Decimal(cost) / Decimal(quantity)).quantize(Decimal("0.0001"))
+                    ingredient, created = Ingredient.objects.get_or_create(
+                        branch=branch, name=name,
+                        defaults={"unit": "kg", "minimum": Decimal("0"), "unit_cost": unit_cost},
+                    )
+                    if not created and not ingredient.unit_cost:
+                        ingredient.unit_cost = unit_cost
+                        ingredient.save(update_fields=["unit_cost"])
                     ingredients[name] = ingredient
 
             for recipe_data in recipes:

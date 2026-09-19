@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from catalog.models import Category, Dish
-from operations.models import Order, OrderLine
+from operations.models import DishPrep, Order, OrderLine
 from users.models import Branch
 
 
@@ -25,6 +25,9 @@ class Command(BaseCommand):
             # that belongs to the previous demo menu, keeping staff and finance data.
             OrderLine.objects.filter(order__branch=branch).delete()
             Order.objects.filter(branch=branch).delete()
+            # Tayyor taomlar sanagichi taomga PROTECT bilan bog'langan:
+            # u tozalanmasa menyuni qayta qurib bo'lmaydi.
+            DishPrep.objects.filter(branch=branch).delete()
             Dish.objects.filter(branch=branch).delete()
             Category.objects.filter(branch=branch).delete()
             for position, (category_name, dishes) in enumerate(MENU, 1):

@@ -14,7 +14,7 @@ butun restoran to'xtab qolmasligi kerak. Hisob taomma-taom, ixtiyoriy yoqiladi.
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.response import Response
@@ -64,7 +64,14 @@ def stock_status(branch, day=None):
     day = day or timezone.localdate()
     prepared = prepared_today(branch, day)
     sold = sold_today(branch, day)
-    dishes = {dish.id: dish for dish in Dish.objects.filter(branch=branch, archived=False)}
+    # Arxivlangan taom ham ro'yxatda qoladi, agar bugun u tayyorlangan yoki
+    # sotilgan bo'lsa: aks holda kun o'rtasida menyudan olib tashlangan taom
+    # bilan birga uning bugungi porsiyalari ham hisobdan yo'qolardi.
+    touched = set(prepared) | set(sold)
+    dishes = {
+        dish.id: dish
+        for dish in Dish.objects.filter(branch=branch).filter(Q(archived=False) | Q(id__in=touched))
+    }
 
     rows = []
     for dish_id, dish in dishes.items():

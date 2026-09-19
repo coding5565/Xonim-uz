@@ -154,6 +154,13 @@ class Order(models.Model):
                 name='order_void_needs_reason',
             ),
         ]
+        # Deyarli har bir so'rov filial + sana bo'yicha kesadi: tayyor taomlar
+        # qoldig'i (created_at) har sotuvda, hisobotlar esa (paid_at) bo'yicha.
+        # Indekssiz ular buyurtmalar jadvalini boshdan-oxir ko'zdan kechiradi.
+        indexes = [
+            models.Index(fields=['branch', 'created_at'], name='order_branch_created_idx'),
+            models.Index(fields=['branch', 'paid_at'], name='order_branch_paid_idx'),
+        ]
 
 
 class OrderLine(models.Model):

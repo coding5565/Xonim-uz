@@ -61,8 +61,12 @@ export default function App() {
     localStorage.setItem('honim-theme', darkMode ? 'dark' : 'light')
   }, [darkMode])
 
+  // Oshxona ekrani qog'oz talon foydasiga o'chirilgan, lekin oshxona rolida
+  // boshqa sahifa yo'q: bayroqqa qarab uni ham yashirsak, yon menyu bo'm-bo'sh
+  // qoladi va xodim qayerdaligini bilmaydi.
   const nav = navItems.filter(item =>
-    user && item.roles.includes(user.role) && (SHOW_KITCHEN_SCREEN || item.path !== '/kitchen'))
+    user && item.roles.includes(user.role)
+    && (SHOW_KITCHEN_SCREEN || item.path !== '/kitchen' || user.role === 'kitchen'))
   // Kassa ichki marshrutlari (/pos/stol/4) ham "Kassa" bandiga tegishli.
   const isCurrent = (path: string) =>
     location.pathname === path || (path !== '/' && location.pathname.startsWith(`${path}/`))

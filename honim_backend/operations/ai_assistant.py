@@ -44,7 +44,9 @@ def business_snapshot(branch):
         return {'revenue': _number(revenue), 'cost': _number(cost), 'gross_profit': _number(revenue - cost), 'orders': qs.count()}
 
     def spend(start, end):
-        return _number(Expense.objects.filter(branch=branch, date__range=(start, end), payment_method__in=('cash', 'card')).aggregate(total=Sum('amount'))['total'])
+        # Dashboarddagi «Xarajatlar» bilan bir xil baza: to'lanmagani ham
+        # xarajat. Aks holda AI ekrandagidan boshqa raqamni aytadi.
+        return _number(Expense.objects.filter(branch=branch, date__range=(start, end)).aggregate(total=Sum('amount'))['total'])
 
     today_sales, yesterday_sales = sales(today, today), sales(yesterday, yesterday)
     week_sales, previous_week_sales = sales(week_start, today), sales(previous_week_start, yesterday)

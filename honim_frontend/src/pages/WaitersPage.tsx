@@ -325,7 +325,7 @@ export default function WaitersPage() {
             </label>
           )}
           <p className="alert">
-            {t('Foiz hisob to‘langanda o‘sha paytdagi qiymatda muzlatiladi — keyin o‘zgartirsangiz eski hisobotlar o‘zgarmaydi.')}
+            {t('Foiz hisob ochilganda o‘sha paytdagi qiymatda muzlatiladi — keyin o‘zgartirsangiz eski hisobotlar o‘zgarmaydi.')}
           </p>
           {formError && <p className="alert error">{formError}</p>}
           <button className="button primary full" disabled={busy}>

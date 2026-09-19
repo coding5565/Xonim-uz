@@ -194,6 +194,7 @@ export const ru: Record<string, string> = {
   'Filtrlar': 'Фильтры',
   'Filtrlarni tozalash': 'Очистить фильтры',
   'Filtrni tozalash': 'Очистить фильтр',
+  'Foiz hisob ochilganda o‘sha paytdagi qiymatda muzlatiladi — keyin o‘zgartirsangiz eski hisobotlar o‘zgarmaydi.': 'Процент фиксируется в момент открытия счёта — если изменить его позже, старые отчёты не поменяются.',
   'Foiz hisob to‘langanda o‘sha paytdagi qiymatda muzlatiladi — keyin o‘zgartirsangiz eski hisobotlar o‘zgarmaydi.': 'Процент фиксируется в момент оплаты счёта — если изменить его позже, старые отчёты не поменяются.',
   'Foiz sotuv paytida qanday bo‘lsa, shunday hisoblanadi': 'Считается по проценту на момент продажи',
   'Foizni faqat superadmin o‘zgartiradi': 'Процент меняет только суперадмин',
