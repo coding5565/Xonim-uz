@@ -12,7 +12,45 @@ from rest_framework import serializers
 
 from catalog.models import Category, Dish
 from .models import SALE_CHANNEL_LABELS, SALE_PAYMENT_LABELS, Order, OrderLine
+from .money import CENT
 from core.i18n import _
+
+
+def discount_cuts(lines):
+    """Chegirma tufayli har bir kesimdan ayiriladigan summa.
+
+    Chegirma butun hisobga beriladi, hisobot esa qatorma-qator yig'iladi.
+    Qator menyu narxida sanalsa, «Sotuv» sahifasi kassaga tushmagan pulni
+    ko'rsatib qo'yadi va «Moliya» bilan ajralib ketadi.
+
+    Taqsimlash SQL'da emas, Pythonda bajariladi. Sababi ikkita: SQLite butun
+    sonlarni bo'lganda kasr qismini tashlab yuboradi (PostgreSQL esa yo'q —
+    ya'ni natija bazaga qarab o'zgarardi), va Pythonda qoldiqni eng katta
+    qatorga berib, yig'indini hisob summasiga ANIQ tenglashtirish mumkin.
+    Chegirmali hisoblar kam bo'lgani uchun bu qo'shimcha so'rov arzon.
+    """
+    rows = list(lines.filter(order__discount__gt=0).select_related('order', 'dish'))
+    if not rows:
+        return None
+    earned = allocate_discount(rows)
+    cuts = {key: defaultdict(Decimal) for key in
+            ('dish', 'category', 'cashier', 'method', 'channel', 'hour', 'day')}
+    cuts['total'] = Decimal('0')
+    for row in rows:
+        cut = row.price * row.quantity - earned[row.id]
+        if not cut:
+            continue
+        order = row.order
+        local = timezone.localtime(order.paid_at)
+        cuts['total'] += cut
+        cuts['dish'][row.dish_id] += cut
+        cuts['category'][row.dish.category_id] += cut
+        cuts['cashier'][order.cashier_id] += cut
+        cuts['method'][order.payment_method] += cut
+        cuts['channel'][order.channel] += cut
+        cuts['hour'][local.hour] += cut
+        cuts['day'][local.date()] += cut
+    return cuts
 
 
 class ReportFilters(serializers.Serializer):
@@ -52,6 +90,39 @@ def _period_key(value, group):
     return local.date().replace(day=1) if group == 'month' else local.date()
 
 
+def allocate_discount(rows):
+    """Har bir qatorga tegishli tushum: chegirma ulushiga qarab taqsimlangan.
+
+    Yaxlitlash tiyin yo'qotmasligi uchun qoldiq eng katta qatorga beriladi —
+    shunda taomlar bo'yicha yig'indi hisob summasiga ANIQ teng chiqadi.
+    Qaytaradi: {qator_id: summa}.
+    """
+    by_order = defaultdict(list)
+    for row in rows:
+        by_order[row.order_id].append(row)
+
+    earned = {}
+    for group in by_order.values():
+        order = group[0].order
+        subtotal = order.total + order.discount
+        if not order.discount or not subtotal:
+            for row in group:
+                earned[row.id] = row.price * row.quantity
+            continue
+        factor = order.total / subtotal
+        running = Decimal('0')
+        for row in group:
+            earned[row.id] = (row.price * row.quantity * factor).quantize(CENT)
+            running += earned[row.id]
+        # Tanlangan taom bo'yicha filtrlangan bo'lsa guruhda hisobning bir
+        # qismi turadi, shuning uchun maqsad ham shu qismdan hisoblanadi.
+        target = (sum((row.price * row.quantity for row in group), Decimal('0')) * factor).quantize(CENT)
+        if running != target:
+            biggest = max(group, key=lambda row: row.price * row.quantity)
+            earned[biggest.id] += target - running
+    return earned
+
+
 def build_sales_report(user, filters):
     orders = Order.objects.filter(
         branch=user.branch,
@@ -67,8 +138,9 @@ def build_sales_report(user, filters):
     line_rows = list(lines)
     included_order_ids = {line.order_id for line in line_rows}
     included_orders = [order for order in orders if order.id in included_order_ids]
+    earned = allocate_discount(line_rows)
 
-    revenue = sum((line.price * line.quantity for line in line_rows), Decimal('0'))
+    revenue = sum(earned.values(), Decimal('0'))
     cost = sum((line.cost_total for line in line_rows), Decimal('0'))
     items_sold = sum(line.quantity for line in line_rows)
     order_count = len(included_orders)
@@ -80,7 +152,7 @@ def build_sales_report(user, filters):
     dish_map = defaultdict(lambda: {'dish_id': 0, 'dish': '', 'category': '', 'quantity': 0, 'revenue': Decimal('0'), 'cost': Decimal('0'), 'orders': set()})
     for line in line_rows:
         period = _period_key(line.order.paid_at, filters['group'])
-        amount = line.price * line.quantity
+        amount = earned[line.id]
         trend_map[period]['revenue'] += amount
         trend_map[period]['cost'] += line.cost_total
         trend_map[period]['orders'].add(line.order_id)
@@ -244,39 +316,47 @@ def build_sales_board(user, filters):
         lines = lines.filter(dish_id=filters['dish'])
 
     totals = lines.aggregate(revenue=revenue_sum, items=Sum('quantity'), orders=Count('order_id', distinct=True))
-    revenue = totals['revenue'] or Decimal('0')
+    # Chegirma qatorlarga taqsimlanib, har bir kesimdan ayiriladi.
+    cuts = discount_cuts(lines)
+    revenue = (totals['revenue'] or Decimal('0')) - (cuts['total'] if cuts else Decimal('0'))
     order_count = totals['orders'] or 0
 
     def cash(value):
-        return str(value or Decimal('0'))
+        return str((value or Decimal('0')).quantize(CENT))
 
-    def grouped(*fields, sort='-revenue'):
-        return list(
+    def grouped(*fields, sort='-revenue', cut=None, key=None):
+        rows = list(
             lines.values(*fields)
             .annotate(revenue=revenue_sum, quantity=Sum('quantity'), orders=Count('order_id', distinct=True))
             .order_by(sort)
         )
+        if cuts and cut:
+            for row in rows:
+                row['revenue'] = (row['revenue'] or Decimal('0')) - cuts[cut][row[key or fields[0]]]
+            rows.sort(key=lambda row: row['revenue'], reverse=sort.startswith('-'))
+        return rows
 
     dishes = [
         {'dish_id': row['dish_id'], 'dish': row['name'], 'category': row['dish__category__name'],
          'quantity': row['quantity'], 'orders': row['orders'], 'revenue': cash(row['revenue'])}
-        for row in grouped('dish_id', 'name', 'dish__category__name')
+        for row in grouped('dish_id', 'name', 'dish__category__name', cut='dish', key='dish_id')
     ]
     categories = [
         {'category_id': row['dish__category_id'], 'category': row['dish__category__name'],
          'quantity': row['quantity'], 'orders': row['orders'], 'revenue': cash(row['revenue'])}
-        for row in grouped('dish__category_id', 'dish__category__name')
+        for row in grouped('dish__category_id', 'dish__category__name', cut='category', key='dish__category_id')
     ]
     cashiers = [
         {'name': row['order__cashier__first_name'] or row['order__cashier__username'],
          'orders': row['orders'], 'quantity': row['quantity'], 'revenue': cash(row['revenue'])}
-        for row in grouped('order__cashier_id', 'order__cashier__first_name', 'order__cashier__username')
+        for row in grouped('order__cashier_id', 'order__cashier__first_name', 'order__cashier__username',
+                           cut='cashier', key='order__cashier_id')
     ]
     methods = [
         {'method': row['order__payment_method'],
          'label': SALE_PAYMENT_LABELS.get(row['order__payment_method'], row['order__payment_method'] or '—'),
          'orders': row['orders'], 'revenue': cash(row['revenue'])}
-        for row in grouped('order__payment_method')
+        for row in grouped('order__payment_method', cut='method', key='order__payment_method')
     ]
     # Kanal kesimi: buyurtma qayerdan kelgani — zal, olib ketish, Uzum, Yandex.
     channels = [
@@ -284,15 +364,20 @@ def build_sales_board(user, filters):
          'label': SALE_CHANNEL_LABELS.get(row['order__channel'], row['order__channel']),
          'orders': row['orders'], 'revenue': cash(row['revenue']),
          'delivery': row['order__channel'] in ('uzum', 'yandex')}
-        for row in grouped('order__channel')
+        for row in grouped('order__channel', cut='channel', key='order__channel')
     ]
+    def less(value, cut, key):
+        return (value or Decimal('0')) - (cuts[cut][key] if cuts else Decimal('0'))
+
     hours = [
-        {'hour': row['hour'], 'orders': row['orders'], 'revenue': cash(row['revenue'])}
+        {'hour': row['hour'], 'orders': row['orders'],
+         'revenue': cash(less(row['revenue'], 'hour', row['hour']))}
         for row in lines.annotate(hour=ExtractHour('order__paid_at')).values('hour')
         .annotate(revenue=revenue_sum, orders=Count('order_id', distinct=True)).order_by('hour')
     ]
     days = [
-        {'date': row['day'].isoformat(), 'orders': row['orders'], 'revenue': cash(row['revenue'])}
+        {'date': row['day'].isoformat(), 'orders': row['orders'],
+         'revenue': cash(less(row['revenue'], 'day', row['day']))}
         for row in lines.annotate(day=TruncDate('order__paid_at')).values('day')
         .annotate(revenue=revenue_sum, orders=Count('order_id', distinct=True)).order_by('day')
     ]

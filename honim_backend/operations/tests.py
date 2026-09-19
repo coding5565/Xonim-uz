@@ -3,6 +3,7 @@ from decimal import Decimal
 from io import BytesIO
 from uuid import uuid4
 from zipfile import ZipFile
+from django.db.models import Sum
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -2487,3 +2488,269 @@ class RecipePriceTests(TestCase):
         recipe = self.create(dish=None, name='Bulyon').data
         self.assertEqual(Decimal(recipe['selling_price']), Decimal('0'))
         self.assertEqual(Decimal(recipe['gross_profit']), Decimal('0'))
+
+
+class WholeDayConsistencyTests(TestCase):
+    """Bir kun boshidan oxirigacha: hamma bo'lim bitta raqamni ko'rsatishi shart.
+
+    Alohida testlar har bir bo'limni o'zicha tekshiradi. Bu test ularning
+    ORASIDAGI bog'lanishni tekshiradi: kassa, sotuv taxtasi, moliya, smena,
+    ofitsiant hisoboti va tayyor taomlar bitta kunning bir xil manzarasini
+    ko'rsatishi kerak. Biri ikkinchisidan ajralib qolsa, egasi qaysi raqamga
+    ishonishni bilmay qoladi — shuning uchun bu yerda hammasi taqqoslanadi.
+    """
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch, first_name='Kassir')
+        self.category = Category.objects.create(branch=self.branch, name='Milliy taomlar')
+        self.owner_client = APIClient()
+        self.owner_client.force_authenticate(self.owner)
+        self.client = APIClient()
+        self.client.force_authenticate(self.cashier)
+
+    def sell(self, quantity, channel='hall', method='cash', waiter_id=None):
+        body = {
+            'key': uuid4(), 'table': '', 'waiter': '', 'channel': channel,
+            'payment_method': method,
+            'lines': [{'dish': self.dish_id, 'quantity': quantity, 'note': ''}],
+        }
+        if waiter_id:
+            body['waiter_id'] = waiter_id
+        return create_order(self.cashier, body)
+
+    def test_one_full_day_adds_up_the_same_way_in_every_report(self):
+        today = timezone.localdate()
+
+        # ── Ertalab: egasi menyuni va ofitsiantni tayyorlaydi ──────────────
+        meat = self.owner_client.post('/api/v1/ingredients/', {
+            'name': 'Go‘sht', 'unit': 'kg', 'minimum': '2', 'unit_cost': '80000',
+        }, format='json').data
+        dish = self.owner_client.post('/api/v1/dishes/', {
+            'name': 'Manti', 'category': self.category.id, 'description': '',
+            'price': '12000', 'portion': '1 dona', 'available': True,
+        }, format='json').data
+        self.dish_id = dish['id']
+        self.owner_client.post('/api/v1/recipes/', {
+            'dish': dish['id'], 'name': 'Manti', 'yield_quantity': 1, 'yield_unit': 'porsiya',
+            'active': True, 'lines': [{'ingredient': meat['id'], 'quantity': '0.020'}],
+        }, format='json')
+        waiter = self.owner_client.post('/api/v1/waiters/', {
+            'name': 'Fazliddin', 'phone': '', 'commission': '5', 'active': True,
+        }, format='json').data
+
+        # Kassir omborni to'ldiradi: 10 kg go'sht 800 000 so'mga.
+        self.client.post('/api/v1/stock/', {
+            'key': str(uuid4()), 'ingredient': meat['id'], 'kind': 'receipt',
+            'quantity': '10', 'cost_total': '800000', 'date': str(today), 'note': 'Bozordan',
+        }, format='json')
+
+        # Oshxona 20 ta manti pishirdi.
+        self.assertEqual(self.client.post('/api/v1/dish-prep/', {
+            'lines': [{'dish': dish['id'], 'quantity': 20, 'note': 'ertalabki partiya'}],
+        }, format='json').status_code, 201)
+
+        # ── Kun davomida: to'rt xil sotuv ──────────────────────────────────
+        self.sell(4, 'hall', 'cash', waiter['id'])          # 48 000 naqd, ofitsiantli
+        self.sell(2, 'uzum', 'uzum')                        # 24 000 Uzum hisobiga
+        # Chegirma to'lovdan OLDIN qo'yiladi: ochiq hisobga, keyin to'lanadi.
+        discounted = self.sell(3, 'takeaway', '')           # 36 000, hali ochiq
+        self.assertEqual(self.client.post(
+            f'/api/v1/orders/{discounted.id}/discount/',
+            {'amount': '6000', 'reason': 'Doimiy mijoz'}, format='json').status_code, 200)
+        self.assertEqual(self.client.post(
+            f'/api/v1/orders/{discounted.id}/pay/', {'payment_method': 'card'}).status_code, 200)
+        returned = self.sell(1, 'hall', 'cash')             # 12 000 naqd, keyin qaytariladi
+        self.assertEqual(self.owner_client.post(
+            f'/api/v1/orders/{returned.id}/refund/', {'reason': 'Mijoz shikoyat qildi'},
+            format='json').status_code, 200)
+
+        # Kunning haqiqati: 48 000 + 24 000 + 30 000 = 102 000.
+        # Qaytarilgani tushumda YO'Q, chunki puli mijozga qaytdi.
+        expected_revenue = Decimal('102000')
+
+        # ── 1. Hamma hisobot bir xil tushumni ko'rsatadimi ─────────────────
+        dashboard = self.owner_client.get('/api/v1/dashboard/').data
+        board = self.owner_client.get(f'/api/v1/sales/board/?start={today}&end={today}').data
+        finance = self.owner_client.get('/api/v1/finance/').data
+        shift = self.client.get('/api/v1/shift/').data
+        report = self.owner_client.get(f'/api/v1/reports/sales/?start={today}&end={today}').data
+
+        self.assertEqual(Decimal(dashboard['revenue']), expected_revenue)
+        self.assertEqual(Decimal(board['summary']['revenue']), expected_revenue)
+        self.assertEqual(Decimal(finance['profit']['revenue']), expected_revenue)
+        self.assertEqual(Decimal(shift['revenue']), expected_revenue)
+        self.assertEqual(Decimal(report['summary']['revenue']), expected_revenue)
+
+        # ── 2. Kanal kesimi jamiga teng bo'lishi shart ────────────────────
+        channels = {row['channel']: Decimal(row['revenue']) for row in finance['channels']}
+        self.assertEqual(channels, {
+            'hall': Decimal('48000'), 'uzum': Decimal('24000'), 'takeaway': Decimal('30000'),
+        })
+        self.assertEqual(sum(channels.values()), expected_revenue)
+        board_channels = {row['channel']: Decimal(row['revenue']) for row in board['channels']}
+        self.assertEqual(board_channels, channels)
+
+        # ── 3. Kassada faqat naqd qolishi kerak ──────────────────────────
+        # 48 000 naqd tushdi; qaytarilgan 12 000 kassadan chiqdi;
+        # karta va Uzum puli kassaga umuman tushmaydi.
+        self.assertEqual(Decimal(shift['expected_cash']), Decimal('48000'))
+        drawer = {row['method']: row['in_drawer'] for row in shift['breakdown']}
+        self.assertTrue(drawer['cash'])
+        self.assertFalse(drawer['card'])
+        self.assertFalse(drawer['uzum'])
+
+        # ── 4. Ofitsiant ulushi o'z hisobidan hisoblanadi ─────────────────
+        earnings = self.owner_client.get(f'/api/v1/reports/waiters/?start={today}&end={today}').data
+        self.assertEqual(earnings['waiters'][0]['name'], 'Fazliddin')
+        self.assertEqual(Decimal(earnings['waiters'][0]['revenue']), Decimal('48000'))
+        self.assertEqual(Decimal(earnings['waiters'][0]['fee']), Decimal('2400'))  # 5%
+        # Ofitsiantsiz sotilgani ham ko'rinadi: 24 000 + 30 000.
+        self.assertEqual(Decimal(earnings['summary']['unassigned_revenue']), Decimal('54000'))
+
+        # ── 5. Masalliq ANIQ BIR MARTA hisobdan chiqishi shart ───────────
+        # 10 porsiya sotildi (qaytarilgani ham pishirilgan edi) × 20 g = 200 g.
+        consumed = StockMovement.objects.filter(
+            branch=self.branch, kind='sale_consumption',
+        ).aggregate(total=Sum('quantity'))['total']
+        self.assertEqual(consumed, Decimal('0.200'))
+
+        # ── 6. Tayyor taomlar qoldig'i sotuv bilan kamaygan ──────────────
+        prep = self.client.get('/api/v1/dish-prep/').data
+        row = next(item for item in prep['dishes'] if item['dish'] == dish['id'])
+        self.assertEqual(row['prepared'], 20)
+        self.assertEqual(row['sold'], 10)        # qaytarilgan porsiya ham ketgan
+        self.assertEqual(row['remaining'], 10)
+        self.assertFalse(row['out'])
+
+        # ── 7. Tannarx va foyda zanjiri yopiladimi ───────────────────────
+        # 9 ta to'langan porsiya × 1 600 = 14 400 tannarx.
+        self.assertEqual(Decimal(finance['profit']['cogs']), Decimal('14400'))
+        self.assertEqual(
+            Decimal(finance['profit']['gross_profit']),
+            expected_revenue - Decimal('14400'),
+        )
+
+        # ── 8. Bekor va qaytarilgan hisob oshxona taxtasida turmaydi ─────
+        kitchen = APIClient()
+        kitchen.force_authenticate(User.objects.create_user(
+            'oshxona', password='test-only-long-password', role='kitchen', branch=self.branch))
+        self.assertNotIn(returned.id, [item['id'] for item in kitchen.get('/api/v1/kitchen/orders/').data])
+
+        # ── 9. Smena yopilgach kun muzlaydi va farq yoziladi ─────────────
+        closed = self.client.post('/api/v1/shift/', {'counted_cash': '47000', 'note': 'Sanaldi'}, format='json')
+        self.assertEqual(closed.status_code, 201)
+        self.assertEqual(Decimal(closed.data['difference']), Decimal('-1000'))
+        self.assertEqual(Decimal(closed.data['expected_cash']), Decimal('48000'))
+        # Yopilgandan keyin ham tushum o'zgarmaydi.
+        self.assertEqual(
+            Decimal(self.owner_client.get('/api/v1/dashboard/').data['revenue']), expected_revenue)
+
+
+class DiscountInReportsTests(TestCase):
+    """Chegirma hisobotlarda ham ko'rinishi: aks holda «Sotuv» kassaga tushmagan
+    pulni ko'rsatib, «Moliya» bilan ajralib ketadi."""
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.category = Category.objects.create(branch=self.branch, name='Taom')
+        self.osh = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('50000'))
+        self.choy = Dish.objects.create(branch=self.branch, category=self.category, name='Choy', price=Decimal('10000'))
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+
+    def bill_with_discount(self, amount):
+        # 2×50 000 + 3×10 000 = 130 000 — chegirma teng bo'linmaydi.
+        order = create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': '',
+            'lines': [
+                {'dish': self.osh.id, 'quantity': 2, 'note': ''},
+                {'dish': self.choy.id, 'quantity': 3, 'note': ''},
+            ],
+        })
+        self.client.post(f'/api/v1/orders/{order.id}/discount/',
+                         {'amount': str(amount), 'reason': 'Tug‘ilgan kun'}, format='json')
+        self.client.post(f'/api/v1/orders/{order.id}/pay/', {'payment_method': 'cash'})
+        order.refresh_from_db()
+        return order
+
+    def test_the_sales_board_shows_what_was_taken_not_the_menu_price(self):
+        order = self.bill_with_discount(7000)
+        self.assertEqual(order.total, Decimal('123000'))
+        today = timezone.localdate()
+        board = self.client.get(f'/api/v1/sales/board/?start={today}&end={today}').data
+        self.assertEqual(Decimal(board['summary']['revenue']), Decimal('123000'))
+        # Taomlar kesimi ham jamiga teng bo'lishi kerak — tiyin yo'qolmaydi.
+        self.assertEqual(
+            sum(Decimal(row['revenue']) for row in board['dishes']), Decimal('123000'))
+        self.assertEqual(
+            sum(Decimal(row['revenue']) for row in board['channels']), Decimal('123000'))
+        self.assertEqual(
+            sum(Decimal(row['revenue']) for row in board['methods']), Decimal('123000'))
+
+    def test_the_sales_report_and_its_excel_share_the_same_figure(self):
+        self.bill_with_discount(7000)
+        today = timezone.localdate()
+        report = self.client.get(f'/api/v1/reports/sales/?start={today}&end={today}').data
+        self.assertEqual(Decimal(report['summary']['revenue']), Decimal('123000'))
+        # Har qator alohida taqsimlanadi, lekin yig'indi aniq teng chiqadi.
+        self.assertEqual(
+            sum(Decimal(row['revenue']) for row in report['dishes']), Decimal('123000'))
+        self.assertEqual(
+            sum(Decimal(row['revenue']) for row in report['categories']), Decimal('123000'))
+        self.assertEqual(
+            sum(Decimal(row['revenue']) for row in report['trend']), Decimal('123000'))
+        # Excel ham shu hisobdan chiqadi, demak u ham to'g'ri.
+        self.assertEqual(
+            self.client.get(f'/api/v1/reports/sales/export/?start={today}&end={today}').status_code, 200)
+
+    def test_every_money_screen_agrees_after_a_discount(self):
+        self.bill_with_discount(7000)
+        today = timezone.localdate()
+        figures = {
+            'dashboard': Decimal(self.client.get('/api/v1/dashboard/').data['revenue']),
+            'board': Decimal(self.client.get(f'/api/v1/sales/board/?start={today}&end={today}').data['summary']['revenue']),
+            'report': Decimal(self.client.get(f'/api/v1/reports/sales/?start={today}&end={today}').data['summary']['revenue']),
+            'finance': Decimal(self.client.get('/api/v1/finance/').data['profit']['revenue']),
+        }
+        self.assertEqual(set(figures.values()), {Decimal('123000')}, figures)
+
+    def test_a_bill_without_a_discount_keeps_its_exact_menu_price(self):
+        # Chegirmasiz hisobda bo'lish umuman bajarilmaydi — aniqlik yo'qolmasin.
+        create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': 'cash',
+            'lines': [{'dish': self.osh.id, 'quantity': 3, 'note': ''}],
+        })
+        today = timezone.localdate()
+        board = self.client.get(f'/api/v1/sales/board/?start={today}&end={today}').data
+        self.assertEqual(Decimal(board['summary']['revenue']), Decimal('150000'))
+        self.assertEqual(board['dishes'][0]['revenue'], '150000.00')
+
+    def test_a_dish_filter_still_shows_what_that_dish_actually_brought(self):
+        # 2×50 000 (Osh) + 3×10 000 (Choy) = 130 000, chegirma 7 000 -> 123 000.
+        # Osh ulushi: 100 000/130 000 × 123 000 = 94 615.38
+        self.bill_with_discount(7000)
+        today = timezone.localdate()
+        board = self.client.get(
+            f'/api/v1/sales/board/?start={today}&end={today}&dish={self.osh.id}').data
+        self.assertEqual(Decimal(board['summary']['revenue']), Decimal('94615.38'))
+        self.assertEqual(board['dishes'][0]['dish'], 'Osh')
+        self.assertEqual(Decimal(board['dishes'][0]['revenue']), Decimal('94615.38'))
+
+        report = self.client.get(
+            f'/api/v1/reports/sales/?start={today}&end={today}&dish={self.osh.id}').data
+        self.assertEqual(Decimal(report['summary']['revenue']), Decimal('94615.38'))
+
+    def test_only_the_cashier_who_gave_the_discount_carries_it(self):
+        # «Faqat mening savdolarim» filtri ham chegirmani hisobga olishi kerak.
+        self.bill_with_discount(7000)
+        today = timezone.localdate()
+        cashier_client = APIClient()
+        cashier_client.force_authenticate(self.cashier)
+        mine = cashier_client.get(
+            f'/api/v1/sales/board/?start={today}&end={today}&mine=true').data
+        self.assertEqual(Decimal(mine['summary']['revenue']), Decimal('123000'))
+        self.assertEqual(Decimal(mine['cashiers'][0]['revenue']), Decimal('123000'))
