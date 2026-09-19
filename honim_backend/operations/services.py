@@ -54,8 +54,12 @@ def audit_many(user, rows):
 
 
 def quantity_text(value):
-    """Miqdorni jurnal uchun o'qiladigan holga keltiradi: 20.000 -> 20."""
-    trimmed = Decimal(value).quantize(Decimal('0.001'))
+    """Miqdorni jurnal uchun o'qiladigan holga keltiradi: 20.000000 -> 20.
+
+    Olti xonagacha: ziravor kabi mayda masalliq jurnalda «0» bo'lib
+    ko'rinmasligi kerak.
+    """
+    trimmed = Decimal(value).quantize(Decimal('0.000001'))
     return f'{trimmed.normalize():f}'
 
 

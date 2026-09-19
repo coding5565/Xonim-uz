@@ -26,11 +26,36 @@ INSTALLED_APPS = ['django.contrib.auth', 'django.contrib.contenttypes', 'django.
 MIDDLEWARE = ['django.middleware.security.SecurityMiddleware', 'django.contrib.sessions.middleware.SessionMiddleware', 'django.middleware.locale.LocaleMiddleware', 'django.middleware.common.CommonMiddleware', 'django.middleware.csrf.CsrfViewMiddleware', 'django.contrib.auth.middleware.AuthenticationMiddleware', 'django.middleware.clickjacking.XFrameOptionsMiddleware']
 ROOT_URLCONF = 'core.urls'
 AUTH_USER_MODEL = 'users.User'
-DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': BASE_DIR / 'db.sqlite3', 'OPTIONS': {'timeout': 20}}}
-if os.environ.get('POSTGRES_DB'):
-    DATABASES['default'] = {'ENGINE': 'django.db.backends.postgresql', 'NAME': os.environ['POSTGRES_DB'], 'USER': os.environ['POSTGRES_USER'], 'PASSWORD': os.environ['POSTGRES_PASSWORD'], 'HOST': os.environ.get('POSTGRES_HOST', 'localhost'), 'PORT': os.environ.get('POSTGRES_PORT', '5432')}
-if not DEBUG and not os.environ.get('POSTGRES_DB'):
-    raise RuntimeError('PostgreSQL is required in production')
+# Loyiha PostgreSQL'da ishlaydi — mahalliy sinovda ham, serverda ham.
+#
+# Nega bitta baza: SQLite bilan Postgres bir xil kodni boshqacha bajaradi.
+# SQLite butun sonlarni bo'lganda kasr qismini tashlaydi (chegirma taqsimoti
+# 122 999 va 123 000 bo'lib ikki xil chiqqan edi), CHECK cheklovlarini
+# yumshoqroq tekshiradi va o'nlik sonlarni suzuvchi son sifatida saqlaydi.
+# Ya'ni mahalliy sinov serverda takrorlanmasligi mumkin — eng yomon xato turi.
+#
+# SQLite faqat ataylab so'ralganda yoqiladi; jim qolib unga tushib qolish yo'q.
+if os.environ.get('USE_SQLITE') == '1':
+    DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': BASE_DIR / 'db.sqlite3', 'OPTIONS': {'timeout': 20}}}
+else:
+    POSTGRES_PASSWORD = os.environ.get('POSTGRES_PASSWORD')
+    if not POSTGRES_PASSWORD:
+        raise RuntimeError(
+            'POSTGRES_PASSWORD o‘rnatilmagan. Mahalliy sinov uchun uni muhit '
+            'o‘zgaruvchisiga qo‘ying yoki SQLite bilan ishlash uchun USE_SQLITE=1 bering.'
+        )
+    DATABASES = {'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.environ.get('POSTGRES_DB', 'honim'),
+        'USER': os.environ.get('POSTGRES_USER', 'honim'),
+        'PASSWORD': POSTGRES_PASSWORD,
+        'HOST': os.environ.get('POSTGRES_HOST', '127.0.0.1'),
+        'PORT': os.environ.get('POSTGRES_PORT', '5432'),
+        # Ulanishni qayta ishlatish: kassa ekrani har 15 soniyada so'rov
+        # yuboradi, har safar yangi ulanish ochish ortiqcha kechikish.
+        'CONN_MAX_AGE': 60,
+        'CONN_HEALTH_CHECKS': True,
+    }}
 PASSWORD_HASHERS = ['django.contrib.auth.hashers.Argon2PasswordHasher', 'django.contrib.auth.hashers.PBKDF2PasswordHasher']
 AUTH_PASSWORD_VALIDATORS = [{'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', 'OPTIONS': {'min_length': 12}}, {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'}, {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'}]
 REST_FRAMEWORK = {'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.SessionAuthentication'], 'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'], 'DEFAULT_THROTTLE_CLASSES': ['rest_framework.throttling.UserRateThrottle', 'rest_framework.throttling.AnonRateThrottle'], 'DEFAULT_THROTTLE_RATES': {'user': '600/min', 'anon': '100/min', 'login': '10/min'}, 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination', 'PAGE_SIZE': 100, 'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer']}

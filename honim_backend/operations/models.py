@@ -257,7 +257,10 @@ class Ingredient(models.Model):
     branch = models.ForeignKey(Branch, on_delete=models.PROTECT)
     name = models.CharField(max_length=100)
     unit = models.CharField(max_length=10, choices=[('kg', 'kg'), ('l', 'l'), ('dona', 'dona')])
-    quantity = models.DecimalField(max_digits=14, decimal_places=3, default=0)
+    # Olti xona: bitta porsiyaga ketadigan ziravor grammning mingdan biriga
+    # teng bo'lishi mumkin (24 ta mantiga 1 g -> bittasiga 0.0000417 kg).
+    # Uch xonada bu nolga aylanib, ombordan umuman ayrilmay qolardi.
+    quantity = models.DecimalField(max_digits=14, decimal_places=6, default=0)
     minimum = models.DecimalField(max_digits=14, decimal_places=3, default=0)
     # O'rtacha tortilgan tannarx: har kirimda qayta hisoblanadi. Sarf shu narxda
     # baholanadi, shuning uchun eski partiya narxi keyingi sarfga ta'sir qiladi.
@@ -285,7 +288,9 @@ class StockMovement(models.Model):
     key = models.UUIDField()
     request_hash = models.CharField(max_length=64)
     kind = models.CharField(max_length=18, choices=[('receipt', 'Kirim'), ('consumption', 'Kunlik sarf'), ('sale_consumption', 'Sotuv bo‘yicha sarf')])
-    quantity = models.DecimalField(max_digits=14, decimal_places=3)
+    # Sotuvda ayriladigan miqdor retsept ulushidan chiqadi va u juda
+    # mayda bo'lishi mumkin — ombor maydoni bilan bir xil aniqlikda.
+    quantity = models.DecimalField(max_digits=14, decimal_places=6)
     # Narx harakat paytida muzlatiladi: keyin tannarx o'zgarsa ham tarix buzilmaydi.
     # Kirimda foydalanuvchi kiritadi, sarfda o'sha paytdagi o'rtacha tannarxdan olinadi.
     unit_cost = models.DecimalField(max_digits=14, decimal_places=4, default=0)

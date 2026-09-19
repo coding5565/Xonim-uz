@@ -15,3 +15,5 @@ media/
 test-results/
 scan-raw.txt
 scan-str.txt
+# Baza zaxiralari: hajmi katta va ichida mijoz ma'lumotlari bor.
+backups/
