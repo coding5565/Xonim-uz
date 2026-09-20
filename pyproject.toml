@@ -24,7 +24,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 # Sozlamalar fayli Django talabiga ko'ra yuqori registrda yoziladi.
-"honim_backend/core/settings.py" = ["E402"]
+"xonim_backend/core/settings.py" = ["E402"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["core", "users", "catalog", "operations"]

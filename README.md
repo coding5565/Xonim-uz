@@ -1,4 +1,4 @@
-# Honim — restoran boshqaruv tizimi
+# Xonim — restoran boshqaruv tizimi
 
 [![CI](https://github.com/coding5565/Xonim-uz/actions/workflows/ci.yml/badge.svg)](https://github.com/coding5565/Xonim-uz/actions/workflows/ci.yml)
 
@@ -78,18 +78,18 @@ Kerak: Python 3.12, Node 22, PostgreSQL 17.
 
 ```bash
 # 1. Baza
-createdb -O honim honim
+createdb -O xonim xonim
 
 # 2. Backend
-cd honim_backend
+cd xonim_backend
 pip install -r requirements.lock
 export DJANGO_SECRET_KEY=...            # ixtiyoriy kalit
-export POSTGRES_DB=honim POSTGRES_USER=honim POSTGRES_PASSWORD=...
+export POSTGRES_DB=xonim POSTGRES_USER=xonim POSTGRES_PASSWORD=...
 python manage.py migrate
 python manage.py runserver 127.0.0.1:8000
 
 # 3. Frontend (alohida terminal)
-cd honim_frontend
+cd xonim_frontend
 npm ci
 npm run dev
 ```
@@ -105,10 +105,10 @@ kiritilmaydi.
 ## Tekshirish
 
 ```bash
-cd honim_backend && python manage.py test   # 183 ta test
-ruff check honim_backend                    # Python linteri
+cd xonim_backend && python manage.py test   # 222 ta test
+ruff check xonim_backend                    # Python linteri
 
-cd honim_frontend && npm run typecheck      # TypeScript
+cd xonim_frontend && npm run typecheck      # TypeScript
 npm run lint                                # ESLint
 npm run build                               # yig'ish
 ```

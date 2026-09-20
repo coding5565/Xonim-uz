@@ -13,8 +13,8 @@ Django 5.2 LTS va unga mos DRF liniyasi konservativ boshlang'ich tanlov. Eng yan
 Quyidagi kod papkalari reja; hozir README va docs fayllari yaratilgan.
 
 ```text
-Honim.uz/
-├── honim_backend/
+Xonim.uz/
+├── xonim_backend/
 │   ├── manage.py
 │   ├── pyproject.toml
 │   ├── uv.lock
@@ -44,7 +44,7 @@ Honim.uz/
 │   ├── audit/              # amal tarixi
 │   ├── notifications/      # qoldiq va operatsion ogohlantirishlar
 │   └── tests/integration/
-├── honim_frontend/
+├── xonim_frontend/
 │   ├── package.json
 │   ├── package-lock.json
 │   ├── vite.config.ts

@@ -10,13 +10,13 @@ Ko'rilganlar: frontend package.json, pages/layouts/stores/composables tuzilishi,
 
 Foydali asos: backend/frontend alohida, Django biznes modullari, rolga mos frontend layoutlar, yagona API mijozi, filial konteksti, moliyaviy service, audit va teskari yozuvlar.
 
-Yangi loyiha uchun o'zgarishlar: Vue TypeScript qat'iy tiplari, versiyalangan API, testlar, dependency lock, serverda filial izolyatsiyasi, moliyaviy yozuvlarda idempotency va parallel ishlash nazorati. Ko'rilgan users modelida qaytariladigan shifrlangan parol nusxasi va visible_password mavjud; Honim'da bu naqsh ishlatilmaydi. Parol xeshi va tiklash oqimi qo'llanadi.
+Yangi loyiha uchun o'zgarishlar: Vue TypeScript qat'iy tiplari, versiyalangan API, testlar, dependency lock, serverda filial izolyatsiyasi, moliyaviy yozuvlarda idempotency va parallel ishlash nazorati. Ko'rilgan users modelida qaytariladigan shifrlangan parol nusxasi va visible_password mavjud; Xonim'da bu naqsh ishlatilmaydi. Parol xeshi va tiklash oqimi qo'llanadi.
 
-Turon frontend package.json Nuxt 3/Vue 3/Pinia ishlatadi. Honim taklifi Vue 3/Vite; papkalarni tashkil etish va rol layoutlari o'xshash, framework bootstrapi boshqacha. Aynan Nuxt tanlovi ochiq qoladi.
+Turon frontend package.json Nuxt 3/Vue 3/Pinia ishlatadi. Xonim taklifi Vue 3/Vite; papkalarni tashkil etish va rol layoutlari o'xshash, framework bootstrapi boshqacha. Aynan Nuxt tanlovi ochiq qoladi.
 
 ## Ochiq loyihalar
 
-| Manba | Ko'rilgan jihat | Honim uchun xulosa |
+| Manba | Ko'rilgan jihat | Xonim uchun xulosa |
 | --- | --- | --- |
 | [NexoPOS](https://github.com/Blair2004/NexoPOS) | Vue asosidagi POS, kategoriya, savdo, ombor, to'lov, rollar; restoran uchun qo'shimcha modullar | Kassa va operatsion modullarni birga loyihalash. Laravel backendini DRF o'rniga olmaymiz. Qo'shimcha modul mavjudligi uning bepul ekanini anglatmaydi |
 | [POS Awesome](https://github.com/ucraft-com/POS-Awesome) | Vue/Vuetify va ERPNext ustidagi POS | Kassa foydalanuvchi oqimi uchun namuna; mustaqil DRF loyihasiga tayyor drop-in emas |
@@ -35,4 +35,4 @@ NexoPOS va POS Awesome repository sahifalari GPL-3.0 litsenziyasini ko'rsatadi. 
 - [Vue security](https://vuejs.org/guide/best-practices/security): ishonchsiz HTML/template xavflari.
 - [QZ Tray signing](https://qz.io/docs/signing): mahalliy chop integratsiyasining imzolash mexanizmi. Qurilma tanlanmagani sabab hozir integratsiya majburiy tanlanmagan.
 
-Hisobot formulalari va biznes jarayonlari Honim uchun taklif; ularni ochiq loyihalarda aynan mavjud deb da'vo qilmaymiz.
+Hisobot formulalari va biznes jarayonlari Xonim uchun taklif; ularni ochiq loyihalarda aynan mavjud deb da'vo qilmaymiz.

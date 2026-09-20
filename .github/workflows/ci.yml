@@ -21,9 +21,9 @@ jobs:
       postgres:
         image: postgres:17
         env:
-          POSTGRES_DB: honim
-          POSTGRES_USER: honim
-          POSTGRES_PASSWORD: honim-ci-password
+          POSTGRES_DB: xonim
+          POSTGRES_USER: xonim
+          POSTGRES_PASSWORD: xonim-ci-password
         ports: ['5432:5432']
         # Baza tayyor bo'lmasdan testlar boshlanib ketmasligi uchun.
         options: >-
@@ -34,9 +34,9 @@ jobs:
 
     env:
       DJANGO_SECRET_KEY: ci-only-not-a-real-secret-key-value
-      POSTGRES_DB: honim
-      POSTGRES_USER: honim
-      POSTGRES_PASSWORD: honim-ci-password
+      POSTGRES_DB: xonim
+      POSTGRES_USER: xonim
+      POSTGRES_PASSWORD: xonim-ci-password
       POSTGRES_HOST: 127.0.0.1
       POSTGRES_PORT: '5432'
 
@@ -51,22 +51,22 @@ jobs:
       - name: Bog‘liqliklarni o‘rnatish
         run: |
           python -m pip install --upgrade pip
-          pip install -r honim_backend/requirements.lock
+          pip install -r xonim_backend/requirements.lock
           pip install ruff
 
       - name: Linter
-        run: ruff check honim_backend
+        run: ruff check xonim_backend
 
       - name: Django tekshiruvi
-        working-directory: honim_backend
+        working-directory: xonim_backend
         run: python manage.py check --deploy --fail-level ERROR
 
       - name: Qo‘llanmagan migratsiya qolmaganini tekshirish
-        working-directory: honim_backend
+        working-directory: xonim_backend
         run: python manage.py makemigrations --check --dry-run
 
       - name: Testlar
-        working-directory: honim_backend
+        working-directory: xonim_backend
         run: python manage.py test --verbosity 2
 
   frontend:
@@ -80,20 +80,20 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: honim_frontend/package-lock.json
+          cache-dependency-path: xonim_frontend/package-lock.json
 
       - name: Bog‘liqliklarni o‘rnatish
-        working-directory: honim_frontend
+        working-directory: xonim_frontend
         run: npm ci
 
       - name: Tiplar
-        working-directory: honim_frontend
+        working-directory: xonim_frontend
         run: npm run typecheck
 
       - name: Linter
-        working-directory: honim_frontend
+        working-directory: xonim_frontend
         run: npm run lint
 
       - name: Yig‘ish
-        working-directory: honim_frontend
+        working-directory: xonim_frontend
         run: npm run build
