@@ -48,9 +48,14 @@ services:
     volumes:
       - static_files:/var/lib/xonim/static
       - media_files:/var/lib/xonim/media
-    # Tashqi tarmoqda emas: unga faqat nginx murojaat qiladi.
     networks:
+      # Baza va nginx bilan gaplashish uchun.
       - internal
+      # Faqat CHIQISH uchun. `internal` tarmoq tashqariga umuman yo'l
+      # bermaydi — hatto DNS ham ishlamaydi — shuning uchun AI yordamchi
+      # OpenAI ga chiqa olmasdi. Bu tarmoqda hech qanday port ochilmaydi:
+      # u ichkariga emas, tashqariga yo'l ochadi.
+      - egress
 
   web:
     build:
@@ -85,5 +90,9 @@ volumes:
 networks:
   web:
     external: true
+  # Baza shu yerda yashaydi va tashqariga umuman chiqa olmaydi.
   internal:
     internal: true
+  # Ilovaning tashqariga chiqishi (OpenAI). Ichkariga hech narsa
+  # ochilmaydi: bu tarmoqda port e'lon qilinmagan.
+  egress:
