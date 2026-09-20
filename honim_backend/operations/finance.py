@@ -30,6 +30,7 @@ from core.i18n import _
 from users.permissions import OwnerOnly
 
 from .models import (
+    DELIVERY_CHANNELS,
     SALE_CHANNEL_LABELS,
     SALE_PAYMENT_LABELS,
     Expense,
@@ -48,6 +49,7 @@ from .money import (
     next_month,
     parse_month,
     percent,
+    platform_fee,
     short_label,
 )
 from .reports import discount_cuts
@@ -166,19 +168,27 @@ def monthly_trend(branch, today):
         for row in Expense.objects.filter(branch=branch, date__gte=months[0])
         .values(bucket=TruncMonth('date')).annotate(total=Sum('amount')).order_by('bucket')
     }
+    # Platforma ushlanmasi oylik grafikda ham ayriladi: aks holda grafikdagi
+    # sof foyda sahifaning boshidagi raqamdan katta bo'lib ko'rinardi.
+    fee_by = {
+        row['bucket'].date() if hasattr(row['bucket'], 'date') else row['bucket']: row['fee']
+        for row in paid.values(bucket=TruncMonth('paid_at')).annotate(fee=platform_fee()).order_by('bucket')
+    }
     trend = []
     for item in months:
         revenue = revenue_by.get(item) or Decimal('0')
         cost = cost_by.get(item) or Decimal('0')
         spend = spend_by.get(item) or Decimal('0')
+        fee = fee_by.get(item) or Decimal('0')
         trend.append({
             'period': month_key(item),
             'label': short_label(item),
             'revenue': money(revenue),
             'cogs': money(cost),
             'expenses': money(spend),
+            'platform_fee': money(fee),
             'gross_profit': money(revenue - cost),
-            'net_profit': money(revenue - cost - spend),
+            'net_profit': money(revenue - cost - spend - fee),
         })
     return trend
 
@@ -213,7 +223,6 @@ def build_finance(branch, start, end, today):
     purchases, waste = moves['purchases'], moves['waste']
 
     gross_profit = revenue - cogs
-    net_profit = gross_profit - expense_total - waste
     cash_out = settled + purchases
 
     categories = [{
@@ -237,14 +246,33 @@ def build_finance(branch, start, end, today):
     # qator oylik hisobiga kirib ketmasligi kerak — u alohida anomaliya sifatida
     # ko'rsatiladi.
     # Kanal kesimi: zal, olib ketish, Uzum, Yandex — alohida va jami.
+    # Nom ataylab «amount»: `total=Sum('total')` maydon nomini yopib qo'yadi va
+    # keyingi ifodadagi F('total') agregatga tushib, xato beradi.
+    channel_rows = list(
+        paid.values('channel')
+        .annotate(fee=platform_fee(), amount=Sum('total'), count=Count('id'))
+        .order_by('-amount')
+    )
     channels = [{
         'channel': row['channel'],
         'label': SALE_CHANNEL_LABELS.get(row['channel'], row['channel']),
-        'revenue': money(row['total']),
+        'revenue': money(row['amount']),
         'orders': row['count'],
-        'share': percent(row['total'], revenue),
-        'delivery': row['channel'] in ('uzum', 'yandex'),
-    } for row in paid.values('channel').annotate(total=Sum('total'), count=Count('id')).order_by('-total')]
+        'share': percent(row['amount'], revenue),
+        'delivery': row['channel'] in DELIVERY_CHANNELS,
+        # Platforma ushlagani va shu kanaldan haqiqatda qo'lga tegadigani.
+        'fee': money(row['fee']),
+        'fee_share': percent(row['fee'], row['amount']),
+        'net': money(row['amount'] - row['fee']),
+    } for row in channel_rows]
+    # Jami ushlanma kanallar yig'indisidan olinadi: sahifadagi qatorlar bilan
+    # jami doim bir xil chiqsin.
+    platform_total = sum((row['fee'] for row in channel_rows), Decimal('0'))
+
+    # Platforma ushlagan ulush hech qachon hisobga tushmaydi, shuning uchun u
+    # ham xuddi xarajat kabi foydadan ayiriladi. Tushum esa to'liq qoladi:
+    # mijoz to'lagan summa o'zgarmaydi, faqat bizga yetib kelgani kamayadi.
+    net_profit = gross_profit - expense_total - waste - platform_total
 
     salary_spend = spend.filter(salary_payment__isnull=False).aggregate(
         total=Coalesce(Sum('amount'), Decimal('0')), count=Count('id'),
@@ -277,6 +305,8 @@ def build_finance(branch, start, end, today):
             'gross_margin': percent(gross_profit, revenue),
             'expenses': money(expense_total),
             'waste': money(waste),
+            'platform_fee': money(platform_total),
+            'platform_share': percent(platform_total, revenue),
             'net_profit': money(net_profit),
             'net_margin': percent(net_profit, revenue),
             'orders': sales['orders'],
@@ -290,7 +320,9 @@ def build_finance(branch, start, end, today):
         'cash': {
             'in': money(revenue),
             'out': money(cash_out),
-            'net': money(revenue - cash_out),
+            # Platforma ushlagani hech qachon qo'lga tegmaydi — kirimdan ayriladi.
+            'platform_fee': money(platform_total),
+            'net': money(revenue - platform_total - cash_out),
             'settled_expenses': money(settled),
             'stock_purchases': money(purchases),
             'unpaid': money(unpaid),
@@ -321,7 +353,8 @@ def build_finance(branch, start, end, today):
         },
         'trend': monthly_trend(branch, today),
         'basis': (
-            'Sof foyda = tushum − tannarx − xarajatlar. Oylik «Ish haqi» kategoriyasida '
+            'Sof foyda = tushum − tannarx − xarajatlar − platforma ushlanmasi. '
+            'Oylik «Ish haqi» kategoriyasida '
             'xarajatlar ichida turadi. Ombor xaridi foydaga emas, pul oqimiga kiradi — '
             'u sotilganda tannarx bo‘lib hisobga olinadi.'
         ),

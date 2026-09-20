@@ -5,6 +5,7 @@ from rest_framework.routers import DefaultRouter
 
 from catalog.views import CategoryViewSet, DishViewSet, PublicMenuView
 from operations.assistant_chats import AssistantChatDetailView, AssistantChatListView
+from operations.channel_fees import ChannelFeeView
 from operations.daily_usage import DailyUsageView, UsageComparisonView
 from operations.dish_prep import DishPrepHistoryView, DishPrepLeftoverView, DishPrepView
 from operations.finance import FinanceView
@@ -34,7 +35,7 @@ from operations.views import (
     TableViewSet,
 )
 from operations.waiters import WaiterEarningsView, WaiterViewSet
-from users.payroll import PayrollView
+from users.payroll import AttendanceHistoryView, AttendanceView, PayrollView
 from users.views import (
     AuditView,
     CsrfView,
@@ -69,6 +70,8 @@ urlpatterns = [
     path('api/v1/staff/<int:pk>/salary-payments/', SalaryPaymentView.as_view()),
     path('api/v1/staff/salary-payments/export/', SalaryPaymentExportView.as_view()),
     path('api/v1/payroll/', PayrollView.as_view()),
+    path('api/v1/attendance/', AttendanceView.as_view()),
+    path('api/v1/staff/<int:pk>/attendance/', AttendanceHistoryView.as_view()),
     path('api/v1/public/menu/<slug:slug>/', PublicMenuView.as_view()),
     path('api/v1/orders/<int:pk>/pay/', PayView.as_view()),
     path('api/v1/orders/<int:pk>/lines/', OrderLinesView.as_view()),
@@ -95,6 +98,7 @@ urlpatterns = [
     path('api/v1/daily-usage/compare/', UsageComparisonView.as_view()),
     path('api/v1/dashboard/', DashboardView.as_view()),
     path('api/v1/finance/', FinanceView.as_view()),
+    path('api/v1/channel-fees/', ChannelFeeView.as_view()),
     path('api/v1/assistant/chat/', AssistantChatView.as_view()),
     path('api/v1/assistant/chats/', AssistantChatListView.as_view()),
     path('api/v1/assistant/chats/<int:pk>/', AssistantChatDetailView.as_view()),

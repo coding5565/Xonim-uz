@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
-  AlertTriangle, ArrowRight, Banknote, ChefHat, Coins, Package, PiggyBank, Receipt, RefreshCw, Wallet,
+  AlertTriangle, ArrowRight, Banknote, Bike, ChefHat, Coins, Package, PiggyBank, Receipt, RefreshCw, Wallet,
 } from 'lucide-react'
 import { api, money } from '../api'
 import { useI18n } from '../i18n'
@@ -171,6 +171,25 @@ export default function FinancePage() {
             </Link>
           )}
 
+          {/* Uzum va Yandex savdo summasining bir qismini o'zida qoldiradi.
+              Tushum to'liq turadi — mijoz to'lagani o'zgarmaydi — lekin bizga
+              yetib kelmagan ulush shu yerda ochiq ayriladi. */}
+          {!!Number(profit.platform_fee) && (
+            <Link to="/settings" className="chain-row minus">
+              <span className="chain-icon violet"><Bike size={18} /></span>
+              <div>
+                <strong>{t('Platforma ushlanmasi')}</strong>
+                <small>
+                  {t('Uzum va Yandex o‘z ulushini savdo summasidan ushlab qoladi — tushumning {percent}% i', {
+                    percent: profit.platform_share,
+                  })}
+                </small>
+              </div>
+              <b>−{money(profit.platform_fee)}</b>
+              <ArrowRight size={15} />
+            </Link>
+          )}
+
           <div className={`chain-total${negative ? ' negative' : ''}`}>
             <div>
               <strong>{t('Sof foyda')}</strong>
@@ -251,6 +270,11 @@ export default function FinancePage() {
             <Link to={`/inventory?view=usage&${range}`} className="cash-row">
               <span>{t('Ombor xaridiga ketdi')}</span><b>−{money(cash.stock_purchases)}</b><ArrowRight size={14} />
             </Link>
+            {!!Number(cash.platform_fee) && (
+              <div className="cash-row">
+                <span>{t('Platforma ushlab qoldi')}</span><b>−{money(cash.platform_fee)}</b>
+              </div>
+            )}
             <div className="cash-row total">
               <span>{t('Sof pul oqimi')}</span><b>{money(cash.net)} {t('so‘m')}</b>
             </div>
@@ -321,7 +345,16 @@ export default function FinancePage() {
               <p className="nav-caption">{t('SAVDO KANALLARI')}</p>
               {data.channels.map(row => (
                 <Link key={row.channel} to={`/sales?${range}`} className="cash-row">
-                  <span>{t(row.label)}{row.delivery ? ` · ${t('yetkazib berish')}` : ''}</span>
+                  <span>
+                    {t(row.label)}{row.delivery ? ` · ${t('yetkazib berish')}` : ''}
+                    {!!Number(row.fee) && (
+                      <em className="fee-line">
+                        {t('−{fee} ushlanma ({percent}%) · hisobga {net}', {
+                          fee: money(row.fee || 0), percent: row.fee_share || '0', net: money(row.net || 0),
+                        })}
+                      </em>
+                    )}
+                  </span>
                   <b>{money(row.revenue)}</b>
                   <ArrowRight size={14} />
                 </Link>

@@ -86,6 +86,15 @@ export interface ActivityLog {
   actions: ActivityFacet[]
   actors: ActivityActor[]
 }
+/** Bir xodimning hafta ichidagi bitta kuni. */
+export interface PayrollDay {
+  date: string
+  weekday: string
+  rest: boolean
+  /** null — hali belgilanmagan. «Belgilanmagan» bilan «kelmadi» bir xil emas. */
+  present: boolean | null
+  future: boolean
+}
 export interface PayrollEmployee {
   id: number
   name: string
@@ -93,33 +102,66 @@ export interface PayrollEmployee {
   role: string
   role_label: string
   active: boolean
-  agreed: string
+  daily_wage: string
+  week_wage: string
+  week: PayrollDay[]
+  week_days: number
+  week_earned: string
+  today: 'present' | 'absent' | null
+  days_worked: number
+  earned: string
   paid: string
-  difference: string
-  status: 'paid' | 'partial' | 'unpaid' | 'no_agreement'
-  paid_on: string | null
+  /** Yig'ilgan haq − berilgan pul. Manfiy bo'lsa — avans. */
+  balance: string
+  advance: boolean
+  payments: number
+  last_paid_on: string | null
+}
+export interface PayrollPayment {
+  id: number
+  employee: number
+  employee_name: string
+  amount: string
   payment_method: string
   payment_label: string
+  paid_on: string
   note: string
+  actor_name: string
 }
 export interface Payroll {
+  today: string
+  /** Yakshanba: bu kunga haq hisoblanmaydi. */
+  rest_day: boolean
+  week: {
+    start: string
+    end: string
+    label: string
+    current: boolean
+    days: { date: string; weekday: string; name: string; rest: boolean; today: boolean; future: boolean; marked: number; present: number }[]
+  }
   month: string
   month_label: string
   months: string[]
   summary: {
-    agreed: string
-    paid: string
-    remaining: string
-    paid_count: number
     staff_count: number
-    expected: number
-    covered: number
-    without_agreement: number
+    daily_total: string
+    week_wage: string
+    week_earned: string
+    earned: string
+    paid: string
+    balance: string
+    marked_today: number
+    present_today: number
+    unmarked_today: number
+    month_paid: string
+    month_count: number
     by_method: { method: string; label: string; amount: string; count: number }[]
+    work_days: number
+    without_wage: number
   }
   employees: PayrollEmployee[]
+  payments: PayrollPayment[]
   trend: { period: string; label: string; total: string; count: number }[]
-  lifetime: { id: number; name: string; total: string; months: number; first: string; last: string }[]
   all_time: { total: string; payments: number }
 }
 export interface StockUsageRow {
@@ -177,6 +219,8 @@ export interface Finance {
     gross_margin: string
     expenses: string
     waste: string
+    platform_fee: string
+    platform_share: string
     net_profit: string
     net_margin: string
     orders: number
@@ -196,6 +240,7 @@ export interface Finance {
   cash: {
     in: string
     out: string
+    platform_fee: string
     net: string
     settled_expenses: string
     stock_purchases: string
@@ -220,6 +265,7 @@ export interface Finance {
     revenue: string
     cogs: string
     expenses: string
+    platform_fee: string
     gross_profit: string
     net_profit: string
   }[]
@@ -285,6 +331,10 @@ export interface ShiftMethodRow {
   count: number
   /** Faqat naqd kassada qoladi. */
   in_drawer: boolean
+  /** Platforma ushlab qolgan summa — Uzum va Yandexda noldan katta. */
+  fee: string
+  /** Hisobga haqiqatda tushadigan summa: amount − fee. */
+  net: string
 }
 export interface ShiftDay {
   date: string
@@ -320,6 +370,10 @@ export interface ChannelRow {
   share?: string
   /** Yetkazib berish platformasi — puli kassaga tushmaydi. */
   delivery: boolean
+  /** Platforma ushlagani. Faqat moliya sahifasida keladi. */
+  fee?: string
+  fee_share?: string
+  net?: string
 }
 export interface Waiter {
   id: number
@@ -367,3 +421,14 @@ export interface PrepLeftovers {
   summary: PrepStatus['summary']
   leftovers: PrepRow[]
 }
+
+/** Platforma ushlanmasi — superadmin sozlaydigan foiz. */
+export interface ChannelFeeRow {
+  channel: SaleChannel
+  label: string
+  commission: string
+  net_share: string
+  updated_at: string | null
+  configured: boolean
+}
+export interface ChannelFees { rows: ChannelFeeRow[]; default: string; detail?: string }

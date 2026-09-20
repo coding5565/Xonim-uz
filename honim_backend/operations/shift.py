@@ -21,7 +21,7 @@ from core.i18n import _
 from users.permissions import OwnerOnly, SalesOnly
 
 from .models import SALE_PAYMENT_METHODS, Expense, Order, ShiftClose
-from .money import day_window, money
+from .money import day_window, money, platform_fee
 from .services import audit
 
 # Shu summadan katta farq e'tibor talab qiladi.
@@ -35,11 +35,15 @@ def day_figures(branch, day):
     since, until = day_window(day)
     paid = Order.objects.filter(branch=branch, status='paid', paid_at__gte=since, paid_at__lt=until)
     totals = paid.aggregate(revenue=Coalesce(Sum('total'), Decimal('0')), orders=Count('id'))
+    # Nom ataylab «amount»: `total=Sum('total')` maydonni yopib qo'yadi va
+    # ushlanma ifodasidagi F('total') agregatga tushib ketardi.
     by_method = {
         row['payment_method']: row
-        for row in paid.values('payment_method').annotate(total=Sum('total'), count=Count('id')).order_by('-total')
+        for row in paid.values('payment_method')
+        .annotate(fee=platform_fee(), amount=Sum('total'), count=Count('id'))
+        .order_by('-amount')
     }
-    cash_in = by_method.get('cash', {}).get('total') or Decimal('0')
+    cash_in = by_method.get('cash', {}).get('amount') or Decimal('0')
     # Kassadan naqd chiqqan xarajatlar.
     cash_out = Expense.objects.filter(
         branch=branch, date=day, payment_method='cash',
@@ -47,14 +51,24 @@ def day_figures(branch, day):
 
     # Har bir to'lov usuli doim ro'yxatda turadi, sotuvsizi ham nol bo'lib:
     # yo'q qator «tekshirilmagan» degani emasligini kassir ko'rib tursin.
-    breakdown = [{
-        'method': method,
-        'label': label,
-        'amount': money(by_method.get(method, {}).get('total')),
-        'count': by_method.get(method, {}).get('count', 0),
-        # Faqat naqd kassada qoladi.
-        'in_drawer': method == 'cash',
-    } for method, label in SALE_PAYMENT_METHODS]
+    breakdown = []
+    for method, label in SALE_PAYMENT_METHODS:
+        row = by_method.get(method, {})
+        amount = row.get('amount') or Decimal('0')
+        # Uzum va Yandex savdo summasining bir qismini o'zida ushlab qoladi:
+        # hisobga to'liq summa emas, qolgani tushadi. Kassir kun oxirida
+        # platformadan qancha kutishini aniq bilishi kerak.
+        fee = row.get('fee') or Decimal('0')
+        breakdown.append({
+            'method': method,
+            'label': label,
+            'amount': money(amount),
+            'count': row.get('count', 0),
+            # Faqat naqd kassada qoladi.
+            'in_drawer': method == 'cash',
+            'fee': money(fee),
+            'net': money(amount - fee),
+        })
     return {
         'revenue': totals['revenue'],
         'orders': totals['orders'],

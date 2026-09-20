@@ -30,16 +30,25 @@ masalliq retsept bo'yicha ayriladi — lekin bu taxmin, sotuvni to'xtatmaydi.
 Admin haqiqiy sarfni kiritadi, superadmin ikkalasini solishtiradi.
 
 **Moliya**
-Foyda zanjiri: tushum → tannarx → yalpi foyda → xarajat → sof foyda. Har bir
-raqam bosiladi va qayerdan kelgani ochiladi. Tannarx qamrovi ko'rsatkichi soxta
-marjani fosh qiladi.
+Foyda zanjiri: tushum → tannarx → yalpi foyda → xarajat → platforma ushlanmasi
+→ sof foyda. Har bir raqam bosiladi va qayerdan kelgani ochiladi. Tannarx
+qamrovi ko'rsatkichi soxta marjani fosh qiladi. Uzum va Yandex savdo
+summasining bir qismini o'zida qoldiradi: tushum to'liq yoziladi, ushlanma esa
+alohida qator bo'lib ayriladi. Foiz superadmin qo'lida va har bir buyurtma o'z
+foizini sotuv paytida muzlatib oladi.
+
+**Davomat va ish haqi**
+Haq kunlik yig'iladi: xodim kelgan kun uchun uning kunlik summasi balansiga
+qo'shiladi va o'sha summa qatorga muzlatiladi. Hafta olti kun — yakshanbaga haq
+hisoblanmaydi. Pul istalgan kuni, istalgan summada beriladi va balansdan
+ayriladi; balansdan ko'p berilsa qolgani avans bo'lib turadi.
 
 **Nazorat**
 Har bir amal jurnalga tushadi — kim, qachon, nima uchun. Yozuvni o'chirib
 bo'lmaydi. Kun yakuni: kassadagi naqd sanaladi va tizim hisobi bilan
 solishtiriladi.
 
-**Oyliklar, xodimlar, ofitsiantlar, QR menyu** ham bor.
+**Xodimlar, ofitsiantlar, QR menyu** ham bor.
 
 ---
 

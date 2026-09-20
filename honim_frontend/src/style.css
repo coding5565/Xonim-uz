@@ -1169,3 +1169,74 @@ body.sheet-open{overflow:hidden}
 @media(max-width:800px){
   .row-buttons{flex-direction:column;gap:4px}
 }
+
+/* Platforma ushlanmasi: savdo summasi bilan hisobga tushadigan summa farqi
+   har doim raqamning yonida turadi — kassir ham, egasi ham kutilgan pulni
+   adashtirmasligi uchun. */
+.drawer-side em.fee-line,.cash-row em.fee-line{display:block;font:500 12px 'DM Sans',sans-serif;font-style:normal;color:#9aa8a0;margin-top:3px;line-height:1.5}
+.theme-dark .drawer-side em.fee-line,.theme-dark .cash-row em.fee-line{color:#8fa79a}
+.fee-rows{display:flex;flex-direction:column;gap:12px;padding:0 22px 18px}
+.fee-row{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#fff}
+.fee-row .fee-name{flex:1 1 180px}
+.fee-row .fee-name strong{display:block;font:650 16px 'Manrope',sans-serif;color:#22463a}
+.fee-row .fee-name small{color:#8d9a92;font-size:13px}
+.fee-row .fee-input{display:flex;flex-direction:column;gap:5px;font:600 12px 'DM Sans',sans-serif;letter-spacing:.4px;color:#7f8d85;text-transform:uppercase}
+.fee-row .fee-input input{width:120px;font:650 17px 'Manrope',sans-serif;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fbfdfc}
+.fee-row .fee-net{text-align:right;min-width:110px}
+.fee-row .fee-net small{display:block;font-size:12px;color:#8d9a92}
+.fee-row .fee-net strong{font:700 20px 'Manrope',sans-serif;color:#2f7a55;font-variant-numeric:tabular-nums}
+.theme-dark .fee-row{background:#17231f;border-color:#2c4138}
+.theme-dark .fee-row .fee-name strong{color:#d7e9de}
+.theme-dark .fee-row .fee-input input{background:#101a17;border-color:#2c4138;color:#e4f0e9}
+@media(max-width:700px){.fee-row{align-items:stretch}.fee-row .fee-net{text-align:left}}
+
+/* ── Davomat va ish haqi ──────────────────────────────────────────────
+   Kassir buni har kuni, ko'pincha planshetdan ochadi: tugmalar katta va
+   javobi darhol ko'rinadigan bo'lishi kerak. */
+.button.small{padding:9px 13px;font-size:13.5px;gap:6px}
+.attendance-rows{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px;padding:0 22px 20px}
+.attendance-row{display:flex;align-items:center;justify-content:space-between;gap:14px;border:1px solid var(--line);border-radius:13px;padding:14px 16px;background:#fff}
+.attendance-row.present{border-color:#bcdcc7;background:#f5fbf7}
+.attendance-row.absent{border-color:#e6d2bb;background:#fdf8f2}
+.attendance-name strong{display:block;font:650 17px 'Manrope',sans-serif;color:#22463a}
+.attendance-name small{display:block;font-size:13px;color:#8d9a92;margin-top:3px}
+.attendance-buttons{display:flex;gap:8px;flex-shrink:0}
+.attend{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:#fff;border-radius:11px;padding:11px 14px;font:600 14px 'DM Sans',sans-serif;color:#6f7d75;cursor:pointer;transition:.15s}
+.attend:hover:not(:disabled){border-color:#9cc3ab}
+.attend:disabled{opacity:.55;cursor:default}
+.attend.yes.on{background:#2f7a55;border-color:#2f7a55;color:#fff}
+.attend.no.on{background:#b5762f;border-color:#b5762f;color:#fff}
+.rest-day{text-align:center;padding:26px 22px 34px;color:#8d9a92}
+.rest-day h3{font:650 19px 'Manrope',sans-serif;color:#3a5b47;margin:10px 0 4px}
+.rest-day p{font-size:14px}
+.week-nav{display:flex;gap:8px}
+.week-table th.day{text-align:center;min-width:52px}
+.week-table th.day small{display:block;font-weight:400;opacity:.7}
+.week-table th.day.rest{color:#b5762f}
+.week-table th.day.now{color:#2f7a55}
+.week-table td.day-cell{text-align:center}
+.week-table td.day-cell.rest{background:#fbf7f2}
+.mark{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px}
+.mark.yes{background:#e3f2e8;color:#2f7a55}
+.mark.no{background:#f6e8d8;color:#b5762f}
+.mark.none{border:1px dashed #d7e0d9}
+.mark.rest{color:#c3ccc6}
+.theme-dark .attendance-row{background:#17231f;border-color:#2c4138}
+.theme-dark .attendance-row.present{background:#1b3028;border-color:#356049}
+.theme-dark .attendance-row.absent{background:#2a2419;border-color:#5a4426}
+.theme-dark .attendance-name strong{color:#d7e9de}
+.theme-dark .attend{background:#101a17;border-color:#2c4138;color:#b4c5bb}
+.theme-dark .week-table td.day-cell.rest{background:#17231f}
+.theme-dark .mark.yes{background:#1e3d2d;color:#8fd3a8}
+.theme-dark .mark.no{background:#3a2e1c;color:#e0ab63}
+.theme-dark .mark.none{border-color:#2c4138}
+@media(max-width:700px){
+  .attendance-rows{grid-template-columns:1fr;padding:0 14px 16px}
+  .attendance-row{flex-direction:column;align-items:stretch}
+  .attendance-buttons .attend{flex:1;justify-content:center}
+}
+button.mark.tap{border:1px solid transparent;cursor:pointer;padding:0;transition:.15s}
+button.mark.tap.none{border-style:dashed;border-color:#d7e0d9}
+button.mark.tap:hover:not(:disabled){border-color:#2f7a55}
+button.mark.tap:disabled{opacity:.5;cursor:default}
+.theme-dark button.mark.tap.none{border-color:#2c4138}

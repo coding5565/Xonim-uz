@@ -15,7 +15,8 @@ Diqqat: chekdagi pul boshqacha ko'rinadi (`40 000`, tiyinsiz, probel bilan)
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
-from django.db.models import DecimalField
+from django.db.models import DecimalField, F, Sum
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -42,6 +43,19 @@ def money(value):
     ayirmalar yaxlitlanganda shunday chiqib qolishi mumkin.
     """
     return str((value if value is not None else ZERO).quantize(CENT) + ZERO)
+
+
+def platform_fee(condition=None):
+    """Platforma ushlab qolgan summani hisoblovchi ifoda (Order bo'yicha).
+
+    Har bir buyurtma o'z foizini sotuv paytida muzlatgan, shuning uchun
+    shartnoma keyin o'zgarsa ham eski hisob o'zgarmaydi. Zal va olib ketishda
+    foiz nol — ular yig'indiga hech narsa qo'shmaydi.
+    """
+    return Coalesce(
+        Sum(F('total') * F('channel_commission') / 100, filter=condition, output_field=MONEY),
+        ZERO, output_field=MONEY,
+    )
 
 
 def quantity(value):

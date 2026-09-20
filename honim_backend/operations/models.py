@@ -55,6 +55,38 @@ SALE_CHANNELS = [
 SALE_CHANNEL_LABELS = dict(SALE_CHANNELS)
 # Yetkazib berish platformalari — puli kassaga tushmaydi, hisobga o'tadi.
 DELIVERY_CHANNELS = ['uzum', 'yandex']
+# Platforma odatda ushlab qoladigan ulush. Yangi filialda shu qiymatdan
+# boshlanadi, keyin shartnomaga qarab superadmin o'zgartiradi.
+DEFAULT_PLATFORM_COMMISSION = Decimal('30')
+
+
+class ChannelFee(models.Model):
+    """Yetkazib berish platformasi hisobdan ushlab qoladigan ulush.
+
+    Uzum va Yandex buyurtma summasidan foiz oladi, qolgani restoran hisobiga
+    tushadi. Foiz shartnoma bo'yicha o'zgarishi mumkin, shuning uchun u kodda
+    emas, shu yerda turadi va superadmin tahrirlaydi.
+
+    Diqqat: bu yerdagi foiz FAQAT yangi sotuvlarga qo'llanadi. Har bir
+    buyurtma o'z foizini `Order.channel_commission` da muzlatib oladi — aks
+    holda bugun foizni o'zgartirish o'tgan oyning hisobotini qayta yozib
+    yuborardi.
+    """
+
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT, related_name='channel_fees')
+    channel = models.CharField(max_length=10, choices=SALE_CHANNELS)
+    commission = models.DecimalField(max_digits=5, decimal_places=2, default=DEFAULT_PLATFORM_COMMISSION)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['channel']
+        constraints = [
+            models.UniqueConstraint(fields=['branch', 'channel'], name='channel_fee_unique'),
+            models.CheckConstraint(
+                condition=Q(commission__gte=0) & Q(commission__lte=100),
+                name='channel_fee_range',
+            ),
+        ]
 
 
 class Waiter(models.Model):
@@ -123,6 +155,9 @@ class Order(models.Model):
     # o'tgan buyurtmadagi ulush o'zgarmaydi.
     waiter_commission = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     channel = models.CharField(max_length=10, default='hall', choices=SALE_CHANNELS)
+    # Platforma ushlab qolgan foiz, sotuv paytida muzlatiladi. Zal va olib
+    # ketishda nol: u yerda hech kim hech narsa ushlamaydi.
+    channel_commission = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     status = models.CharField(max_length=10, default='open', choices=ORDER_STATUSES)
     # `total` — mijoz to'laydigan summa, ya'ni chegirma AYRILGANDAN keyingi
     # qiymat. Tushum shu maydondan hisoblanadi, shuning uchun chegirma
@@ -203,11 +238,64 @@ class Expense(models.Model):
         constraints = [models.UniqueConstraint(fields=['branch', 'key'], name='expense_idempotency'), models.CheckConstraint(condition=Q(amount__gt=0), name='expense_positive_amount')]
 
 
+# Hafta olti kun: yakshanba dam olish kuni va unga haq yozilmaydi.
+WORK_DAYS_PER_WEEK = 6
+# Python hafta kunlari: dushanba 0 ... yakshanba 6.
+REST_WEEKDAY = 6
+
+
+class Attendance(models.Model):
+    """Xodim shu kuni ishga keldimi.
+
+    Haq shu yerdan yig'iladi: belgilangan har bir kelgan kun xodimning
+    balansiga kunlik summasini qo'shadi. Kunlik summa qatorga MUZLATILADI —
+    keyin kelishuv o'zgarsa ham o'tgan kunlar qayta hisoblanmaydi.
+
+    Yakshanba bu yerga tushmaydi: dam olish kuniga haq hisoblanmaydi.
+
+    Kun belgilanmagan bo'lsa hech narsa yozilmaydi. «Belgilanmagan» bilan
+    «kelmagan» bir xil narsa emas — birinchisi hali so'ralmagan savol,
+    ikkinchisi esa javob, shuning uchun kelmagan kun ham qator bo'lib
+    saqlanadi.
+    """
+
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT)
+    employee = models.ForeignKey(User, on_delete=models.PROTECT, related_name='attendances')
+    actor = models.ForeignKey(User, on_delete=models.PROTECT, related_name='marked_attendances')
+    date = models.DateField()
+    present = models.BooleanField(default=True)
+    # Kelgan kun uchun yoziladigan haq. Kelmagan kunda nol bo'lib qoladi.
+    daily_wage = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    note = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-date', 'employee_id']
+        constraints = [
+            models.UniqueConstraint(fields=['branch', 'employee', 'date'], name='attendance_one_row_per_day'),
+            models.CheckConstraint(condition=Q(daily_wage__gte=0), name='attendance_wage_not_negative'),
+        ]
+        indexes = [models.Index(fields=['branch', 'date'], name='attendance_branch_date_idx')]
+
+
 class SalaryPayment(models.Model):
+    """Xodimga berilgan pul. Istalgan kuni, istalgan summada.
+
+    Oylik bir marta to'liq beriladigan narsa emas: haq har kuni yig'ilib
+    boradi, pul esa kerak bo'lganda beriladi — hafta oxirida, avans sifatida
+    yoki bir necha bo'lib. Shuning uchun bu yerda «qaysi oy uchun» degan
+    qat'iy bog'lanish yo'q; `period` faqat hisobotni oyga bo'lish uchun
+    saqlanadi.
+    """
+
     branch = models.ForeignKey(Branch, on_delete=models.PROTECT)
     employee = models.ForeignKey(User, on_delete=models.PROTECT, related_name='salary_payments')
     actor = models.ForeignKey(User, on_delete=models.PROTECT, related_name='processed_salary_payments')
     expense = models.OneToOneField(Expense, on_delete=models.PROTECT, related_name='salary_payment')
+    # Ikki marta bosilgan tugma ikki marta pul bermasligi uchun.
+    key = models.UUIDField()
+    request_hash = models.CharField(max_length=64, blank=True)
     period = models.DateField()
     amount = models.DecimalField(max_digits=14, decimal_places=2)
     payment_method = models.CharField(max_length=10, choices=[('cash', 'Naqd'), ('card', 'Karta')])
@@ -216,9 +304,9 @@ class SalaryPayment(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['-period', '-id']
+        ordering = ['-paid_on', '-id']
         constraints = [
-            models.UniqueConstraint(fields=['branch', 'employee', 'period'], name='salary_one_payment_per_period'),
+            models.UniqueConstraint(fields=['branch', 'key'], name='salary_payment_idempotency'),
             models.CheckConstraint(condition=Q(amount__gt=0), name='salary_payment_positive_amount'),
         ]
 

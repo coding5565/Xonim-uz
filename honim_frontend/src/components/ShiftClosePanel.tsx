@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { Fragment, useCallback, useEffect, useState, type FormEvent } from 'react'
 import { AlertTriangle, CheckCircle2, CreditCard, Lock, Scale, Wallet } from 'lucide-react'
 import { api, dateLabel, money, today } from '../api'
 import { useSession } from '../session'
@@ -130,7 +130,18 @@ export default function ShiftClosePanel() {
             <div className="drawer-side">
               <header><CreditCard size={15} />{t('Hisobga tushgan — sanalmaydi')}</header>
               {toAccount.map(row => (
-                <p key={row.method}><span>{row.label}</span><b>{money(row.amount)}</b></p>
+                <Fragment key={row.method}>
+                  <p><span>{row.label}</span><b>{money(row.net)}</b></p>
+                  {/* Uzum va Yandex savdo summasining bir qismini o'zida qoldiradi:
+                      hisobga tushadigan raqam savdodan kichik bo'ladi. */}
+                  {Number(row.fee) > 0 && (
+                    <em className="fee-line">
+                      {t('savdo {sale} − platforma ushlanmasi {fee}', {
+                        sale: money(row.amount), fee: money(row.fee),
+                      })}
+                    </em>
+                  )}
+                </Fragment>
               ))}
               {!toAccount.length && <p className="muted">{t('Karta orqali savdo bo‘lmagan')}</p>}
               <small>{t('Bu pul kassada yotmaydi — provayder hisobiga tushadi.')}</small>

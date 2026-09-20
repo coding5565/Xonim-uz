@@ -14,9 +14,11 @@ from core.i18n import _
 from users.models import AuditEvent
 
 from .models import (
+    DEFAULT_PLATFORM_COMMISSION,
     DELIVERY_CHANNELS,
     ORDER_STATUS_LABELS,
     SALE_PAYMENT_LABELS,
+    ChannelFee,
     Expense,
     Ingredient,
     Order,
@@ -272,10 +274,14 @@ def _record_order(user, data):
         commission = waiter.commission
 
     recipes = _recipes_for_dishes(user.branch, dishes)
+    channel = data.get('channel', 'hall')
     order = Order.objects.create(
         branch=user.branch, cashier=user, key=data['key'], request_hash=fingerprint(data),
         table=table_text, table_ref=table, waiter=waiter_text, waiter_ref=waiter,
-        waiter_commission=commission, channel=data.get('channel', 'hall'),
+        waiter_commission=commission, channel=channel,
+        # Foiz shu yerda muzlatiladi: keyin shartnoma o'zgarsa ham bu
+        # buyurtmaning hisobi o'zgarmaydi.
+        channel_commission=platform_commission(user.branch, channel),
         total=total, status='paid' if paid else 'open',
         payment_method=data['payment_method'], paid_at=timezone.now() if paid else None,
     )
@@ -529,6 +535,20 @@ def apply_discount(user, order_id, amount, reason):
         audit(user, 'order.discount', f'#{order.id} · chegirma olib tashlandi')
     return order
 
+
+
+
+def platform_commission(branch, channel):
+    """Platforma shu kanaldan ushlab qoladigan foiz.
+
+    Sozlanmagan bo'lsa standart qiymat ishlatiladi: yangi filialda ham Uzum
+    darhol to'g'ri hisoblansin. Zal va olib ketishda hech kim hech narsa
+    ushlamaydi, shuning uchun nol.
+    """
+    if channel not in DELIVERY_CHANNELS:
+        return Decimal('0')
+    fee = ChannelFee.objects.filter(branch=branch, channel=channel).first()
+    return fee.commission if fee else DEFAULT_PLATFORM_COMMISSION
 
 
 def check_payment_channel(channel, method):

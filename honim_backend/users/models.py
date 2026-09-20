@@ -19,7 +19,9 @@ class User(AbstractUser):
     role = models.CharField(max_length=12, choices=Role.choices, default=Role.CASHIER)
     branch = models.ForeignKey(Branch, on_delete=models.PROTECT, null=True)
     phone = models.CharField(max_length=30, blank=True)
-    salary = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    # Kunlik haq. Oylik emas: hafta olti kun ishlanadi va haq har kuni
+    # davomatga qarab yig'iladi, shuning uchun kelishuvning birligi ham kun.
+    daily_wage = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     hired_at = models.DateField(null=True, blank=True)
     notes = models.CharField(max_length=300, blank=True)
 
@@ -52,7 +54,8 @@ AUDIT_LABELS = {
     'stock.sale_consumption': 'Savdo bo‘yicha sarf',
     'stock.shortage': 'Qoldiqdan ko‘p sarflandi',
     'expense.create': 'Xarajat kiritildi',
-    'salary.pay': 'Oylik to‘landi',
+    'salary.pay': 'Ish haqi berildi',
+    'attendance.mark': 'Davomat belgilandi',
     'staff.create': 'Xodim qo‘shildi',
     'staff.update': 'Xodim ma’lumoti o‘zgardi',
     'catalog.create': 'Menyuga qo‘shildi',
@@ -60,6 +63,7 @@ AUDIT_LABELS = {
     'recipe.create': 'Retsept yaratildi',
     'recipe.update': 'Retsept yangilandi',
     'table.create': 'Stol qo‘shildi',
+    'channel.fee': 'Platforma ulushi o‘zgardi',
     'waiter.create': 'Ofitsiant qo‘shildi',
     'waiter.update': 'Ofitsiant ma’lumoti o‘zgardi',
     'waiter.remove': 'Ofitsiant olib tashlandi',
@@ -76,10 +80,12 @@ AUDIT_GROUPS = {
     'print': 'Chop etish',
     'kitchen': 'Oshxona',
     'stock': 'Ombor',
+    'channel': 'Platformalar',
     'prep': 'Tayyor taomlar',
     'usage': 'Kunlik sarf',
     'expense': 'Xarajat',
-    'salary': 'Oylik',
+    'salary': 'Ish haqi',
+    'attendance': 'Davomat',
     'staff': 'Xodimlar',
     'catalog': 'Menyu',
     'recipe': 'Retsept',

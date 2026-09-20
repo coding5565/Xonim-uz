@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import QRCode from 'qrcode'
-import { ArrowRight, CheckCircle2, Clock3, ExternalLink, QrCode, Server, ShieldCheck } from 'lucide-react'
+import { ArrowRight, Bike, CheckCircle2, Clock3, ExternalLink, QrCode, Server, ShieldCheck } from 'lucide-react'
 import { api, dateLabel } from '../api'
 import { useI18n } from '../i18n'
-import type { ActivityLog } from '../types'
+import type { ActivityLog, ChannelFees } from '../types'
 import { useSession } from '../session'
 
 const ready = [
@@ -23,19 +23,51 @@ export default function SettingsPage() {
   const [qr, setQr] = useState('')
   const [error, setError] = useState('')
   const [audit, setAudit] = useState<ActivityLog>()
+  const [fees, setFees] = useState<ChannelFees>()
+  // Tahrirdagi qiymat alohida turadi: serverdan kelgan raqam yozayotganda
+  // ostidan o'zgarib ketmasligi kerak.
+  const [rates, setRates] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState('')
+  const [saved, setSaved] = useState('')
   const url = `${window.location.origin}/menu`
 
   useEffect(() => {
     async function load() {
       try {
         setQr(await QRCode.toDataURL(url, { width: 260, margin: 2, color: { dark: '#153d32', light: '#ffffff' } }))
-        if (user?.role === 'owner') setAudit(await api<ActivityLog>('audit/'))
+        if (user?.role !== 'owner') return
+        const [log, platform] = await Promise.all([
+          api<ActivityLog>('audit/'),
+          api<ChannelFees>('channel-fees/'),
+        ])
+        setAudit(log)
+        setFees(platform)
+        setRates(Object.fromEntries(platform.rows.map(row => [row.channel, row.commission])))
       } catch (exception) {
         setError((exception as Error).message)
       }
     }
     load()
   }, [url, user?.role])
+
+  async function saveFee(channel: string) {
+    setSaving(channel)
+    setError('')
+    setSaved('')
+    try {
+      const next = await api<ChannelFees>('channel-fees/', {
+        method: 'PUT',
+        body: JSON.stringify({ channel, commission: rates[channel] }),
+      })
+      setFees(next)
+      setRates(Object.fromEntries(next.rows.map(row => [row.channel, row.commission])))
+      setSaved(channel)
+    } catch (exception) {
+      setError((exception as Error).message)
+    } finally {
+      setSaving('')
+    }
+  }
 
   return (
     <>
@@ -67,10 +99,62 @@ export default function SettingsPage() {
             {ready.map(item => <li key={item}><CheckCircle2 />{t(item)}</li>)}
             {pending.map(item => <li key={item} className="pending"><Clock3 />{t(item)}</li>)}
           </ul>
-          <div className="inline-tip"><Server size={20} />{t('Mahalliy SQLite · production uchun PostgreSQL')}</div>
+          <div className="inline-tip"><Server size={20} />{t('PostgreSQL 17 — mahalliy va production bir xil baza')}</div>
           <div className="inline-tip"><ShieldCheck size={20} />{t('Faqat localhost uchun ishga tushirilgan')}</div>
         </section>
       </div>
+      {user?.role === 'owner' && !!fees && (
+        <section className="panel spaced">
+          <header className="panel-heading">
+            <div>
+              <h2><Bike size={17} /> {t('Platforma ushlanmasi')}</h2>
+              <p>{t('Uzum va Yandex savdo summasining qancha qismini o‘zida qoldiradi')}</p>
+            </div>
+            <span className="pill subtle">{t('Faqat superadmin')}</span>
+          </header>
+          <div className="fee-rows">
+            {fees.rows.map(row => (
+              <div key={row.channel} className="fee-row">
+                <div className="fee-name">
+                  <strong>{t(row.label)}</strong>
+                  <small>
+                    {row.configured && row.updated_at
+                      ? t('o‘zgartirilgan: {date}', { date: dateLabel(row.updated_at) })
+                      : t('shartnoma kiritilmagan — standart {percent}%', { percent: fees.default })}
+                  </small>
+                </div>
+                <label className="fee-input">
+                  {t('Ushlanma, %')}
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={rates[row.channel] ?? row.commission}
+                    onChange={event => setRates({ ...rates, [row.channel]: event.target.value })}
+                  />
+                </label>
+                <div className="fee-net">
+                  <small>{t('Bizga tushadi')}</small>
+                  <strong>{(100 - Number(rates[row.channel] ?? row.commission)).toFixed(2)}%</strong>
+                </div>
+                <button
+                  type="button"
+                  className="button secondary"
+                  onClick={() => saveFee(row.channel)}
+                  disabled={saving === row.channel || rates[row.channel] === row.commission}
+                >
+                  {saving === row.channel ? t('Saqlanmoqda…') : t('Saqlash')}
+                </button>
+                {saved === row.channel && <span className="pill good">{t('Saqlandi')}</span>}
+              </div>
+            ))}
+          </div>
+          <p className="data-note">
+            {t('Yangi foiz faqat shu paytdan keyingi sotuvlarga qo‘llanadi. Har bir buyurtma o‘z foizini sotuv paytida muzlatib oladi, shuning uchun o‘tgan kunlarning hisobi o‘zgarmaydi.')}
+          </p>
+        </section>
+      )}
       {user?.role === 'owner' && (
         <section className="panel spaced">
           <header className="panel-heading">

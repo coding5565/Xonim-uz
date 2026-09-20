@@ -14,19 +14,25 @@ interface Staff {
   role: 'owner' | 'cashier' | 'kitchen'
   active: boolean
   phone: string
-  salary: string
+  daily_wage: string
+  week_wage: string
   hired_at: string | null
   notes: string
   last_login: string | null
-  last_salary_period: string | null
+  /** Davomatdan yig'ilgan haq − berilgan pul. */
+  days_worked: number
+  earned: string
+  paid: string
+  balance: string
+  last_salary_amount: string | null
   last_salary_paid_on: string | null
 }
 
 interface SalaryPayment {
   id: number
-  period: string
   amount: string
   payment_method: 'cash' | 'card'
+  payment_label: string
   paid_on: string
   note: string
   actor_name: string
@@ -38,7 +44,7 @@ interface CreateForm {
   role: string
   password: string
   phone: string
-  salary: string
+  daily_wage: string
   hired_at: string
   notes: string
 }
@@ -47,14 +53,14 @@ interface EditForm {
   name: string
   role: string
   phone: string
-  salary: string
+  daily_wage: string
   hired_at: string
   notes: string
   active: boolean
 }
 
 interface PayForm {
-  period: string
+  key: string
   amount: string
   payment_method: string
   paid_on: string
@@ -66,7 +72,6 @@ const roleName = (role: string) =>
 
 export default function StaffPage() {
   const { t, tn } = useI18n()
-  const currentMonth = today().slice(0, 7)
   const [staff, setStaff] = useState<Staff[]>([])
   const [payments, setPayments] = useState<SalaryPayment[]>([])
   const [selected, setSelected] = useState<Staff>()
@@ -79,13 +84,13 @@ export default function StaffPage() {
   const [error, setError] = useState('')
   const [formError, setFormError] = useState('')
   const [createForm, setCreateForm] = useState<CreateForm>({
-    name: '', username: '', role: 'cashier', password: '', phone: '', salary: '', hired_at: today(), notes: '',
+    name: '', username: '', role: 'cashier', password: '', phone: '', daily_wage: '', hired_at: today(), notes: '',
   })
   const [editForm, setEditForm] = useState<EditForm>({
-    name: '', role: 'cashier', phone: '', salary: '', hired_at: '', notes: '', active: true,
+    name: '', role: 'cashier', phone: '', daily_wage: '', hired_at: '', notes: '', active: true,
   })
   const [payForm, setPayForm] = useState<PayForm>({
-    period: currentMonth, amount: '', payment_method: 'cash', paid_on: today(), note: '',
+    key: '', amount: '', payment_method: 'cash', paid_on: today(), note: '',
   })
 
   const updateCreate = (patch: Partial<CreateForm>) => setCreateForm(previous => ({ ...previous, ...patch }))
@@ -109,12 +114,13 @@ export default function StaffPage() {
   )
   const employees = staff.filter(item => item.role !== 'owner')
   const activeCount = employees.filter(item => item.active).length
-  const monthlyPayroll = employees.filter(item => item.active).reduce((sum, item) => sum + Number(item.salary), 0)
-  const paidThisMonth = employees.filter(item => item.last_salary_period === currentMonth).length
+  // Hafta olti kun: to'liq ishlangan haftaning narxi.
+  const weeklyPayroll = employees.filter(item => item.active).reduce((sum, item) => sum + Number(item.week_wage), 0)
+  const owed = employees.reduce((sum, item) => sum + Number(item.balance), 0)
 
   function startCreate() {
     setCreateForm({
-      name: '', username: '', role: 'cashier', password: '', phone: '', salary: '', hired_at: today(), notes: '',
+      name: '', username: '', role: 'cashier', password: '', phone: '', daily_wage: '', hired_at: today(), notes: '',
     })
     setFormError('')
     setCreateOpen(true)
@@ -129,7 +135,7 @@ export default function StaffPage() {
         method: 'POST',
         body: JSON.stringify({
           ...createForm,
-          salary: createForm.salary || '0',
+          daily_wage: createForm.daily_wage || '0',
           hired_at: createForm.hired_at || null,
         }),
       })
@@ -148,7 +154,7 @@ export default function StaffPage() {
       name: item.name,
       role: item.role,
       phone: item.phone,
-      salary: item.salary,
+      daily_wage: item.daily_wage,
       hired_at: item.hired_at || '',
       notes: item.notes,
       active: item.active,
@@ -183,7 +189,14 @@ export default function StaffPage() {
   async function startPay(item: Staff) {
     setSelected(item)
     setPayForm({
-      period: currentMonth, amount: item.salary, payment_method: 'cash', paid_on: today(), note: '',
+      // Kalit shu yerda tug'iladi: ikki marta bosilgan tugma ikki marta
+      // pul bermaydi.
+      key: crypto.randomUUID(),
+      // Odatda qarzning hammasi beriladi; boshqa summa qo'lda yoziladi.
+      amount: Number(item.balance) > 0 ? item.balance : '',
+      payment_method: 'cash',
+      paid_on: today(),
+      note: '',
     })
     setFormError('')
     try {
@@ -235,11 +248,11 @@ export default function StaffPage() {
         <div>
           <span className="eyebrow">{t('JAMOA VA ISH HAQI')}</span>
           <h1>{t('Xodimlar')}<span className="heading-dot">.</span></h1>
-          <p>{t('Hisoblar, lavozimlar va oylik to‘lovlari bir joyda.')}</p>
+          <p>{t('Hisoblar, lavozimlar va kunlik ish haqi bir joyda.')}</p>
         </div>
         <div className="heading-actions">
-          <Link to="/payroll" className="button secondary"><Banknote size={17} />{t('Oyliklar tahlili')}</Link>
-          <button className="button secondary" onClick={exportPayroll}><Download size={17} />{t('Oyliklar Excel')}</button>
+          <Link to="/payroll" className="button secondary"><Banknote size={17} />{t('Davomat va ish haqi')}</Link>
+          <button className="button secondary" onClick={exportPayroll}><Download size={17} />{t('To‘lovlar Excel')}</button>
           <button className="button primary" onClick={startCreate}><Plus size={18} />{t('Xodim yaratish')}</button>
         </div>
       </div>
@@ -250,17 +263,18 @@ export default function StaffPage() {
           <small>{tn('{count} ta xodim hisobidan', employees.length)}</small>
         </article>
         <article>
-          <Banknote /><span>{t('Oylik ish haqi fondi')}</span><strong>{money(monthlyPayroll)}</strong>
-          <small>{t('so‘m / oy')}</small>
+          <Banknote /><span>{t('Haftalik ish haqi fondi')}</span><strong>{money(weeklyPayroll)}</strong>
+          <small>{t('so‘m · olti kunlik hafta')}</small>
         </article>
         <article>
-          <CalendarCheck /><span>{t('{month} da to‘langan', { month: currentMonth })}</span>
-          <strong>{paidThisMonth} / {activeCount}</strong><small>{t('har xodimga oyiga bir marta')}</small>
+          <CalendarCheck /><span>{t('Hozirgi qarzimiz')}</span>
+          <strong className={owed > 0 ? 'owed' : undefined}>{money(owed)}</strong>
+          <small>{t('yig‘ilgan haq − berilgan pul')}</small>
         </article>
       </div>
       <section className="panel">
         <header className="panel-heading">
-          <div><h2>{t('Xodimlar ro‘yxati')}</h2><p>{t('Rol, oylik va hisob holatini boshqaring')}</p></div>
+          <div><h2>{t('Xodimlar ro‘yxati')}</h2><p>{t('Rol, kunlik haq va hisob holatini boshqaring')}</p></div>
           <div className="search-field">
             <Search size={17} />
             <input
@@ -275,8 +289,8 @@ export default function StaffPage() {
           <table>
             <thead>
               <tr>
-                <th>{t('XODIM')}</th><th>{t('ROL')}</th><th>{t('OYLIK')}</th>
-                <th>{t('SO‘NGGI TO‘LOV')}</th><th>{t('HOLAT')}</th><th>{t('AMALLAR')}</th>
+                <th>{t('XODIM')}</th><th>{t('ROL')}</th><th>{t('KUNLIK HAQ')}</th>
+                <th>{t('BALANS')}</th><th>{t('SO‘NGGI TO‘LOV')}</th><th>{t('HOLAT')}</th><th>{t('AMALLAR')}</th>
               </tr>
             </thead>
             <tbody>
@@ -287,12 +301,32 @@ export default function StaffPage() {
                     <small>@{item.username}{item.phone ? ` · ${item.phone}` : ''}</small>
                   </td>
                   <td><span className="pill subtle">{t(roleName(item.role))}</span></td>
-                  <td className="number">{item.role === 'owner' ? '—' : `${money(item.salary)} ${t('so‘m')}`}</td>
+                  <td className="number">
+                    {item.role === 'owner' ? '—' : (
+                      <>
+                        {money(item.daily_wage)} {t('so‘m')}
+                        <small>{t('haftasiga {amount}', { amount: money(item.week_wage) })}</small>
+                      </>
+                    )}
+                  </td>
+                  <td className="number">
+                    {item.role === 'owner' ? '—' : (
+                      <>
+                        <strong className={Number(item.balance) > 0 ? 'owed' : undefined}>
+                          {money(item.balance)}
+                        </strong>
+                        <small>
+                          {tn('{count} ish kuni', item.days_worked)}
+                          {Number(item.balance) < 0 ? ` · ${t('avans')}` : ''}
+                        </small>
+                      </>
+                    )}
+                  </td>
                   <td>
                     {item.role === 'owner' ? <span>—</span>
-                      : item.last_salary_period ? (
+                      : item.last_salary_paid_on ? (
                         <>
-                          <strong>{item.last_salary_period}</strong>
+                          <strong>{money(item.last_salary_amount || 0)}</strong>
                           <small>{item.last_salary_paid_on}</small>
                         </>
                       ) : <span>{t('To‘lov yo‘q')}</span>}
@@ -309,7 +343,7 @@ export default function StaffPage() {
                           <Pencil size={15} />
                         </button>
                         <button className="table-action pay" onClick={() => startPay(item)}>
-                          <Banknote size={15} />{t('Oylik')}
+                          <Banknote size={15} />{t('Pul berish')}
                         </button>
                         <button className="text-link" onClick={() => showHistory(item)}>{t('Tarix')}</button>
                       </div>
@@ -327,7 +361,7 @@ export default function StaffPage() {
       <div className="inline-tip">
         <ShieldCheck size={20} />
         <span>
-          {t('Oylik to‘lovi saqlanganda “Ish haqi” kategoriyasida xarajat yaratiladi va superadmin dashboardida darhol hisoblanadi.')}
+          {t('Har bir to‘lov “Ish haqi” kategoriyasida xarajat yaratadi va xodimning balansidan ayriladi. Haq esa davomatdan yig‘iladi — “Davomat va ish haqi” bo‘limida.')}
         </span>
       </div>
 
@@ -378,14 +412,15 @@ export default function StaffPage() {
           </div>
           <div className="form-row">
             <label>
-              {t('Oylik, so‘m')}
+              {t('Kunlik haq, so‘m')}
+              <small className="field-hint">{t('Bir ish kuni uchun. Hafta olti kun.')}</small>
               <input
-                value={createForm.salary}
-                onChange={event => updateCreate({ salary: event.target.value })}
+                value={createForm.daily_wage}
+                onChange={event => updateCreate({ daily_wage: event.target.value })}
                 type="number"
                 min="0"
                 step="1000"
-                placeholder="3500000"
+                placeholder="150000"
               />
             </label>
             <label>
@@ -450,10 +485,11 @@ export default function StaffPage() {
               </select>
             </label>
             <label>
-              {t('Oylik, so‘m')}
+              {t('Kunlik haq, so‘m')}
+              <small className="field-hint">{t('O‘zgarish faqat keyingi kunlarga ta’sir qiladi')}</small>
               <input
-                value={editForm.salary}
-                onChange={event => updateEdit({ salary: event.target.value })}
+                value={editForm.daily_wage}
+                onChange={event => updateEdit({ daily_wage: event.target.value })}
                 type="number"
                 min="0"
                 step="1000"
@@ -492,22 +528,23 @@ export default function StaffPage() {
 
       <AppModal
         open={payOpen}
-        title={t('{name} · oylik to‘lovi', { name: selected?.name || '' })}
+        title={t('{name} · pul berish', { name: selected?.name || '' })}
         onClose={() => { if (!busy) setPayOpen(false) }}
       >
         <form onSubmit={paySalary}>
           <div className="salary-amount">{money(payForm.amount || 0)} <small>{t('so‘m')}</small></div>
+          {!!selected && (
+            <p className="alert">
+              {Number(selected.balance) >= 0
+                ? t('Hozirgi qarz: {amount} so‘m · {days} ish kuni yig‘ilgan', {
+                  amount: money(selected.balance), days: selected.days_worked,
+                })
+                : t('Bu xodimga {amount} so‘m avans berilgan — yangi to‘lov uning ustiga qo‘shiladi', {
+                  amount: money(Math.abs(Number(selected.balance))),
+                })}
+            </p>
+          )}
           <div className="form-row">
-            <label>
-              {t('Qaysi oy uchun?')}
-              <input
-                value={payForm.period}
-                onChange={event => updatePay({ period: event.target.value })}
-                type="month"
-                max={currentMonth}
-                required
-              />
-            </label>
             <label>
               {t('To‘lov sanasi')}
               <input
@@ -549,12 +586,12 @@ export default function StaffPage() {
               placeholder={t('Avans, bonus yoki boshqa izoh')}
             />
           </label>
-          <p className="alert">
-            {t('Bir xodimga bir oy uchun faqat bitta oylik to‘lovi yoziladi. To‘lov xarajatlarda ham aks etadi.')}
+          <p className="data-note">
+            {t('Istalgan summa, istalgan kuni: to‘lov balansdan ayriladi. Balansdan ko‘p berilsa qolgani avans bo‘lib turadi va keyingi ish kunlari bilan yopiladi.')}
           </p>
           {formError && <p className="alert error">{formError}</p>}
           <button className="button primary full" disabled={busy}>
-            {busy ? t('Saqlanmoqda…') : t('Oylikni to‘langan deb belgilash')}
+            {busy ? t('Saqlanmoqda…') : t('Pulni berildi deb yozish')}
           </button>
         </form>
       </AppModal>
@@ -568,9 +605,9 @@ export default function StaffPage() {
           {payments.map(item => (
             <div key={item.id}>
               <span>
-                <strong>{item.period}</strong>
+                <strong>{item.paid_on}</strong>
                 <small>
-                  {item.paid_on} · {item.payment_method === 'cash' ? t('Naqd') : t('Karta')} · {item.actor_name}
+                  {item.payment_method === 'cash' ? t('Naqd') : t('Karta')} · {item.actor_name}
                 </small>
               </span>
               <strong>{money(item.amount)} {t('so‘m')}</strong>

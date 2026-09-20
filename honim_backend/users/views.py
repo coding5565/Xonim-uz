@@ -20,18 +20,18 @@ from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
 from core.i18n import _
-from operations.models import SALE_PAYMENT_METHODS, SalaryPayment
+from operations.models import SALE_PAYMENT_METHODS, WORK_DAYS_PER_WEEK, SalaryPayment
 from operations.services import Conflict, audit, create_expense
 
 from .models import AuditEvent, User, audit_group, audit_label
-from .permissions import OwnerOnly
+from .permissions import OwnerOnly, SalesOnly
 
 
 def salary_register_xlsx(payments):
-    rows = [['Xodim', 'Login', 'Rol', 'Qaysi oy uchun', 'To‘langan sana', 'Summa', 'To‘lov turi', 'Kiritgan', 'Izoh']]
+    rows = [['Xodim', 'Login', 'Rol', 'Kunlik haq', 'To‘langan sana', 'Summa', 'To‘lov turi', 'Kiritgan', 'Izoh']]
     rows += [[
         item.employee.first_name or item.employee.username, item.employee.username, item.employee.get_role_display(),
-        item.period.strftime('%Y-%m'), item.paid_on.isoformat(), item.amount,
+        item.employee.daily_wage, item.paid_on.isoformat(), item.amount,
         'Naqd' if item.payment_method == 'cash' else 'Karta', item.actor.first_name or item.actor.username, item.note,
     ] for item in payments]
     def column(index):
@@ -214,7 +214,7 @@ class StaffCreateInput(serializers.Serializer):
     role = serializers.ChoiceField(choices=[User.Role.CASHIER, User.Role.KITCHEN])
     password = serializers.CharField(min_length=12, max_length=128, trim_whitespace=False, write_only=True)
     phone = serializers.CharField(max_length=30, allow_blank=True, default='')
-    salary = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal('0'), default=0)
+    daily_wage = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0'), default=0)
     hired_at = serializers.DateField(allow_null=True, required=False)
     notes = serializers.CharField(max_length=300, allow_blank=True, default='')
 
@@ -232,27 +232,25 @@ class StaffUpdateInput(serializers.Serializer):
     name = serializers.CharField(max_length=150, required=False)
     role = serializers.ChoiceField(choices=[User.Role.CASHIER, User.Role.KITCHEN], required=False)
     phone = serializers.CharField(max_length=30, allow_blank=True, required=False)
-    salary = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal('0'), required=False)
+    daily_wage = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0'), required=False)
     hired_at = serializers.DateField(allow_null=True, required=False)
     notes = serializers.CharField(max_length=300, allow_blank=True, required=False)
     active = serializers.BooleanField(required=False)
 
 
 class SalaryPaymentInput(serializers.Serializer):
-    period = serializers.RegexField(r'^\d{4}-\d{2}$')
+    """Ish haqi to'lovi: istalgan kuni, istalgan summada.
+
+    Oyga bog'lanmaydi — haq kunlik yig'iladi va pul kerak bo'lganda
+    beriladi. `key` takroriy yuborishdan himoya qiladi: bir marta bosilgan
+    tugma ikki marta pul bermasligi kerak.
+    """
+
+    key = serializers.UUIDField()
     amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal('1'))
     payment_method = serializers.ChoiceField(choices=['cash', 'card'])
     paid_on = serializers.DateField()
     note = serializers.CharField(max_length=250, allow_blank=True, default='')
-
-    def validate_period(self, value):
-        try:
-            period = datetime.strptime(value, '%Y-%m').date().replace(day=1)
-        except ValueError:
-            raise serializers.ValidationError(_('Oy noto‘g‘ri.')) from None
-        if period > timezone.localdate().replace(day=1):
-            raise serializers.ValidationError(_('Kelajak oyi uchun to‘lov kiritib bo‘lmaydi.'))
-        return period
 
     def validate_paid_on(self, value):
         if value > timezone.localdate():
@@ -261,7 +259,10 @@ class SalaryPaymentInput(serializers.Serializer):
 
 
 def staff_payload(user):
-    latest = user.salary_payments.order_by('-period').first()
+    latest = max(user.salary_payments.all(), key=lambda item: (item.paid_on, item.id), default=None)
+    # Balans hamma vaqt bo'yicha: yig'ilgan haq − berilgan pul.
+    earned = sum((row.daily_wage for row in user.attendances.all() if row.present), Decimal('0'))
+    paid = sum((item.amount for item in user.salary_payments.all()), Decimal('0'))
     return {
         'id': user.id,
         'name': user.first_name or user.username,
@@ -269,11 +270,16 @@ def staff_payload(user):
         'role': user.role,
         'active': user.is_active,
         'phone': user.phone,
-        'salary': str(user.salary),
+        'daily_wage': str(user.daily_wage),
+        'week_wage': str(user.daily_wage * WORK_DAYS_PER_WEEK),
         'hired_at': user.hired_at,
         'notes': user.notes,
         'last_login': user.last_login,
-        'last_salary_period': latest.period.strftime('%Y-%m') if latest else None,
+        'days_worked': sum(1 for row in user.attendances.all() if row.present),
+        'earned': str(earned),
+        'paid': str(paid),
+        'balance': str(earned - paid),
+        'last_salary_amount': str(latest.amount) if latest else None,
         'last_salary_paid_on': latest.paid_on if latest else None,
     }
 
@@ -289,7 +295,7 @@ class StaffView(APIView):
     permission_classes = [OwnerOnly]
 
     def get(self, request):
-        staff = User.objects.filter(branch=request.user.branch).prefetch_related('salary_payments').order_by('role', 'first_name', 'username')
+        staff = User.objects.filter(branch=request.user.branch).prefetch_related('salary_payments', 'attendances').order_by('role', 'first_name', 'username')
         return Response([staff_payload(user) for user in staff])
 
     @transaction.atomic
@@ -304,7 +310,7 @@ class StaffView(APIView):
             role=data['role'],
             branch=request.user.branch,
             phone=data['phone'],
-            salary=data['salary'],
+            daily_wage=data['daily_wage'],
             hired_at=data.get('hired_at'),
             notes=data['notes'],
         )
@@ -341,21 +347,30 @@ class StaffDetailView(APIView):
         return Response(staff_payload(user))
 
 
+def payment_payload(payment, actor_name):
+    return {
+        'id': payment.id,
+        'employee': payment.employee_id,
+        'amount': str(payment.amount),
+        'payment_method': payment.payment_method,
+        'payment_label': 'Naqd' if payment.payment_method == 'cash' else 'Karta',
+        'paid_on': payment.paid_on,
+        'note': payment.note,
+        'actor_name': actor_name,
+    }
+
+
 class SalaryPaymentView(APIView):
-    permission_classes = [OwnerOnly]
+    """Xodimga pul berish. Kassir ham bera oladi — ko'pincha pulni u beradi."""
+
+    permission_classes = [SalesOnly]
 
     def get(self, request, pk):
         employee = branch_employee(request, pk)
         payments = SalaryPayment.objects.filter(branch=request.user.branch, employee=employee).select_related('actor')
-        return Response([{
-            'id': item.id,
-            'period': item.period.strftime('%Y-%m'),
-            'amount': str(item.amount),
-            'payment_method': item.payment_method,
-            'paid_on': item.paid_on,
-            'note': item.note,
-            'actor_name': item.actor.first_name or item.actor.username,
-        } for item in payments])
+        return Response([
+            payment_payload(item, item.actor.first_name or item.actor.username) for item in payments
+        ])
 
     @transaction.atomic
     def post(self, request, pk):
@@ -363,16 +378,23 @@ class SalaryPaymentView(APIView):
         if not employee:
             raise serializers.ValidationError(_('Xodim topilmadi.'))
         if employee.role == User.Role.OWNER:
-            raise serializers.ValidationError(_('Superadmin oyligi bu bo‘limda yuritilmaydi.'))
+            raise serializers.ValidationError(_('Superadmin ish haqi bu bo‘limda yuritilmaydi.'))
         serializer = SalaryPaymentInput(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        if SalaryPayment.objects.select_for_update().filter(branch=request.user.branch, employee=employee, period=data['period']).exists():
-            raise Conflict(_('Bu xodim uchun tanlangan oy oyligi allaqachon to‘langan.'))
+
+        # Takroriy yuborish: bir xil kalit bilan kelgan so'rov yangi pul
+        # bermaydi, avvalgi yozuvning o'zini qaytaradi.
+        again = SalaryPayment.objects.filter(branch=request.user.branch, key=data['key']).first()
+        if again:
+            if again.employee_id != employee.id or again.amount != data['amount']:
+                raise Conflict(_('Bir xil amal kaliti boshqa ma’lumot bilan yuborildi.'))
+            return Response(payment_payload(again, again.actor.first_name or again.actor.username), status=200)
+
         expense = create_expense(request.user, {
             'key': uuid4(),
             'category': 'Ish haqi',
-            'purpose': f'{data["period"].strftime("%Y-%m")} oyi uchun oylik',
+            'purpose': f'{employee.first_name or employee.username} · ish haqi',
             'recipient': employee.first_name or employee.username,
             'amount': data['amount'],
             'payment_method': data['payment_method'],
@@ -383,22 +405,20 @@ class SalaryPaymentView(APIView):
             employee=employee,
             actor=request.user,
             expense=expense,
-            period=data['period'],
+            key=data['key'],
+            # Oy faqat hisobotni bo'lish uchun: to'lov qaysi oyda berilgan.
+            period=data['paid_on'].replace(day=1),
             amount=data['amount'],
             payment_method=data['payment_method'],
             paid_on=data['paid_on'],
             note=data['note'],
         )
-        AuditEvent.objects.create(branch=request.user.branch, actor=request.user, action='salary.pay', description=f'{employee.first_name} · {payment.period:%Y-%m} · {payment.amount} so‘m')
-        return Response({
-            'id': payment.id,
-            'period': payment.period.strftime('%Y-%m'),
-            'amount': str(payment.amount),
-            'payment_method': payment.payment_method,
-            'paid_on': payment.paid_on,
-            'note': payment.note,
-            'actor_name': request.user.first_name or request.user.username,
-        }, status=201)
+        AuditEvent.objects.create(
+            branch=request.user.branch, actor=request.user, action='salary.pay',
+            description=f'{employee.first_name or employee.username} · {payment.amount} so‘m · {payment.paid_on:%d.%m.%Y}',
+        )
+        return Response(
+            payment_payload(payment, request.user.first_name or request.user.username), status=201)
 
 
 class SalaryPaymentExportView(APIView):

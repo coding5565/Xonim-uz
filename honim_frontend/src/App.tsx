@@ -37,7 +37,8 @@ const navItems: NavItem[] = [
   { path: '/recipes', name: 'Retsept va foyda', icon: BarChart3, roles: ['owner'] },
   { path: '/staff', name: 'Xodimlar', icon: Users, roles: ['owner'] },
   { path: '/waiters', name: 'Ofitsiantlar', icon: ConciergeBell, roles: ['owner'] },
-  { path: '/payroll', name: 'Oyliklar', icon: Banknote, roles: ['owner'] },
+  // Kassir ham ochadi: davomatni u belgilaydi va pulni ko'pincha u beradi.
+  { path: '/payroll', name: 'Ish haqi', icon: Banknote, roles: ['owner', 'cashier'] },
   { path: '/activity', name: 'Harakatlar', icon: History, roles: ['owner'] },
 ]
 

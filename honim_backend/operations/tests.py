@@ -131,39 +131,40 @@ class WorkflowTests(TestCase):
             'role': 'cashier', 'password': 'Safe-test-password-49!'
         }, format='json').status_code, 403)
 
-    def test_owner_updates_employee_and_salary_payment_hits_finance_once(self):
+    def test_owner_updates_employee_and_the_wage_payment_hits_finance_once(self):
         employee = User.objects.create_user(
             'manager', password='Safe-test-password-51!', first_name='Menejer',
-            role='admin', branch=self.branch, salary=Decimal('3500000')
+            role='cashier', branch=self.branch, daily_wage=Decimal('130000')
         )
         detail = f'/api/v1/staff/{employee.id}/'
         response = self.client.patch(detail, {
-            'phone': '+998901234567', 'salary': '4000000', 'active': True,
+            'phone': '+998901234567', 'daily_wage': '150000', 'active': True,
             'hired_at': str(timezone.localdate()), 'notes': 'Bosh admin'
         }, format='json')
         self.assertEqual(response.status_code, 200)
         employee.refresh_from_db()
-        self.assertEqual(employee.salary, Decimal('4000000'))
+        self.assertEqual(employee.daily_wage, Decimal('150000'))
         self.assertEqual(employee.phone, '+998901234567')
 
-        period = timezone.localdate().strftime('%Y-%m')
         payload = {
-            'period': period, 'amount': '4000000', 'payment_method': 'card',
-            'paid_on': str(timezone.localdate()), 'note': 'To‘liq oylik'
+            'key': str(uuid4()), 'amount': '900000', 'payment_method': 'card',
+            'paid_on': str(timezone.localdate()), 'note': 'Haftalik'
         }
         pay_url = f'/api/v1/staff/{employee.id}/salary-payments/'
         self.assertEqual(self.client.post(pay_url, payload, format='json').status_code, 201)
-        self.assertEqual(self.client.post(pay_url, payload, format='json').status_code, 409)
+        # Bir xil kalit bilan ikkinchi so'rov yangi pul bermaydi.
+        self.assertEqual(self.client.post(pay_url, payload, format='json').status_code, 200)
         self.assertEqual(SalaryPayment.objects.filter(employee=employee).count(), 1)
         expense = Expense.objects.get(category='Ish haqi')
-        self.assertEqual(expense.amount, Decimal('4000000'))
+        self.assertEqual(expense.amount, Decimal('900000'))
         self.assertEqual(expense.recipient, 'Menejer')
         dashboard = self.client.get('/api/v1/dashboard/').data
-        self.assertEqual(Decimal(dashboard['expenses']), Decimal('4000000'))
+        self.assertEqual(Decimal(dashboard['expenses']), Decimal('900000'))
 
+        # Kassir pul bera oladi, lekin xodim kartasini o'zgartira olmaydi.
         self.client.force_authenticate(self.cashier)
-        self.assertEqual(self.client.patch(detail, {'salary': '1'}, format='json').status_code, 403)
-        self.assertEqual(self.client.get(pay_url).status_code, 403)
+        self.assertEqual(self.client.patch(detail, {'daily_wage': '1'}, format='json').status_code, 403)
+        self.assertEqual(self.client.get(pay_url).status_code, 200)
 
     def test_stock_exactly_once_and_no_negative_balance(self):
         ingredient = Ingredient.objects.create(branch=self.branch, name='Guruch', unit='kg', quantity=50)
@@ -786,144 +787,218 @@ class StockCostingTests(TestCase):
 
 
 class PayrollTests(TestCase):
-    """Oyliklar bo'limi: kelishilgan va to'langan summa hech qachon aralashmasin."""
+    """Ish haqi: kunlik yig'iladi, istalgan kuni beriladi.
+
+    Butun bo'lim bitta tenglamaga tayanadi:
+        balans = kelgan kunlar uchun yozilgan haq − berilgan pul
+    Shu tenglama buzilmasligi shu yerda tekshiriladi.
+    """
 
     def setUp(self):
         self.branch = Branch.objects.create(name='One', slug='one')
         self.other = Branch.objects.create(name='Two', slug='two')
-        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch, salary=Decimal('9000000'))
-        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch, salary=Decimal('3000000'), first_name='Kassir')
-        self.admin = User.objects.create_user('admin', password='test-only-long-password', role='admin', branch=self.branch, salary=Decimal('5000000'), first_name='Admin')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cashier = User.objects.create_user(
+            'cashier', password='test-only-long-password', role='cashier', branch=self.branch,
+            first_name='Kassir', daily_wage=Decimal('150000'))
+        self.cook = User.objects.create_user(
+            'oshpaz', password='test-only-long-password', role='kitchen', branch=self.branch,
+            first_name='Oshpaz', daily_wage=Decimal('200000'))
         self.client = APIClient()
         self.client.force_authenticate(self.owner)
-        self.month = timezone.localdate().replace(day=1)
+        self.today = timezone.localdate()
+        # Yakshanbaga haq yozilmaydi, shuning uchun sinov ish kunida
+        # o'tkaziladi: bugun yakshanba bo'lsa shanbaga suriladi.
+        self.workday = self.today - timedelta(days=1) if self.today.weekday() == 6 else self.today
+        # Eng yaqin yakshanba — dam olish kuni qoidasini sinash uchun.
+        self.sunday = self.today - timedelta(days=(self.today.weekday() + 1) % 7)
 
-    def pay(self, employee, amount, period=None, method='cash'):
-        return self.client.post(f'/api/v1/staff/{employee.id}/salary-payments/', {
-            'period': (period or self.month).strftime('%Y-%m'),
+    def mark(self, rows, day=None, client=None):
+        return (client or self.client).post('/api/v1/attendance/', {
+            'date': str(day or self.workday),
+            'rows': [{'employee': person.id, 'present': present} for person, present in rows],
+        }, format='json')
+
+    def pay(self, employee, amount, method='cash', key=None, day=None, client=None):
+        return (client or self.client).post(f'/api/v1/staff/{employee.id}/salary-payments/', {
+            'key': str(key or uuid4()),
             'amount': str(amount),
             'payment_method': method,
-            'paid_on': str(timezone.localdate()),
+            'paid_on': str(day or self.today),
             'note': '',
         }, format='json')
 
-    def test_empty_month_shows_the_whole_wage_bill_as_unpaid(self):
-        data = self.client.get('/api/v1/payroll/').data
-        # Superadmin o'z oyligini bu yerda yuritmaydi, shuning uchun fondga kirmaydi.
-        self.assertEqual(data['summary']['agreed'], '8000000.00')
-        self.assertEqual(data['summary']['paid'], '0.00')
-        self.assertEqual(data['summary']['remaining'], '8000000.00')
-        self.assertEqual(data['summary']['paid_count'], 0)
+    def rows(self, client=None):
+        data = (client or self.client).get('/api/v1/payroll/').data
+        return data, {row['username']: row for row in data['employees']}
+
+    def test_nothing_is_owed_before_anyone_is_marked(self):
+        data, rows = self.rows()
+        self.assertEqual(data['summary']['balance'], '0.00')
         self.assertEqual(data['summary']['staff_count'], 2)
-        self.assertEqual({row['status'] for row in data['employees']}, {'unpaid'})
-        self.assertNotIn('owner', [row['username'] for row in data['employees']])
+        self.assertEqual(data['summary']['unmarked_today'], 2 if not data['rest_day'] else 2)
+        self.assertEqual(rows['cashier']['balance'], '0.00')
+        self.assertEqual(rows['cashier']['daily_wage'], '150000.00')
+        # Olti kunlik hafta: kunlik haq olti barobar.
+        self.assertEqual(rows['cashier']['week_wage'], '900000.00')
+        # Superadmin o'z haqini bu bo'limda yuritmaydi.
+        self.assertNotIn('owner', rows)
 
-    def test_paid_partial_and_unpaid_are_told_apart(self):
-        self.assertEqual(self.pay(self.cashier, Decimal('3000000')).status_code, 201)
-        self.assertEqual(self.pay(self.admin, Decimal('2000000')).status_code, 201)
+    def test_a_marked_day_adds_that_days_wage_to_the_balance(self):
+        self.assertEqual(self.mark([(self.cashier, True), (self.cook, True)]).status_code, 201)
+        data, rows = self.rows()
+        self.assertEqual(rows['cashier']['balance'], '150000.00')
+        self.assertEqual(rows['oshpaz']['balance'], '200000.00')
+        self.assertEqual(rows['cashier']['days_worked'], 1)
+        self.assertEqual(data['summary']['balance'], '350000.00')
+        self.assertEqual(data['summary']['earned'], '350000.00')
+
+    def test_a_day_off_adds_nothing(self):
+        self.mark([(self.cashier, False), (self.cook, True)])
+        _data, rows = self.rows()
+        self.assertEqual(rows['cashier']['balance'], '0.00')
+        self.assertEqual(rows['cashier']['days_worked'], 0)
+        # Belgilangan, lekin kelmagan: «so'ralmagan» emas, «kelmadi».
+        self.assertEqual(rows['cashier']['today'] or 'absent', 'absent')
+        self.assertEqual(rows['oshpaz']['balance'], '200000.00')
+
+    def test_marking_the_same_day_twice_corrects_it_instead_of_doubling(self):
+        self.mark([(self.cashier, True)])
+        self.mark([(self.cashier, True)])
+        _data, rows = self.rows()
+        self.assertEqual(rows['cashier']['balance'], '150000.00')
+        # Xato tuzatiladi: kelgan deb belgilangan kun kelmaganga o'tkazilsa
+        # o'sha kunning haqi balansdan ham chiqib ketadi.
+        self.mark([(self.cashier, False)])
+        _data, rows = self.rows()
+        self.assertEqual(rows['cashier']['balance'], '0.00')
+
+    def test_sunday_is_a_rest_day_and_earns_nothing(self):
+        response = self.mark([(self.cashier, True)], day=self.sunday)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('akshanba', str(response.data))
+        self.assertEqual(self.rows()[1]['cashier']['balance'], '0.00')
+
+    def test_a_raise_never_rewrites_the_days_already_worked(self):
+        self.mark([(self.cashier, True)])
+        self.assertEqual(self.client.patch(
+            f'/api/v1/staff/{self.cashier.id}/', {'daily_wage': '300000'}, format='json').status_code, 200)
+        _data, rows = self.rows()
+        # O'tgan kun eski kelishuv bilan qoladi, yangi kunlar yangisi bilan.
+        self.assertEqual(rows['cashier']['balance'], '150000.00')
+        self.assertEqual(rows['cashier']['daily_wage'], '300000.00')
+        self.mark([(self.cashier, True)], day=self.workday - timedelta(days=1))
+        self.assertEqual(self.rows()[1]['cashier']['balance'], '450000.00')
+
+    def test_money_paid_comes_off_the_balance(self):
+        self.mark([(self.cashier, True)])
+        self.assertEqual(self.pay(self.cashier, Decimal('100000')).status_code, 201)
+        _data, rows = self.rows()
+        self.assertEqual(rows['cashier']['earned'], '150000.00')
+        self.assertEqual(rows['cashier']['paid'], '100000.00')
+        self.assertEqual(rows['cashier']['balance'], '50000.00')
+        self.assertFalse(rows['cashier']['advance'])
+
+    def test_paying_before_the_work_is_an_advance(self):
+        # Pul zarur bo'lsa oldinroq beriladi: balans manfiyga tushadi va
+        # keyingi ish kunlari bilan o'zi yopiladi.
+        self.pay(self.cashier, Decimal('150000'))
+        _data, rows = self.rows()
+        self.assertEqual(rows['cashier']['balance'], '-150000.00')
+        self.assertTrue(rows['cashier']['advance'])
+        self.mark([(self.cashier, True)])
+        self.assertEqual(self.rows()[1]['cashier']['balance'], '0.00')
+
+    def test_the_same_key_never_pays_twice(self):
+        key = uuid4()
+        self.assertEqual(self.pay(self.cashier, Decimal('100000'), key=key).status_code, 201)
+        # Ikkinchi marta bosilgan tugma yangi pul bermaydi.
+        self.assertEqual(self.pay(self.cashier, Decimal('100000'), key=key).status_code, 200)
+        self.assertEqual(SalaryPayment.objects.filter(employee=self.cashier).count(), 1)
+        self.assertEqual(self.rows()[1]['cashier']['paid'], '100000.00')
+        # Bir xil kalit boshqa summa bilan kelsa — bu xato, qabul qilinmaydi.
+        self.assertEqual(self.pay(self.cashier, Decimal('200000'), key=key).status_code, 409)
+
+    def test_a_payment_lands_in_expenses_exactly_once(self):
+        self.pay(self.cashier, Decimal('120000'))
+        expenses = Expense.objects.filter(branch=self.branch, category='Ish haqi')
+        self.assertEqual(expenses.count(), 1)
+        self.assertEqual(expenses.first().amount, Decimal('120000'))
+        self.assertEqual(expenses.first().recipient, 'Kassir')
+        # Moliyada oylik xarajatlar ICHIDA turadi, ustiga qo'shilmaydi.
+        finance = self.client.get('/api/v1/finance/').data
+        self.assertEqual(finance['salary']['total'], '120000.00')
+        self.assertEqual(finance['profit']['expenses'], '120000.00')
+
+    def test_several_payments_in_one_month_are_all_kept(self):
+        # Eski tizimda bir oyga bitta to'lov sig'ardi. Endi hafta oxirida
+        # ham, o'rtasida ham berish mumkin.
+        self.pay(self.cashier, Decimal('100000'))
+        self.pay(self.cashier, Decimal('50000'))
+        data, rows = self.rows()
+        self.assertEqual(rows['cashier']['paid'], '150000.00')
+        self.assertEqual(rows['cashier']['payments'], 2)
+        self.assertEqual(data['summary']['month_count'], 2)
+        self.assertEqual(data['all_time'], {'total': '150000.00', 'payments': 2})
+
+    def test_the_cashier_marks_attendance_and_pays_too(self):
+        cashier = APIClient()
+        cashier.force_authenticate(self.cashier)
+        self.assertEqual(self.mark([(self.cook, True)], client=cashier).status_code, 201)
+        self.assertEqual(self.pay(self.cook, Decimal('50000'), client=cashier).status_code, 201)
+        _data, rows = self.rows(client=cashier)
+        self.assertEqual(rows['oshpaz']['balance'], '150000.00')
+
+    def test_the_kitchen_reaches_none_of_it(self):
+        kitchen = APIClient()
+        kitchen.force_authenticate(self.cook)
+        self.assertEqual(kitchen.get('/api/v1/payroll/').status_code, 403)
+        self.assertEqual(self.mark([(self.cashier, True)], client=kitchen).status_code, 403)
+        self.assertEqual(self.pay(self.cashier, Decimal('10000'), client=kitchen).status_code, 403)
+
+    def test_other_branches_stay_out(self):
+        stranger = User.objects.create_user(
+            'stranger', password='test-only-long-password', role='cashier',
+            branch=self.other, daily_wage=Decimal('700000'))
+        self.assertNotIn('stranger', self.rows()[1])
+        # Begona xodimni belgilab ham bo'lmaydi.
+        self.assertEqual(self.mark([(stranger, True)]).status_code, 400)
+
+    def test_future_and_forgotten_days_are_refused(self):
+        self.assertEqual(self.mark([(self.cashier, True)], day=self.today + timedelta(days=1)).status_code, 400)
+        self.assertEqual(self.mark([(self.cashier, True)], day=self.today - timedelta(days=40)).status_code, 400)
+        self.assertEqual(self.pay(self.cashier, Decimal('1000'), day=self.today + timedelta(days=1)).status_code, 400)
+        self.assertEqual(self.pay(self.cashier, Decimal('0')).status_code, 400)
+
+    def test_the_week_shows_six_working_days_and_one_rest_day(self):
         data = self.client.get('/api/v1/payroll/').data
-        rows = {row['username']: row for row in data['employees']}
-        self.assertEqual(rows['cashier']['status'], 'paid')
-        self.assertEqual(rows['cashier']['difference'], '0.00')
-        # Kelishilgandan kam berilgan bo'lsa, farqi qarz bo'lib qoladi.
-        self.assertEqual(rows['admin']['status'], 'partial')
-        self.assertEqual(rows['admin']['difference'], '3000000.00')
-        self.assertEqual(data['summary']['paid'], '5000000.00')
-        self.assertEqual(data['summary']['remaining'], '3000000.00')
-        self.assertEqual(data['summary']['paid_count'], 2)
+        self.assertEqual(len(data['week']['days']), 7)
+        self.assertEqual(sum(1 for day in data['week']['days'] if day['rest']), 1)
+        self.assertEqual(data['summary']['work_days'], 6)
+        # Har bir xodimning hafta qatori ham yetti kun.
+        self.assertEqual(len(data['employees'][0]['week']), 7)
 
-    def test_payment_methods_and_lifetime_totals_are_grouped_not_split(self):
-        self.pay(self.cashier, Decimal('3000000'), method='cash')
-        self.pay(self.admin, Decimal('5000000'), method='card')
-        previous = (self.month - timedelta(days=1)).replace(day=1)
-        self.pay(self.cashier, Decimal('2500000'), period=previous, method='cash')
+    def test_the_week_total_follows_the_days_actually_marked(self):
+        self.mark([(self.cashier, True), (self.cook, True)])
+        data, rows = self.rows()
+        self.assertEqual(rows['cashier']['week_days'], 1)
+        self.assertEqual(rows['cashier']['week_earned'], '150000.00')
+        self.assertEqual(data['summary']['week_earned'], '350000.00')
+        # To'liq hafta olti kun bo'lardi.
+        self.assertEqual(data['summary']['week_wage'], '2100000.00')
 
-        data = self.client.get('/api/v1/payroll/').data
-        methods = {row['method']: row for row in data['summary']['by_method']}
-        self.assertEqual(methods['cash']['amount'], '3000000.00')
-        self.assertEqual(methods['card']['amount'], '5000000.00')
+    def test_the_marking_is_written_into_the_audit_log(self):
+        self.mark([(self.cashier, True), (self.cook, False)])
+        entry = AuditEvent.objects.filter(action='attendance.mark').first()
+        self.assertIsNotNone(entry)
+        self.assertIn('1 keldi', entry.description)
+        self.assertIn('1 kelmadi', entry.description)
 
-        # Umriy jamlanma bitta xodim uchun bitta qator bo'lishi kerak —
-        # Meta.ordering GROUP BY'ni bo'lib yuborsa, ikkita qator chiqardi.
-        lifetime = {row['name']: row for row in data['lifetime']}
-        self.assertEqual(lifetime['Kassir']['total'], '5500000.00')
-        self.assertEqual(lifetime['Kassir']['months'], 2)
-        self.assertEqual(lifetime['Admin']['total'], '5000000.00')
-        self.assertEqual(data['all_time'], {'total': '10500000.00', 'payments': 3})
-
-    def test_month_filter_and_trend_cover_the_history(self):
-        previous = (self.month - timedelta(days=1)).replace(day=1)
-        self.pay(self.cashier, Decimal('2500000'), period=previous)
-        data = self.client.get(f'/api/v1/payroll/?month={previous:%Y-%m}').data
-        self.assertEqual(data['month'], previous.strftime('%Y-%m'))
-        self.assertEqual(data['summary']['paid'], '2500000.00')
-        self.assertIn(previous.strftime('%Y-%m'), data['months'])
-
-        self.assertEqual(len(data['trend']), 12)
-        point = next(row for row in data['trend'] if row['period'] == previous.strftime('%Y-%m'))
-        self.assertEqual(point['total'], '2500000.00')
-        # To'lovsiz oylar nol bilan to'ldiriladi, grafikda bo'shliq qolmaydi.
-        self.assertEqual(sum(1 for row in data['trend'] if row['total'] == '0.00'), 11)
-
-    def test_overpaying_one_employee_does_not_hide_another_debt(self):
-        # Kassirga kelishilgandan ko'p, adminga umuman berilmadi.
-        self.pay(self.cashier, Decimal('6000000'))
-        data = self.client.get('/api/v1/payroll/').data
-        rows = {row['username']: row for row in data['employees']}
-        self.assertEqual(rows['cashier']['status'], 'paid')
-        self.assertEqual(rows['admin']['status'], 'unpaid')
-        # Qarz har xodim bo'yicha alohida: adminning 5 000 000 qarzi
-        # kassirga ortiqcha berilgan pul bilan yopilmaydi.
-        self.assertEqual(data['summary']['remaining'], '5000000.00')
-        self.assertEqual(data['summary']['paid'], '6000000.00')
-        # Ortiqcha to'lov manfiy farq bo'lib chiqmaydi.
-        self.assertEqual(rows['cashier']['difference'], '0.00')
-
-    def test_employee_without_an_agreed_salary_is_not_called_unpaid(self):
-        nobody = User.objects.create_user('yangi', password='test-only-long-password', role='kitchen', branch=self.branch, first_name='Yangi')
-        data = self.client.get('/api/v1/payroll/').data
-        rows = {row['username']: row for row in data['employees']}
-        # Oyligi kiritilmagan xodim «to'lanmagan» emas, «kelishilmagan».
-        self.assertEqual(rows['yangi']['status'], 'no_agreement')
-        self.assertEqual(rows['yangi']['difference'], '0.00')
-        # Qarzga ham, qamrovga ham kirmaydi.
-        self.assertEqual(data['summary']['remaining'], '8000000.00')
-        self.assertEqual(data['summary']['expected'], 2)
-        self.assertEqual(data['summary']['without_agreement'], 1)
-        self.assertEqual(nobody.salary, Decimal('0'))
-
-    def test_coverage_counts_how_many_agreed_staff_were_paid(self):
-        self.pay(self.cashier, Decimal('4500000'))
-        summary = self.client.get('/api/v1/payroll/').data['summary']
-        self.assertEqual(summary['expected'], 2)
-        self.assertEqual(summary['covered'], 1)
-
-    def test_other_branches_and_other_roles_stay_out(self):
-        stranger = User.objects.create_user('stranger', password='test-only-long-password', role='cashier', branch=self.other, salary=Decimal('7000000'))
-        self.assertNotIn('stranger', [row['username'] for row in self.client.get('/api/v1/payroll/').data['employees']])
-        self.assertEqual(stranger.branch, self.other)
-
-        for role in ('admin', 'cashier', 'kitchen'):
-            client = APIClient()
-            client.force_authenticate(User.objects.create_user(f'{role}-x', password='test-only-long-password', role=role, branch=self.branch))
-            self.assertEqual(client.get('/api/v1/payroll/').status_code, 403)
-
-    def test_future_and_broken_months_are_refused(self):
-        future = (self.month.replace(day=28) + timedelta(days=10)).replace(day=1)
+    def test_a_broken_month_filter_is_refused(self):
+        future = (self.today.replace(day=28) + timedelta(days=10)).replace(day=1)
         self.assertEqual(self.client.get(f'/api/v1/payroll/?month={future:%Y-%m}').status_code, 400)
         self.assertEqual(self.client.get('/api/v1/payroll/?month=2026-13').status_code, 400)
         self.assertEqual(self.client.get('/api/v1/payroll/?month=sentabr').status_code, 400)
-
-    def test_salary_payment_also_lands_in_expenses_exactly_once(self):
-        self.pay(self.cashier, Decimal('3000000'))
-        # Moliya hisobida oylik xarajatlar ichida turadi — ustiga qo'shilmasligi kerak.
-        expenses = Expense.objects.filter(branch=self.branch, category='Ish haqi')
-        self.assertEqual(expenses.count(), 1)
-        self.assertEqual(expenses.first().amount, Decimal('3000000'))
-        self.assertEqual(
-            self.client.get('/api/v1/payroll/').data['summary']['paid'],
-            str(expenses.first().amount),
-        )
 
 
 class StockUsageTests(TestCase):
@@ -1079,7 +1154,7 @@ class FinanceTests(TestCase):
     def setUp(self):
         self.branch = Branch.objects.create(name='One', slug='one')
         self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
-        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch, salary=Decimal('3000000'), first_name='Kassir')
+        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch, daily_wage=Decimal('120000'), first_name='Kassir')
         self.category = Category.objects.create(branch=self.branch, name='Taom')
         self.osh = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('50000'))
         self.choy = Dish.objects.create(branch=self.branch, category=self.category, name='Choy', price=Decimal('10000'))
@@ -1145,10 +1220,10 @@ class FinanceTests(TestCase):
 
     def test_salary_sits_inside_expenses_and_is_never_added_twice(self):
         self.sell(self.osh, 10)
-        self.client.post(f'/api/v1/staff/{self.cashier.id}/salary-payments/', {
-            'period': timezone.localdate().strftime('%Y-%m'), 'amount': '3000000',
+        self.assertEqual(self.client.post(f'/api/v1/staff/{self.cashier.id}/salary-payments/', {
+            'key': str(uuid4()), 'amount': '3000000',
             'payment_method': 'cash', 'paid_on': str(timezone.localdate()), 'note': '',
-        }, format='json')
+        }, format='json').status_code, 201)
 
         data = self.finance()
         # Oylik xarajatlar ichida — jami xarajat aynan oylikning o'zi.
@@ -1211,10 +1286,10 @@ class FinanceTests(TestCase):
     def test_manual_salary_row_never_counts_as_a_real_salary_payment(self):
         self.sell(self.osh, 10)
         # Haqiqiy oylik to'lovi: bog'langan Expense yaratadi.
-        self.client.post(f'/api/v1/staff/{self.cashier.id}/salary-payments/', {
-            'period': timezone.localdate().strftime('%Y-%m'), 'amount': '3000000',
+        self.assertEqual(self.client.post(f'/api/v1/staff/{self.cashier.id}/salary-payments/', {
+            'key': str(uuid4()), 'amount': '3000000',
             'payment_method': 'cash', 'paid_on': str(timezone.localdate()), 'note': '',
-        }, format='json')
+        }, format='json').status_code, 201)
         # Qo'lda «Ish haqi» deb yozilgan xarajat: kategoriya erkin matn bo'lgani uchun
         # eski usul buni ham oylik deb sanardi.
         self.client.post('/api/v1/expenses/', {
@@ -2746,8 +2821,13 @@ class WholeDayConsistencyTests(TestCase):
 
         # ── 1b. «Sof pul oqimi» ikkala sahifada bir xil formulada ────────
         # Ikkala kartaning nomi ham bir xil, demak raqami ham bir xil bo'lishi
-        # shart: kirim − to'langan xarajat − ombor xaridi (800 000).
-        self.assertEqual(Decimal(dashboard['net_cash']), expected_revenue - Decimal('800000'))
+        # shart: kirim − to'langan xarajat − ombor xaridi (800 000) − Uzum
+        # ushlab qolgan ulush (24 000 ning 30% i = 7 200). Ushlangan pul hech
+        # qachon hisobga tushmaydi, shuning uchun pul oqimida ham yo'q.
+        platform_cut = Decimal('7200')
+        self.assertEqual(Decimal(finance['profit']['platform_fee']), platform_cut)
+        self.assertEqual(
+            Decimal(dashboard['net_cash']), expected_revenue - Decimal('800000') - platform_cut)
         self.assertEqual(Decimal(finance['cash']['net']), Decimal(dashboard['net_cash']))
 
         # ── 2. Kanal kesimi jamiga teng bo'lishi shart ────────────────────
@@ -3432,3 +3512,129 @@ class StockHistoryIsForTheOwnerTests(TestCase):
             'oshxona', password='test-only-long-password', role='kitchen', branch=self.branch))
         self.assertEqual(kitchen.get('/api/v1/stock/').status_code, 403)
         self.assertEqual(self.receipt(kitchen).status_code, 403)
+
+
+class PlatformCommissionTests(TestCase):
+    """Uzum va Yandex savdo summasining bir qismini o'zida ushlab qoladi.
+
+    Mijoz to'lagan summa o'zgarmaydi — tushum to'liq yoziladi — lekin
+    hisobimizga faqat qolgani tushadi. Shuning uchun ushlanma foyda
+    zanjirida alohida qator bo'lib ayriladi, kun yakunida esa kassir
+    platformadan qancha kutishini ko'rib turadi.
+    """
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.category = Category.objects.create(branch=self.branch, name='Taom')
+        self.dish = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('50000'))
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+        prepare(self.cashier, *Dish.objects.filter(branch=self.branch))
+
+    def sell(self, channel, method, quantity=2):
+        return create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': method,
+            'channel': channel,
+            'lines': [{'dish': self.dish.id, 'quantity': quantity, 'note': ''}],
+        })
+
+    def set_share(self, channel, commission):
+        return self.client.put(
+            '/api/v1/channel-fees/', {'channel': channel, 'commission': commission}, format='json')
+
+    def test_a_delivery_sale_freezes_the_platform_share(self):
+        self.assertEqual(self.sell('uzum', 'uzum').channel_commission, Decimal('30'))
+        self.assertEqual(self.sell('yandex', 'yandex').channel_commission, Decimal('30'))
+
+    def test_hall_and_takeaway_keep_every_som(self):
+        self.assertEqual(self.sell('hall', 'cash').channel_commission, Decimal('0'))
+        self.assertEqual(self.sell('takeaway', 'cash').channel_commission, Decimal('0'))
+
+    def test_the_owner_sets_the_share_and_the_next_sale_follows_it(self):
+        self.assertEqual(self.set_share('uzum', '25').status_code, 200)
+        self.assertEqual(self.sell('uzum', 'uzum').channel_commission, Decimal('25'))
+        # Har platformaning o'z shartnomasi bor: Yandex tegilmaydi.
+        self.assertEqual(self.sell('yandex', 'yandex').channel_commission, Decimal('30'))
+
+    def test_changing_the_share_never_rewrites_a_past_sale(self):
+        older = self.sell('uzum', 'uzum')        # 30% bilan sotilgan
+        self.set_share('uzum', '10')
+        newer = self.sell('uzum', 'uzum')        # endi 10%
+        older.refresh_from_db()
+        self.assertEqual(older.channel_commission, Decimal('30'))
+        self.assertEqual(newer.channel_commission, Decimal('10'))
+        # Hisobot ikkalasini o'z foizi bilan sanaydi: 30 000 + 10 000.
+        data = self.client.get('/api/v1/finance/').data
+        self.assertEqual(data['profit']['platform_fee'], '40000.00')
+
+    def test_finance_keeps_the_revenue_whole_and_subtracts_the_share(self):
+        self.sell('hall', 'cash')     # 100 000 — hech kim hech narsa ushlamaydi
+        self.sell('uzum', 'uzum')     # 100 000 — 30 000 platformada qoladi
+        data = self.client.get('/api/v1/finance/').data
+        # Tushum mijoz to'lagan summa bo'lib qoladi.
+        self.assertEqual(data['profit']['revenue'], '200000.00')
+        self.assertEqual(data['profit']['platform_fee'], '30000.00')
+        self.assertEqual(data['profit']['net_profit'], '170000.00')
+        rows = {row['channel']: row for row in data['channels']}
+        self.assertEqual(rows['uzum']['revenue'], '100000.00')
+        self.assertEqual(rows['uzum']['fee'], '30000.00')
+        self.assertEqual(rows['uzum']['net'], '70000.00')
+        self.assertEqual(rows['hall']['fee'], '0.00')
+        self.assertEqual(rows['hall']['net'], '100000.00')
+        # Pul oqimi ham kamayadi: ushlangan pul hech qachon qo'lga tegmaydi.
+        self.assertEqual(data['cash']['platform_fee'], '30000.00')
+        self.assertEqual(data['cash']['net'], '170000.00')
+
+    def test_the_monthly_trend_agrees_with_the_headline(self):
+        self.sell('uzum', 'uzum')
+        data = self.client.get('/api/v1/finance/').data
+        current = next(row for row in data['trend'] if row['period'] == data['filters']['month'])
+        self.assertEqual(current['platform_fee'], '30000.00')
+        self.assertEqual(current['net_profit'], data['profit']['net_profit'])
+
+    def test_the_shift_close_shows_what_the_platform_will_transfer(self):
+        self.sell('hall', 'cash')
+        self.sell('uzum', 'uzum')
+        cashier = APIClient()
+        cashier.force_authenticate(self.cashier)
+        rows = {row['method']: row for row in cashier.get('/api/v1/shift/').data['breakdown']}
+        self.assertEqual(rows['uzum']['amount'], '100000.00')
+        self.assertEqual(rows['uzum']['fee'], '30000.00')
+        self.assertEqual(rows['uzum']['net'], '70000.00')
+        # Naqd pulni hech kim ushlamaydi.
+        self.assertEqual(rows['cash']['fee'], '0.00')
+        self.assertEqual(rows['cash']['net'], '100000.00')
+
+    def test_the_frozen_figures_survive_the_day_being_closed(self):
+        self.sell('uzum', 'uzum')
+        cashier = APIClient()
+        cashier.force_authenticate(self.cashier)
+        closed = cashier.post('/api/v1/shift/', {'counted_cash': '0', 'note': ''}, format='json')
+        self.assertEqual(closed.status_code, 201)
+        rows = {row['method']: row for row in closed.data['breakdown']}
+        self.assertEqual(rows['uzum']['net'], '70000.00')
+
+    def test_only_the_superadmin_may_change_the_share(self):
+        cashier = APIClient()
+        cashier.force_authenticate(self.cashier)
+        self.assertEqual(cashier.get('/api/v1/channel-fees/').status_code, 403)
+        self.assertEqual(
+            cashier.put('/api/v1/channel-fees/', {'channel': 'uzum', 'commission': '0'}, format='json').status_code,
+            403,
+        )
+
+    def test_the_share_must_stay_between_zero_and_a_hundred(self):
+        self.assertEqual(self.set_share('uzum', '-1').status_code, 400)
+        self.assertEqual(self.set_share('uzum', '101').status_code, 400)
+        self.assertEqual(self.set_share('uzum', '0').status_code, 200)
+        # Zal kanali uchun ushlanma tushunchasi yo'q.
+        self.assertEqual(self.set_share('hall', '10').status_code, 400)
+
+    def test_the_change_is_written_into_the_audit_log(self):
+        self.set_share('yandex', '35')
+        entry = AuditEvent.objects.filter(action='channel.fee').first()
+        self.assertIsNotNone(entry)
+        self.assertIn('30', entry.description)
+        self.assertIn('35', entry.description)

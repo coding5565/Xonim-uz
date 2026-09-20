@@ -31,7 +31,7 @@ from .models import (
     StockMovement,
     Table,
 )
-from .money import money, parse_month
+from .money import money, parse_month, platform_fee
 from .printing import PrinterError, print_receipt
 from .reports import (
     ReportFilters,
@@ -424,7 +424,11 @@ class DashboardView(APIView):
         purchases = StockMovement.objects.filter(
             branch=branch, kind='receipt', date__gte=start, date__lte=end,
         ).aggregate(total=Sum('cost_total'))['total'] or Decimal('0')
-        cash_out = settled + purchases
+        # Yetkazib berish platformasi ushlab qolgan ulush hech qachon hisobga
+        # tushmaydi, shuning uchun u ham pul oqimidan ayriladi — Moliya
+        # sahifasidagi «Sof pul oqimi» bilan bir xil formula.
+        platform_cut = paid.aggregate(total=platform_fee())['total']
+        cash_out = settled + purchases + platform_cut
         previous = amount(orders.filter(status='paid', paid_at__date__gte=previous_start, paid_at__date__lte=previous_end), 'total')
         # One grouped query per series instead of two aggregates per day. order_by() drops the
         # model's default ordering, which Django would otherwise add to GROUP BY and split the totals.
@@ -441,7 +445,7 @@ class DashboardView(APIView):
         while cursor <= end:
             trend.append({'date': cursor, 'revenue': money(revenue_by_day.get(cursor)), 'expenses': money(expenses_by_day.get(cursor))})
             cursor += timedelta(days=1)
-        return Response({'revenue': money(revenue), 'expenses': money(spending), 'net_cash': money(revenue - cash_out), 'cost': money(recipe_cost), 'gross_profit': money(revenue - recipe_cost), 'gross_margin': money((revenue - recipe_cost) / revenue * 100 if revenue else Decimal('0')), 'paid_count': paid.count(), 'open_count': orders.filter(status='open').count(), 'previous_revenue': money(previous), 'by_method': by_method, 'low_stock': Ingredient.objects.filter(branch=branch, quantity__lte=F('minimum')).count(), 'trend': trend, 'period': {'kind': 'month' if request.query_params.get('month') else 'days', 'start': start, 'end': end}, 'months': dashboard_months(branch, today), 'expense_categories': list(expenses.values('category').annotate(total=Sum('amount')).order_by('-total')), 'recent_orders': OrderSerializer(period_orders.select_related('cashier').prefetch_related('lines')[:5], many=True).data, 'as_of': timezone.now(), 'basis': 'Yalpi foyda: tushumdan sotuv paytidagi retsept tannarxi ayirilgan qiymat. Oylik, ijara va boshqa xarajatlar bu ko‘rsatkichdan alohida.'})
+        return Response({'revenue': money(revenue), 'expenses': money(spending), 'net_cash': money(revenue - cash_out), 'platform_fee': money(platform_cut), 'cost': money(recipe_cost), 'gross_profit': money(revenue - recipe_cost), 'gross_margin': money((revenue - recipe_cost) / revenue * 100 if revenue else Decimal('0')), 'paid_count': paid.count(), 'open_count': orders.filter(status='open').count(), 'previous_revenue': money(previous), 'by_method': by_method, 'low_stock': Ingredient.objects.filter(branch=branch, quantity__lte=F('minimum')).count(), 'trend': trend, 'period': {'kind': 'month' if request.query_params.get('month') else 'days', 'start': start, 'end': end}, 'months': dashboard_months(branch, today), 'expense_categories': list(expenses.values('category').annotate(total=Sum('amount')).order_by('-total')), 'recent_orders': OrderSerializer(period_orders.select_related('cashier').prefetch_related('lines')[:5], many=True).data, 'as_of': timezone.now(), 'basis': 'Yalpi foyda: tushumdan sotuv paytidagi retsept tannarxi ayirilgan qiymat. Oylik, ijara va boshqa xarajatlar bu ko‘rsatkichdan alohida.'})
 
 
 class SalesSummaryView(APIView):
