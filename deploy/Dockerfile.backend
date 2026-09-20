@@ -23,7 +23,11 @@ RUN pip install -r requirements.lock -r requirements-deploy.txt
 
 COPY xonim_backend/ /app/
 COPY deploy/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+# CR belgilarini olib tashlaymiz. `.gitattributes` buni manbada ham
+# kafolatlaydi, lekin Windows'dagi nusxadan to'g'ridan-to'g'ri yig'ilsa
+# fayl baribir CRLF bilan kelishi mumkin — u holda yadro `/bin/sh\r`
+# nomli interpretatorni qidirib, konteyner ko'tarilmaydi.
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh && chmod +x /usr/local/bin/entrypoint.sh
 
 # Ildiz huquqi bilan ishlamaydi: konteynerdan chiqib ketilsa ham zarar
 # cheklangan bo'ladi. Statik va media papkalari shu foydalanuvchiniki.
