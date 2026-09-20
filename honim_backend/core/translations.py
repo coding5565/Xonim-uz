@@ -8,6 +8,8 @@ RU = {
     'Bir taomni faqat bir marta kiriting.': 'Вносите каждое блюдо только один раз.',
     'Bir martada ko‘pi bilan 100 ta taom.': 'За раз не более 100 блюд.',
     'Ayrim taomlar topilmadi.': 'Некоторые блюда не найдены.',
+    'Ombor harakatlari tarixi faqat superadminga ochiq.':
+        'История движений по складу доступна только суперадмину.',
     '{name} — bugun tayyorlanmagan': '{name} — сегодня не приготовлено',
     '{name} — {count} ta qoldi': '{name} — осталось {count}',
     'Bu taomlar tayyor emas: {dishes}. «Tayyor taomlar» bo‘limida bugun nechta tayyorlanganini kiriting.':
@@ -142,6 +144,8 @@ EN = {
     'Bir taomni faqat bir marta kiriting.': 'Enter each dish only once.',
     'Bir martada ko‘pi bilan 100 ta taom.': '100 dishes at most in one go.',
     'Ayrim taomlar topilmadi.': 'Some dishes were not found.',
+    'Ombor harakatlari tarixi faqat superadminga ochiq.':
+        'The stock movement history is for the superadmin only.',
     '{name} — bugun tayyorlanmagan': '{name} — not cooked today',
     '{name} — {count} ta qoldi': '{name} — {count} left',
     'Bu taomlar tayyor emas: {dishes}. «Tayyor taomlar» bo‘limida bugun nechta tayyorlanganini kiriting.':

@@ -7,6 +7,7 @@ from django.db.models.functions import TruncDate
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import mixins, serializers, viewsets
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -340,9 +341,20 @@ class RecipeViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.Retri
 
 
 class StockView(APIView):
+    """Ombor harakatlari: kirim kassir tomonidan yoziladi, tarix esa egaga.
+
+    Kassir kirim va chiqim kiritadi — bu uning kundalik ishi. Lekin harakatlar
+    TARIXI egasining nazorat vositasi: u yerdan qaysi taomga qancha masalliq
+    ketgani, retsept bo'yicha sarf va qo'lda yozilgan farq ko'rinadi. Shuning
+    uchun ro'yxat faqat egaga ochiq — ekrандan yashirish yetarli emas, so'rov
+    ham rad etilishi kerak.
+    """
+
     permission_classes = [SalesOnly]
 
     def get(self, request):
+        if request.user.role != 'owner':
+            raise PermissionDenied(_('Ombor harakatlari tarixi faqat superadminga ochiq.'))
         return Response(MovementSerializer(StockMovement.objects.filter(branch=request.user.branch).select_related('ingredient')[:100], many=True).data)
 
     def post(self, request):

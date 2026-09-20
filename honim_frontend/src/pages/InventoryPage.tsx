@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ArrowDownToLine, ClipboardList, Coins, Package, Plus } from 'lucide-react'
+import { ArrowDownToLine, ClipboardList, Coins, Minus, Package, Plus } from 'lucide-react'
 import { api, list, money, today } from '../api'
 import { useI18n } from '../i18n'
 import { useSession } from '../session'
@@ -74,16 +74,14 @@ export default function InventoryPage() {
 
   const load = useCallback(async () => {
     try {
-      const [loadedIngredients, loadedMovements] = await Promise.all([
-        list<Ingredient>('ingredients/'),
-        api<Movement[]>('stock/'),
-      ])
-      setIngredients(loadedIngredients)
-      setMovements(loadedMovements)
+      setIngredients(await list<Ingredient>('ingredients/'))
+      // Harakatlar tarixi egasining nazorat vositasi: kassirga ko'rinmaydi
+      // va so'ralmaydi ham — server uni baribir rad etadi.
+      if (owner) setMovements(await api<Movement[]>('stock/'))
     } catch (exception) {
       setError((exception as Error).message)
     }
-  }, [])
+  }, [owner])
 
   useEffect(() => {
     load()
@@ -97,13 +95,14 @@ export default function InventoryPage() {
     ? Number(form.cost_total) / Number(form.quantity)
     : 0
 
-  function start(kind: Modal) {
+  function start(kind: Modal, ingredient?: number) {
     setFormError('')
     setModal(kind)
     if (pending) return
     setKey(crypto.randomUUID())
     setForm({
-      ingredient: ingredients[0]?.id || 0,
+      // Qatordan bosilgan bo'lsa o'sha mahsulot tanlangan holda ochiladi.
+      ingredient: ingredient || ingredients[0]?.id || 0,
       quantity: '',
       cost_total: '',
       note: kind === 'consumption' ? t('Kunlik haqiqiy sarf') : '',
@@ -204,7 +203,7 @@ export default function InventoryPage() {
         </header>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>{t('MAHSULOT')}</th><th>{t('QOLDIQ')}</th><th>{t('TANNARX')}</th><th>{t('QOLDIQ QIYMATI')}</th><th>{t('MINIMAL ME’YOR')}</th><th>{t('HOLAT')}</th></tr></thead>
+            <thead><tr><th>{t('MAHSULOT')}</th><th>{t('QOLDIQ')}</th><th>{t('TANNARX')}</th><th>{t('QOLDIQ QIYMATI')}</th><th>{t('MINIMAL ME’YOR')}</th><th>{t('HOLAT')}</th><th>{t('AMALLAR')}</th></tr></thead>
             <tbody>
               {ingredients.map(row => {
                 const isLow = Number(row.quantity) <= Number(row.minimum)
@@ -228,6 +227,26 @@ export default function InventoryPage() {
                         {owing ? t('Hisobdan oshgan') : isLow ? t('Kam qolgan') : t('Yetarli')}
                       </span>
                     </td>
+                    <td>
+                      {/* Qatorning o'zidan kiritish: mahsulot allaqachon
+                          tanlangan bo'ladi, ro'yxatdan qidirish shart emas. */}
+                      <div className="row-buttons">
+                        <button
+                          className="table-action receipt"
+                          title={t('{name} uchun kirim', { name: row.name })}
+                          onClick={() => start('receipt', row.id)}
+                        >
+                          <ArrowDownToLine size={14} />{t('Kirim')}
+                        </button>
+                        <button
+                          className="table-action"
+                          title={t('{name} uchun sarf', { name: row.name })}
+                          onClick={() => start('consumption', row.id)}
+                        >
+                          <Minus size={14} />{t('Sarf')}
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 )
               })}
@@ -236,6 +255,7 @@ export default function InventoryPage() {
           {!ingredients.length && <div className="empty-state">{t('Xomashyo ro‘yxatiga mahsulot qo‘shing.')}</div>}
         </div>
       </section>
+      {owner && (
       <section className="panel spaced">
         <header className="panel-heading">
           <div><h2>{t('Ombor harakatlari')}</h2><p>{t('So‘nggi 100 ta kirim, sarf va sotuv bo‘yicha yozuv')}</p></div>
@@ -265,6 +285,7 @@ export default function InventoryPage() {
           )}
         </div>
       </section>
+      )}
       <p className="data-note">
         {t('Retsept, batch tannarxi va foyda «Retsept va foyda» bo‘limida. Sotuvdan oldin xomashyo qoldig‘ini Kirim orqali kiriting.')}
       </p>

@@ -1073,6 +1073,8 @@ export const ru: Record<string, string> = {
   '{name} olib tashlansinmi? Savdo tarixi saqlanadi.': '{name} убрать? История продаж сохранится.',
   '{name} olib tashlash': 'Убрать {name}',
   '{name} tahrirlash': 'Редактировать {name}',
+  '{name} uchun kirim': 'Приход: {name}',
+  '{name} uchun sarf': 'Расход: {name}',
   '{name} uchun tayyorlangan miqdor': 'Приготовленное количество для «{name}»',
   '{name} · oylik to‘lovi': '{name} · выплата зарплаты',
   '{name} · to‘lovlar tarixi': '{name} · история выплат',

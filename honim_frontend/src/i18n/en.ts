@@ -1073,6 +1073,8 @@ export const en: Record<string, string> = {
   '{name} olib tashlansinmi? Savdo tarixi saqlanadi.': 'Remove {name}? The sales history is kept.',
   '{name} olib tashlash': 'Remove {name}',
   '{name} tahrirlash': 'Edit {name}',
+  '{name} uchun kirim': 'Receipt for {name}',
+  '{name} uchun sarf': 'Write off {name}',
   '{name} uchun tayyorlangan miqdor': 'Portions cooked for {name}',
   '{name} · oylik to‘lovi': '{name} · salary payment',
   '{name} · to‘lovlar tarixi': '{name} · payment history',

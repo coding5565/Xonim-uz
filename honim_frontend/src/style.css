@@ -1158,3 +1158,14 @@ body.sheet-open{overflow:hidden}
   .counter-total small{display:none}
   .counter-note{grid-column:auto;font-size:11px}
 }
+
+/* Ombor jadvalidagi qator tugmalari: kirim va sarf o'sha qatordan kiritiladi,
+   shuning uchun mahsulotni ro'yxatdan qidirish shart emas. */
+.row-buttons{display:flex;gap:6px}
+.row-buttons .table-action{white-space:nowrap}
+.table-action.receipt{border-color:var(--green-200);color:var(--green-800);background:var(--green-50)}
+.table-action.receipt:hover{background:var(--green-100)}
+.theme-dark .table-action.receipt{background:var(--green-100);border-color:var(--green-200);color:#a9dcc0}
+@media(max-width:800px){
+  .row-buttons{flex-direction:column;gap:4px}
+}

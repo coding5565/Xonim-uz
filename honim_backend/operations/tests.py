@@ -96,7 +96,6 @@ class WorkflowTests(TestCase):
         # Kundalik ish — kassirda: xarajat, ombor, kunlik sarf, stollar.
         self.assertEqual(self.client.get('/api/v1/expenses/').status_code, 200)
         self.assertEqual(self.client.get('/api/v1/ingredients/').status_code, 200)
-        self.assertEqual(self.client.get('/api/v1/stock/').status_code, 200)
         self.assertEqual(self.client.get('/api/v1/daily-usage/').status_code, 200)
         self.assertEqual(self.client.post('/api/v1/tables/', {'number': 77}, format='json').status_code, 201)
         # Qoida va nazorat — superadminda.
@@ -106,6 +105,9 @@ class WorkflowTests(TestCase):
         self.assertEqual(self.client.get('/api/v1/finance/').status_code, 403)
         self.assertEqual(self.client.get('/api/v1/staff/').status_code, 403)
         self.assertEqual(self.client.get('/api/v1/shift/history/').status_code, 403)
+        # Ombor harakatlari tarixi ham nazorat vositasi: kassir kirim yozadi,
+        # lekin qaysi taomga qancha ketganini ko'rmaydi.
+        self.assertEqual(self.client.get('/api/v1/stock/').status_code, 403)
         self.assertEqual(self.client.get('/api/v1/daily-usage/compare/').status_code, 403)
 
     def test_only_owner_creates_staff_and_password_is_never_returned(self):
@@ -3372,3 +3374,61 @@ class RecipeIsAnEstimateNotALawTests(TestCase):
         meat = next(row for row in rows if row['name'] == 'Go‘sht')
         # Manfiy qoldiq API orqali ham ko'rinadi — yashirilmaydi.
         self.assertEqual(Decimal(meat['quantity']), Decimal('-0.500'))
+
+
+class StockHistoryIsForTheOwnerTests(TestCase):
+    """Ombor harakatlari tarixi — egasining nazorat vositasi.
+
+    Kassir kirim va chiqim kiritadi, bu uning kundalik ishi. Lekin tarixdan
+    qaysi taomga qancha masalliq ketgani va retsept bilan haqiqiy sarf
+    orasidagi farq ko'rinadi — bu egasining ko'zi. Ekrandan yashirish yetarli
+    emas: so'rov ham rad etilishi kerak, aks holda manzilni qo'lda yozgan
+    kassir baribir ko'radi.
+    """
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.flour = Ingredient.objects.create(
+            branch=self.branch, name='Un', unit='kg', quantity=Decimal('0'), unit_cost=Decimal('0'))
+        self.client = APIClient()
+
+    def receipt(self, client):
+        return client.post('/api/v1/stock/', {
+            'key': str(uuid4()), 'ingredient': self.flour.id, 'kind': 'receipt',
+            'quantity': '10', 'cost_total': '60000',
+            'date': str(timezone.localdate()), 'note': 'Bozordan',
+        }, format='json')
+
+    def test_the_cashier_can_still_record_stock(self):
+        # Kirim kiritish kassirning kundalik ishi — u to'xtatilmaydi.
+        self.client.force_authenticate(self.cashier)
+        self.assertEqual(self.receipt(self.client).status_code, 201)
+        self.flour.refresh_from_db()
+        self.assertEqual(self.flour.quantity, Decimal('10.000000'))
+
+    def test_the_cashier_cannot_read_the_movement_history(self):
+        self.client.force_authenticate(self.cashier)
+        self.receipt(self.client)
+        response = self.client.get('/api/v1/stock/')
+        self.assertEqual(response.status_code, 403)
+        self.assertIn('superadmin', str(response.data).lower())
+
+    def test_the_owner_sees_the_whole_history(self):
+        cashier = APIClient()
+        cashier.force_authenticate(self.cashier)
+        self.receipt(cashier)
+
+        self.client.force_authenticate(self.owner)
+        response = self.client.get('/api/v1/stock/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]['ingredient_name'], 'Un')
+
+    def test_the_kitchen_reaches_neither(self):
+        kitchen = APIClient()
+        kitchen.force_authenticate(User.objects.create_user(
+            'oshxona', password='test-only-long-password', role='kitchen', branch=self.branch))
+        self.assertEqual(kitchen.get('/api/v1/stock/').status_code, 403)
+        self.assertEqual(self.receipt(kitchen).status_code, 403)
