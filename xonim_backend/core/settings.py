@@ -64,19 +64,31 @@ PASSWORD_HASHERS = ['django.contrib.auth.hashers.Argon2PasswordHasher', 'django.
 AUTH_PASSWORD_VALIDATORS = [{'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', 'OPTIONS': {'min_length': 12}}, {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'}, {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'}]
 REST_FRAMEWORK = {'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.SessionAuthentication'], 'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'], 'DEFAULT_THROTTLE_CLASSES': ['rest_framework.throttling.UserRateThrottle', 'rest_framework.throttling.AnonRateThrottle'], 'DEFAULT_THROTTLE_RATES': {'user': '600/min', 'anon': '100/min', 'login': '10/min', 'assistant': '20/min'}, 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination', 'PAGE_SIZE': 100, 'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer']}
 CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', 'http://127.0.0.1:5173,http://localhost:5173').split(',')
+# HTTPS himoyasi DEBUG dan ALOHIDA boshqariladi.
+#
+# Ilgari ular bitta bayroqqa bog'langan edi: DEBUG o'chsa, cookie'lar
+# «secure» bo'lib qolardi va oddiy HTTP orqali umuman yuborilmasdi — ya'ni
+# sertifikatsiz serverga qo'yilgan tizimga hech kim kira olmasdi, sabab esa
+# hech qayerda ko'rinmasdi. Endi bu alohida sozlama: sukut bo'yicha YOQIQ,
+# va uni faqat ataylab, vaqtincha o'chirish mumkin.
+HTTPS = os.environ.get('DJANGO_HTTPS', '0' if DEBUG else '1') == '1'
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_AGE = 43200
-SESSION_COOKIE_SECURE = not DEBUG
-CSRF_COOKIE_SECURE = not DEBUG
-SECURE_SSL_REDIRECT = not DEBUG
-SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
+SESSION_COOKIE_SECURE = HTTPS
+CSRF_COOKIE_SECURE = HTTPS
+SECURE_SSL_REDIRECT = HTTPS
+SECURE_HSTS_SECONDS = 31536000 if HTTPS else 0
 # HSTS butun domenga tarqaladi. Tizim bitta domenda ishlaydi va hammasi
 # HTTPS orqali beriladi, shuning uchun subdomenlarni ham qamrab olamiz.
 # `PRELOAD` faqat sarlavhaga belgi qo'yadi — domen brauzer ro'yxatiga
 # o'z-o'zidan tushmaydi, buning uchun uni alohida yuborish kerak.
-SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
-SECURE_HSTS_PRELOAD = not DEBUG
+SECURE_HSTS_INCLUDE_SUBDOMAINS = HTTPS
+SECURE_HSTS_PRELOAD = HTTPS
+# Teskari proksi (Traefik/nginx) orqasida turganda Django so'rovni HTTP deb
+# ko'radi. Busiz `SECURE_SSL_REDIRECT` cheksiz qayta yo'naltirish hosil
+# qiladi: Django HTTPS ga yuboradi, proksi esa ichkariga yana HTTP beradi.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
 DATA_UPLOAD_MAX_MEMORY_SIZE = 6 * 1024 * 1024
@@ -101,6 +113,12 @@ USE_I18N = True
 # oddiy lug'at, shuning uchun .mo kompilyatsiya qilish shart emas.
 LANGUAGES = [('uz', 'O‘zbekcha'), ('ru', 'Русский'), ('en', 'English')]
 STATIC_URL = '/static/'
+# `collectstatic` shu papkaga yig'adi, nginx esa shu yerdan beradi.
+# Ilgari u umuman yo'q edi va serverga qo'yishda birinchi qadam xato bilan
+# to'xtardi.
+STATIC_ROOT = Path(os.environ.get('DJANGO_STATIC_ROOT', BASE_DIR / 'staticfiles'))
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+# Taom rasmlari shu yerda yotadi. Serverda bu alohida disk hajmi bo'ladi,
+# aks holda konteyner qayta qurilganda rasmlar yo'qolardi.
+MEDIA_ROOT = Path(os.environ.get('DJANGO_MEDIA_ROOT', BASE_DIR / 'media'))
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

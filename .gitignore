@@ -17,3 +17,5 @@ scan-raw.txt
 scan-str.txt
 # Baza zaxiralari: hajmi katta va ichida mijoz ma'lumotlari bor.
 backups/
+# `collectstatic` natijasi: har yig'ishda qayta hosil bo'ladi.
+staticfiles/

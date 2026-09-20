@@ -1,0 +1,89 @@
+# Xonim CRM — bitta loyiha sifatida umumiy serverda.
+#
+# Tuzilishi ~/apps/README.md dagi qoidaga amal qiladi: Traefik faqat
+# `web` tarmog'idagi konteynerni ko'radi, baza esa tashqariga umuman
+# chiqmaydi (`internal` tarmoq).
+#
+#   Traefik ──HTTPS──> web (nginx)  ──/api──> app (gunicorn) ──> db (Postgres)
+#                        └── SPA, /media, /static
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: ${PROJECT}_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Zaxira nusxa va solishtirishlar bir xil bo'lishi uchun.
+      TZ: Asia/Tashkent
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      # Ilova baza tayyor bo'lguncha kutadi: aks holda birinchi migratsiya
+      # «connection refused» bilan yiqilardi.
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - internal
+
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.backend
+    image: ${PROJECT}_app
+    container_name: ${PROJECT}_app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DJANGO_STATIC_ROOT: /var/lib/xonim/static
+      DJANGO_MEDIA_ROOT: /var/lib/xonim/media
+      POSTGRES_HOST: db
+      POSTGRES_PORT: '5432'
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - static_files:/var/lib/xonim/static
+      - media_files:/var/lib/xonim/media
+    # Tashqi tarmoqda emas: unga faqat nginx murojaat qiladi.
+    networks:
+      - internal
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+    image: ${PROJECT}_web
+    container_name: ${PROJECT}_web
+    restart: unless-stopped
+    depends_on:
+      - app
+    volumes:
+      # Faqat o'qish uchun: nginx bu fayllarni bermaydi, yozmaydi.
+      - static_files:/var/lib/xonim/static:ro
+      - media_files:/var/lib/xonim/media:ro
+    networks:
+      - web
+      - internal
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=web
+      - traefik.http.routers.${PROJECT}.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.${PROJECT}.entrypoints=websecure
+      - traefik.http.routers.${PROJECT}.tls=true
+      - traefik.http.routers.${PROJECT}.tls.certresolver=le
+      - traefik.http.services.${PROJECT}.loadbalancer.server.port=80
+
+volumes:
+  db_data:
+  static_files:
+  media_files:
+
+networks:
+  web:
+    external: true
+  internal:
+    internal: true
