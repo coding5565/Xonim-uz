@@ -14,6 +14,9 @@ const ZONES: { key: TableZone; title: string }[] = [
   { key: 'hall_right', title: 'O‘ng tomon · stulli' },
 ]
 
+/** Yetkazib berish platformalari — kanal ham, to'lov turi ham shu nom bilan. */
+const DELIVERY_METHODS = ['uzum', 'yandex']
+
 /** Stol bilan bog'liq bo'lmagan savdo joylari. Har biri alohida kiriladi va
  *  alohida hisoblanadi: kanal marshrutda yozilgani uchun kassir uni tanlashni
  *  unuta olmaydi. */
@@ -221,7 +224,11 @@ export default function TablesPage() {
   const outside = zoneTables('outside')
   const busyCount = tables.filter(item => item.open_order).length
   const openTotal = tables.reduce((sum, item) => sum + Number(item.open_order?.total || 0), 0)
-  const methods = user?.payment_methods || []
+  // Stol hisobi doim zal savdosi. Uzum va Yandex alohida kanal bo'lib, o'z
+  // kirish joyidan kiritiladi va puli platforma hisobiga tushadi — zaldagi
+  // mehmon ular bilan to'lay olmaydi, shuning uchun ro'yxatda turmaydi.
+  const methods = (user?.payment_methods || [])
+    .filter(item => !DELIVERY_METHODS.includes(item.method))
 
   return (
     <>
@@ -364,7 +371,7 @@ export default function TablesPage() {
                   disabled={busy}
                   onClick={() => pay(item.method)}
                 >
-                  {item.label}
+                  {t(item.label)}
                 </button>
               ))}
             </div>
