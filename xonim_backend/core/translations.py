@@ -137,6 +137,84 @@ RU = {
     'Rasm o‘lchami juda katta.': 'Размер изображения слишком велик.',
     'Savol kamida 2 belgidan iborat bo‘lsin.': 'Вопрос должен содержать хотя бы 2 символа.',
     'Taom tanlangan kategoriyaga tegishli emas.': 'Блюдо не относится к выбранной категории.',
+    # Davomat va ish haqi bo'limi: bu xabarlar tarjimasiz qolib ketgan edi.
+    'Bir martada ko‘pi bilan 50 ta xodim.': 'За раз не более 50 сотрудников.',
+    'Bir xodim ro‘yxatda ikki marta.': 'Один сотрудник в списке дважды.',
+    'Faqat oxirgi {days} kunni belgilash mumkin.': 'Отметить можно только последние {days} дней.',
+    'Kelajakdagi hafta uchun davomat yuritilmaydi.': 'Посещаемость за будущую неделю не ведётся.',
+    'Kelajakdagi kun uchun davomat belgilanmaydi.': 'Посещаемость за будущий день не отмечается.',
+    'Yakshanba — dam olish kuni, unga haq hisoblanmaydi.':
+        'Воскресенье — выходной, оплата за него не начисляется.',
+    'Superadmin ish haqi bu bo‘limda yuritilmaydi.':
+        'Зарплата суперадмина в этом разделе не ведётся.',
+    'Saqlandi. Yangi foiz shu paytdan keyingi sotuvlarga qo‘llanadi.':
+        'Сохранено. Новый процент применяется к продажам с этого момента.',
+    # Ilgari umuman _() ga o'ralmagan, ya'ni har doim o'zbekcha chiqardi.
+    'Faqat oxirgi {days} kunni yopish mumkin.': 'Закрыть можно только последние {days} дней.',
+    'Faqat oxirgi {days} kun uchun kiritish mumkin.': 'Вносить можно только за последние {days} дней.',
+    '{name}: dona butun son bo‘lishi kerak.': '{name}: штуки должны быть целым числом.',
+    'Bu hisob «{status}» holatida — o‘zgartirib bo‘lmaydi.':
+        'Счёт в статусе «{status}» — изменить нельзя.',
+    'Faqat to‘langan hisob qaytariladi. Bu hisob «{status}».':
+        'Возврат возможен только по оплаченному счёту. Этот счёт «{status}».',
+    'Buyurtma hozir “{state}” holatida. Sahifani yangilang.':
+        'Заказ сейчас в статусе «{state}». Обновите страницу.',
+    # Yangi tekshiruvlar va amallar.
+    'Bu nomli taom allaqachon bor.': 'Блюдо с таким названием уже есть.',
+    'Ish haqi to‘lovini bu yerdan o‘zgartirib bo‘lmaydi.':
+        'Выплату зарплаты отсюда изменить нельзя.',
+    'Bugungi yozuvlar orasida bunday qator yo‘q.': 'Среди сегодняшних записей такой строки нет.',
+    'Ofitsiant hisobida {balance} so‘m bor, undan ko‘p berib bo‘lmaydi.':
+        'На счету официанта {balance} сум, выдать больше нельзя.',
+    'Joriy parol noto‘g‘ri.': 'Текущий пароль неверен.',
+    'Parol almashtirildi.': 'Пароль изменён.',
+    # Hisob holatlari xabar ichida ko'rsatiladi, shuning uchun ular ham kerak.
+    'Ochiq': 'Открыт',
+    'To‘langan': 'Оплачен',
+    'Bekor qilingan': 'Отменён',
+    'Qaytarilgan': 'Возвращён',
+    'Yangi': 'Новый',
+    'Tayyorlanmoqda': 'Готовится',
+    'Tayyor': 'Готово',
+    'Topshirildi': 'Передан',
+    # --- AI yordamchining tayyor javoblari ---
+    'Salom! Savdo, kecha-bugun taqqoslash, xarajat, ombor yoki eng ko‘p sotilgan taomlar haqida so‘rashingiz mumkin.':
+        'Здравствуйте! Можно спросить о продажах, сравнении вчера-сегодня, расходах, складе '
+        'или самых продаваемых блюдах.',
+    'Bugun tushum {revenue} so‘m, {orders} ta to‘langan chek va {spend} so‘m xarajat qayd etildi.':
+        'Сегодня выручка {revenue} сум, {orders} оплаченных чеков и {spend} сум расходов.',
+    'Kecha bilan solishtirganda tushum {percent}% ga {direction}.':
+        'По сравнению со вчера выручка {direction} на {percent}%.',
+    'Kecha savdo bo‘lmagani uchun foiz hisoblanmadi.':
+        'Вчера продаж не было, поэтому процент не рассчитан.',
+    'o‘sdi': 'выросла',
+    'kamaydi': 'снизилась',
+    'Bugun va kecha': 'Сегодня и вчера',
+    'Bugun': 'Сегодня',
+    'Kecha': 'Вчера',
+    'Oxirgi 7 kunda tushum {revenue} so‘m, xarajat {spend} so‘m.':
+        'За последние 7 дней выручка {revenue} сум, расходы {spend} сум.',
+    'Oldingi haftada savdo bo‘lmagani uchun foiz hisoblanmadi.':
+        'На прошлой неделе продаж не было, поэтому процент не рассчитан.',
+    'O‘sish: {percent}%.': 'Рост: {percent}%.',
+    'Haftalik tushum': 'Выручка за неделю',
+    'Oldingi 7 kun': 'Предыдущие 7 дней',
+    'Oxirgi 7 kun': 'Последние 7 дней',
+    'Oxirgi 7 kunda to‘langan savdo qayd etilmagan.':
+        'За последние 7 дней оплаченных продаж не зафиксировано.',
+    '{name} — {count} ta': '{name} — {count} шт.',
+    'Oxirgi 7 kundagi eng ko‘p sotilgan taomlar: {names}.':
+        'Самые продаваемые блюда за последние 7 дней: {names}.',
+    'Eng ko‘p sotilgan taomlar': 'Самые продаваемые блюда',
+    'Minimal qoldiqdan past mahsulot yo‘q. Ombor holati hozir me’yorda.':
+        'Товаров ниже минимального остатка нет. Склад сейчас в норме.',
+    'Quyidagi mahsulotlar minimal qoldiqda yoki undan past: {names}.':
+        'Следующие товары на минимальном остатке или ниже: {names}.',
+    'Oxirgi 7 kunda {spend} so‘m xarajat va {revenue} so‘m tushum qayd etilgan.':
+        'За последние 7 дней зафиксировано {spend} сум расходов и {revenue} сум выручки.',
+    '7 kunlik pul oqimi': 'Денежный поток за 7 дней',
+    'Tushum': 'Выручка',
+    'Xarajat': 'Расход',
 }
 
 
@@ -271,5 +349,83 @@ EN = {
     'Rasm o‘lchami juda katta.': 'The image is too large.',
     'Savol kamida 2 belgidan iborat bo‘lsin.': 'The question needs at least 2 characters.',
     'Taom tanlangan kategoriyaga tegishli emas.': 'The dish does not belong to the selected category.',
+    # Davomat va ish haqi bo'limi: bu xabarlar tarjimasiz qolib ketgan edi.
+    'Bir martada ko‘pi bilan 50 ta xodim.': '50 people at most in one go.',
+    'Bir xodim ro‘yxatda ikki marta.': 'The same person appears twice in the list.',
+    'Faqat oxirgi {days} kunni belgilash mumkin.': 'Only the last {days} days can be marked.',
+    'Kelajakdagi hafta uchun davomat yuritilmaydi.': 'Attendance is not kept for a future week.',
+    'Kelajakdagi kun uchun davomat belgilanmaydi.': 'Attendance is not marked for a future day.',
+    'Yakshanba — dam olish kuni, unga haq hisoblanmaydi.':
+        'Sunday is the rest day; no wage is earned for it.',
+    'Superadmin ish haqi bu bo‘limda yuritilmaydi.':
+        'The owner’s pay is not handled in this section.',
+    'Saqlandi. Yangi foiz shu paytdan keyingi sotuvlarga qo‘llanadi.':
+        'Saved. The new rate applies to sales from now on.',
+    # Ilgari umuman _() ga o'ralmagan, ya'ni har doim o'zbekcha chiqardi.
+    'Faqat oxirgi {days} kunni yopish mumkin.': 'Only the last {days} days can be closed.',
+    'Faqat oxirgi {days} kun uchun kiritish mumkin.': 'Entries are allowed for the last {days} days only.',
+    '{name}: dona butun son bo‘lishi kerak.': '{name}: pieces must be a whole number.',
+    'Bu hisob «{status}» holatida — o‘zgartirib bo‘lmaydi.':
+        'This bill is «{status}» — it cannot be changed.',
+    'Faqat to‘langan hisob qaytariladi. Bu hisob «{status}».':
+        'Only a paid bill can be refunded. This one is «{status}».',
+    'Buyurtma hozir “{state}” holatida. Sahifani yangilang.':
+        'The order is now “{state}”. Refresh the page.',
+    # Yangi tekshiruvlar va amallar.
+    'Bu nomli taom allaqachon bor.': 'A dish with that name already exists.',
+    'Ish haqi to‘lovini bu yerdan o‘zgartirib bo‘lmaydi.':
+        'A salary payment cannot be changed from here.',
+    'Bugungi yozuvlar orasida bunday qator yo‘q.': 'No such row among today’s entries.',
+    'Ofitsiant hisobida {balance} so‘m bor, undan ko‘p berib bo‘lmaydi.':
+        'The waiter has {balance} so‘m on account; you cannot hand over more.',
+    'Joriy parol noto‘g‘ri.': 'The current password is wrong.',
+    'Parol almashtirildi.': 'Password changed.',
+    # Hisob holatlari xabar ichida ko'rsatiladi, shuning uchun ular ham kerak.
+    'Ochiq': 'Open',
+    'To‘langan': 'Paid',
+    'Bekor qilingan': 'Cancelled',
+    'Qaytarilgan': 'Refunded',
+    'Yangi': 'New',
+    'Tayyorlanmoqda': 'Cooking',
+    'Tayyor': 'Ready',
+    'Topshirildi': 'Served',
+    # --- AI yordamchining tayyor javoblari ---
+    'Salom! Savdo, kecha-bugun taqqoslash, xarajat, ombor yoki eng ko‘p sotilgan taomlar haqida so‘rashingiz mumkin.':
+        'Hello! You can ask about sales, today against yesterday, expenses, stock '
+        'or the best-selling dishes.',
+    'Bugun tushum {revenue} so‘m, {orders} ta to‘langan chek va {spend} so‘m xarajat qayd etildi.':
+        'Today: {revenue} so‘m in takings, {orders} paid bills and {spend} so‘m of expenses.',
+    'Kecha bilan solishtirganda tushum {percent}% ga {direction}.':
+        'Against yesterday, takings {direction} by {percent}%.',
+    'Kecha savdo bo‘lmagani uchun foiz hisoblanmadi.':
+        'There were no sales yesterday, so no percentage was calculated.',
+    'o‘sdi': 'rose',
+    'kamaydi': 'fell',
+    'Bugun va kecha': 'Today and yesterday',
+    'Bugun': 'Today',
+    'Kecha': 'Yesterday',
+    'Oxirgi 7 kunda tushum {revenue} so‘m, xarajat {spend} so‘m.':
+        'Over the last 7 days: {revenue} so‘m in takings, {spend} so‘m of expenses.',
+    'Oldingi haftada savdo bo‘lmagani uchun foiz hisoblanmadi.':
+        'There were no sales the week before, so no percentage was calculated.',
+    'O‘sish: {percent}%.': 'Growth: {percent}%.',
+    'Haftalik tushum': 'Weekly takings',
+    'Oldingi 7 kun': 'Previous 7 days',
+    'Oxirgi 7 kun': 'Last 7 days',
+    'Oxirgi 7 kunda to‘langan savdo qayd etilmagan.':
+        'No paid sales were recorded in the last 7 days.',
+    '{name} — {count} ta': '{name} — {count}',
+    'Oxirgi 7 kundagi eng ko‘p sotilgan taomlar: {names}.':
+        'Best-selling dishes of the last 7 days: {names}.',
+    'Eng ko‘p sotilgan taomlar': 'Best-selling dishes',
+    'Minimal qoldiqdan past mahsulot yo‘q. Ombor holati hozir me’yorda.':
+        'Nothing is below its minimum level. Stock is fine right now.',
+    'Quyidagi mahsulotlar minimal qoldiqda yoki undan past: {names}.':
+        'These items are at or below their minimum level: {names}.',
+    'Oxirgi 7 kunda {spend} so‘m xarajat va {revenue} so‘m tushum qayd etilgan.':
+        'The last 7 days recorded {spend} so‘m of expenses and {revenue} so‘m of takings.',
+    '7 kunlik pul oqimi': 'Cash flow over 7 days',
+    'Tushum': 'Takings',
+    'Xarajat': 'Expense',
 }
 

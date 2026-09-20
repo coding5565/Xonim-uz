@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import QRCode from 'qrcode'
-import { ArrowRight, Bike, CheckCircle2, Clock3, ExternalLink, QrCode, Server, ShieldCheck } from 'lucide-react'
+import { ArrowRight, Bike, CheckCircle2, Clock3, ExternalLink, KeyRound, QrCode, Server, ShieldCheck } from 'lucide-react'
 import { api, dateLabel } from '../api'
 import { useI18n } from '../i18n'
 import type { ActivityLog, ChannelFees } from '../types'
@@ -29,7 +29,16 @@ export default function SettingsPage() {
   const [rates, setRates] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState('')
   const [saved, setSaved] = useState('')
-  const url = `${window.location.origin}/menu`
+  // Parol almashtirish: ilgari buning yo'li umuman yo'q edi.
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [repeat, setRepeat] = useState('')
+  const [passwordBusy, setPasswordBusy] = useState(false)
+  const [passwordError, setPasswordError] = useState('')
+  const [passwordDone, setPasswordDone] = useState('')
+  // Menyu manzili filialga bog'liq.
+  const menuPath = user?.branch_slug ? `/menu/${user.branch_slug}` : '/menu'
+  const url = `${window.location.origin}${menuPath}`
 
   useEffect(() => {
     async function load() {
@@ -69,6 +78,28 @@ export default function SettingsPage() {
     }
   }
 
+  async function changePassword(event: FormEvent) {
+    event.preventDefault()
+    setPasswordError('')
+    setPasswordDone('')
+    if (next !== repeat) return setPasswordError(t('Yangi parollar bir xil emas.'))
+    setPasswordBusy(true)
+    try {
+      await api('auth/password/', {
+        method: 'POST',
+        body: JSON.stringify({ current_password: current, new_password: next }),
+      })
+      setCurrent('')
+      setNext('')
+      setRepeat('')
+      setPasswordDone(t('Parol almashtirildi.'))
+    } catch (exception) {
+      setPasswordError((exception as Error).message)
+    } finally {
+      setPasswordBusy(false)
+    }
+  }
+
   return (
     <>
       <div className="page-heading">
@@ -86,7 +117,7 @@ export default function SettingsPage() {
           <p className="muted">{t('Faqat menyu ko‘rish uchun')}</p>
           {qr && <img src={qr} alt={t('Mijoz menyusi QR kodi')} width={230} height={230} />}
           <code>{url}</code>
-          <Link to="/menu" target="_blank" className="button primary">{t('Menyuni ochish')} <ExternalLink size={16} /></Link>
+          <Link to={menuPath} target="_blank" className="button primary">{t('Menyuni ochish')} <ExternalLink size={16} /></Link>
           <p className="data-note">
             {t('Bu QR localhost manziliga olib boradi. Telefonlardan foydalanish uchun LAN yoki ommaviy domen bilan sozlash kerak.')}
           </p>
@@ -103,6 +134,59 @@ export default function SettingsPage() {
           <div className="inline-tip"><ShieldCheck size={20} />{t('Faqat localhost uchun ishga tushirilgan')}</div>
         </section>
       </div>
+
+      {/* Parolni almashtirish har bir xodimga ochiq: unutilgan parol
+          yangi hisob ochishni talab qilmasligi kerak. */}
+      <section className="panel spaced">
+        <header className="panel-heading">
+          <div>
+            <h2>{t('Parolni almashtirish')}</h2>
+            <p>{t('Kamida 12 belgi. Almashtirilgandan keyin boshqa qurilmalardagi sessiyalar uziladi.')}</p>
+          </div>
+          <KeyRound size={19} />
+        </header>
+        <form className="password-form" onSubmit={changePassword}>
+          <div className="form-row">
+            <label>
+              {t('Joriy parol')}
+              <input
+                value={current}
+                onChange={event => setCurrent(event.target.value)}
+                type="password"
+                autoComplete="current-password"
+                required
+              />
+            </label>
+            <label>
+              {t('Yangi parol')}
+              <input
+                value={next}
+                onChange={event => setNext(event.target.value)}
+                type="password"
+                autoComplete="new-password"
+                minLength={12}
+                required
+              />
+            </label>
+            <label>
+              {t('Yangi parolni takrorlang')}
+              <input
+                value={repeat}
+                onChange={event => setRepeat(event.target.value)}
+                type="password"
+                autoComplete="new-password"
+                minLength={12}
+                required
+              />
+            </label>
+          </div>
+          {passwordError && <p className="alert error">{passwordError}</p>}
+          {passwordDone && <p className="alert success">{passwordDone}</p>}
+          <button className="button primary" disabled={passwordBusy}>
+            {t(passwordBusy ? 'Saqlanmoqda…' : 'Parolni almashtirish')}
+          </button>
+        </form>
+      </section>
       {user?.role === 'owner' && !!fees && (
         <section className="panel spaced">
           <header className="panel-heading">

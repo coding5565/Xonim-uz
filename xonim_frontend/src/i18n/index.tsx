@@ -15,6 +15,17 @@ const DICTIONARIES: Record<Lang, Record<string, string>> = { uz: {}, ru, en }
 
 const STORAGE_KEY = 'xonim-lang'
 
+/**
+ * Joriy til. Bu yerda saqlanadi, localStorage'da emas.
+ *
+ * Nega: maxfiy rejimda yoki sayt ma'lumotlari yopiq bo'lganda yozish
+ * ishlamaydi. Ilgari `currentLang()` to'g'ridan-to'g'ri localStorage'dan
+ * o'qir edi, natijada ekran ruschaga o'tar, `Accept-Language` sarlavhasi
+ * va tarmoq xatolari esa eski tilda qolib ketardi — bitta sahifada
+ * ikkita til.
+ */
+let active: Lang = 'uz'
+
 function stored(): Lang {
   try {
     const value = localStorage.getItem(STORAGE_KEY)
@@ -24,6 +35,8 @@ function stored(): Lang {
   }
   return 'uz'
 }
+
+active = stored()
 
 /** {name} ko'rinishidagi o'rinlarni qiymat bilan almashtiradi. */
 function fill(text: string, vars?: Record<string, string | number>) {
@@ -70,6 +83,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, [lang])
 
   const setLang = useCallback((next: Lang) => {
+    // Avval xotiradagi qiymat: `currentLang()` va `translate()` shundan
+    // o'qiydi, shuning uchun saqlash ishlamasa ham til hamma joyda birga
+    // o'zgaradi.
+    active = next
     setLangState(next)
     try {
       localStorage.setItem(STORAGE_KEY, next)
@@ -106,12 +123,12 @@ export function useI18n() {
 
 /** Til kodini API so'rovlariga qo'shish uchun — server xabarlari ham tarjima bo'ladi. */
 export function currentLang(): Lang {
-  return stored()
+  return active
 }
 
 /** Sana va raqam formati uchun. React'dan tashqarida ham kerak (api.ts). */
 export function currentLocale(): string {
-  return LOCALES[stored()]
+  return LOCALES[active]
 }
 
 /**
@@ -119,5 +136,5 @@ export function currentLocale(): string {
  * xatolari). Hook ishlatib bo'lmaydigan joylarda shu chaqiriladi.
  */
 export function translate(text: string, vars?: Record<string, string | number>) {
-  return fill(DICTIONARIES[stored()][text] ?? text, vars)
+  return fill(DICTIONARIES[active][text] ?? text, vars)
 }

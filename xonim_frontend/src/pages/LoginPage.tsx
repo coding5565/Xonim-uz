@@ -9,7 +9,9 @@ import type { User } from '../types'
 export default function LoginPage() {
   const { t } = useI18n()
   const navigate = useNavigate()
-  const [username, setUsername] = useState('owner')
+  // Bo'sh boshlanadi: ilgari bu yerda «owner» yozib qo'yilgan edi va
+  // kirish oynasi haqiqiy hisobning loginini o'zi aytib turardi.
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')

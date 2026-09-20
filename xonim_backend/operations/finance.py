@@ -175,21 +175,32 @@ def monthly_trend(branch, today):
         row['bucket'].date() if hasattr(row['bucket'], 'date') else row['bucket']: row['fee']
         for row in paid.values(bucket=TruncMonth('paid_at')).annotate(fee=platform_fee()).order_by('bucket')
     }
+    # Qo'lda yozilgan chiqim ham ayriladi. Bu ilgari unutilgan edi va
+    # grafikdagi sof foyda sarlavhadagi raqamdan aynan isrof miqdoricha
+    # katta bo'lib ko'rinardi — bir sahifada ikkita «sof foyda».
+    waste_by = {
+        row['bucket']: row['total']
+        for row in StockMovement.objects.filter(branch=branch, kind='consumption', date__gte=months[0])
+        .values(bucket=TruncMonth('date')).annotate(total=Sum('cost_total')).order_by('bucket')
+    }
     trend = []
     for item in months:
         revenue = revenue_by.get(item) or Decimal('0')
         cost = cost_by.get(item) or Decimal('0')
         spend = spend_by.get(item) or Decimal('0')
         fee = fee_by.get(item) or Decimal('0')
+        waste = waste_by.get(item) or Decimal('0')
         trend.append({
             'period': month_key(item),
             'label': short_label(item),
             'revenue': money(revenue),
             'cogs': money(cost),
             'expenses': money(spend),
+            'waste': money(waste),
             'platform_fee': money(fee),
             'gross_profit': money(revenue - cost),
-            'net_profit': money(revenue - cost - spend - fee),
+            # Formula `build_finance` dagi sof foyda bilan bir xil bo'lishi SHART.
+            'net_profit': money(revenue - cost - spend - waste - fee),
         })
     return trend
 
@@ -220,6 +231,9 @@ def build_finance(branch, start, end, today):
         # yo'q — lekin bu haqiqiy yo'qotish, shuning uchun foydadan ayiriladi.
         waste=Coalesce(Sum('cost_total', filter=Q(kind='consumption')), Decimal('0')),
         sold=Coalesce(Sum('cost_total', filter=Q(kind='sale_consumption')), Decimal('0')),
+        # Qaytarilgan buyurtma masallig'i omborga qaytdi, ya'ni u sotilgan
+        # tannarx bo'lib qolmaydi va «sarflangan»dan ayirilishi kerak.
+        returned=Coalesce(Sum('cost_total', filter=Q(kind='refund')), Decimal('0')),
     )
     purchases, waste = moves['purchases'], moves['waste']
 
@@ -303,7 +317,7 @@ def build_finance(branch, start, end, today):
         branch=branch, paid_on__gte=start, paid_on__lte=end,
     ).order_by().values_list('period', flat=True).distinct()
     stock_value = sum((item.stock_value for item in Ingredient.objects.filter(branch=branch)), Decimal('0'))
-    consumed = moves['sold'] + waste
+    consumed = moves['sold'] + waste - moves['returned']
 
     return {
         'filters': {

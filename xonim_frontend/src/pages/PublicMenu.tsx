@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { ArrowUpRight, Clock3, Leaf, MapPin, Search, Sparkles, UtensilsCrossed } from 'lucide-react'
 import { api, money } from '../api'
 import { useI18n } from '../i18n'
@@ -12,8 +12,16 @@ interface Menu {
   dishes: Dish[]
 }
 
+/** Filial ko'rsatilmasa shu manzil ochiladi. Bitta filialli o'rnatish uchun. */
+const DEFAULT_BRANCH = 'xonim'
+
 export default function PublicMenu() {
   const { t, tn } = useI18n()
+  // Filial manzildan olinadi: /menu/<slug>. Ilgari u kodda «xonim» deb
+  // yozib qo'yilgan edi va ikkinchi filial o'z menyusini umuman
+  // ocholmasdi — server esa har qanday slug'ni qo'llab-quvvatlaydi.
+  const { slug } = useParams()
+  const branch = slug || DEFAULT_BRANCH
   const [data, setData] = useState<Menu>()
   const [category, setCategory] = useState(0)
   const [search, setSearch] = useState('')
@@ -22,11 +30,11 @@ export default function PublicMenu() {
   const load = useCallback(async () => {
     setError('')
     try {
-      setData(await api<Menu>('public/menu/xonim/'))
+      setData(await api<Menu>(`public/menu/${encodeURIComponent(branch)}/`))
     } catch (exception) {
       setError((exception as Error).message)
     }
-  }, [])
+  }, [branch])
 
   useEffect(() => {
     load()
@@ -41,9 +49,11 @@ export default function PublicMenu() {
   return (
     <div className="public-menu">
       <header className="public-header">
-        <Link to="/menu" className="brand">
+        <Link to={slug ? `/menu/${slug}` : '/menu'} className="brand">
           <span className="brand-mark">x<span>•</span></span>
-          <span className="brand-text">xonim<span>{t('RESTORAN MENYUSI')}</span></span>
+          {/* Filial nomi serverdan keladi — ilgari u olinardi-yu, hech
+              qayerda ko'rsatilmasdi. */}
+          <span className="brand-text">{data?.name || 'xonim'}<span>{t('RESTORAN MENYUSI')}</span></span>
         </Link>
         <div className="public-header-meta">
           <span className="open-badge"><i /> {t('Bugun ochiq')}</span>

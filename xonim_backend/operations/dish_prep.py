@@ -222,6 +222,35 @@ class DishPrepView(APIView):
         return Response(record_prep(request.user, data.validated_data['lines']), status=201)
 
 
+class DishPrepRowView(APIView):
+    """Noto‘g‘ri kiritilgan tayyorlash yozuvini olib tashlaydi.
+
+    Yozuvlar qo‘shilib boradi va manfiy miqdor kiritib bo‘lmaydi, shuning
+    uchun «20 o‘rniga 200» xatosini tuzatishning boshqa yo‘li yo‘q edi —
+    kun oxirigacha qoldiq soxta bo‘lib turardi.
+
+    Faqat BUGUNGI yozuv o‘chiriladi: o‘tgan kunning tayyorlash tarixi
+    hisobotlarga kirgan va uni qayta yozish nazoratni buzardi.
+    """
+
+    permission_classes = [SalesOnly]
+
+    @transaction.atomic
+    def delete(self, request, pk):
+        day = timezone.localdate()
+        row = DishPrep.objects.select_related('dish').filter(
+            branch=request.user.branch, pk=pk, date=day,
+        ).first()
+        if not row:
+            raise serializers.ValidationError(_('Bugungi yozuvlar orasida bunday qator yo‘q.'))
+        audit_many(request.user, [(
+            'prep.remove',
+            f'{row.dish.name} · −{row.quantity} porsiya · yozuv o‘chirildi',
+        )])
+        row.delete()
+        return Response(stock_status(request.user.branch, day))
+
+
 class DishPrepHistoryView(APIView):
     """Bugun kim nima kiritgani — kassirga ham, egasiga ham."""
 

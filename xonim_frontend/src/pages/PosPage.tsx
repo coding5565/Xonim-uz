@@ -108,6 +108,15 @@ export default function PosPage() {
       // Menyu ham yangilanadi: egasi narxni o'zgartirsa yoki taomni
       // vaqtincha o'chirsa, kassa ekrani buni darhol ko'rsatadi.
       setDishes(freshDishes)
+      // Savatdagi nusxalar ham yangilanadi. Ilgari savatga tushgan taom
+      // o'zining eski narxini saqlab qolardi: ekranda bitta summa turar,
+      // server esa yangi narx bo'yicha boshqasini hisoblardi — kassir
+      // farqni faqat chekda ko'rardi.
+      const priced = new Map(freshDishes.map(item => [item.id, item]))
+      setCart(previous => previous.map(line => {
+        const current = priced.get(line.dish.id)
+        return current ? { ...line, dish: current } : line
+      }))
       if (tableId) setTable(await api<Table>(`tables/${tableId}/`))
       if (orderId) setBill(await api<Order>(`orders/${orderId}/`))
     } catch {
@@ -194,6 +203,11 @@ export default function PosPage() {
     : 0
   const payable = total + waiterFee
   const change = Math.max(0, Number(cashGiven) - payable)
+  // Tayyor summa tugmalari. Hisobdan KICHIK qiymat foyda bermaydi: forma
+  // uni qabul qilmaydi. Ilgari ro'yxat qotirilgan edi va 200 000 dan
+  // qimmat chekda uchta tugmaning uchalasi ham ishlamasdi.
+  const cashPresets = [payable, ...[50000, 100000, 200000, 500000, 1000000]
+    .filter(amount => amount > payable).slice(0, 3)]
 
   // Sarlavhada kanal ko'rinib tursin: kassir qaysi joydan sotayotganini
   // ekranga qarab bilishi kerak, yozib qo'yilgandan keyin emas.
@@ -633,7 +647,7 @@ export default function PosPage() {
                 />
               </label>
               <div className="pay-grid">
-                {[payable, 50000, 100000, 200000].map((amount, index) => (
+                {cashPresets.map((amount, index) => (
                   <button key={index} type="button" onClick={() => setCashGiven(String(amount))}>
                     {index === 0 ? t('Tayyor pul') : money(amount)}
                   </button>

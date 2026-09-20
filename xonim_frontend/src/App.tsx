@@ -69,6 +69,8 @@ export default function App() {
     user && item.roles.includes(user.role)
     && (SHOW_KITCHEN_SCREEN || item.path !== '/kitchen' || user.role === 'kitchen'))
   // Kassa ichki marshrutlari (/pos/stol/4) ham "Kassa" bandiga tegishli.
+  // Mijoz menyusi filialga bog'liq manzilda turadi.
+  const menuPath = user?.branch_slug ? `/menu/${user.branch_slug}` : '/menu'
   const isCurrent = (path: string) =>
     location.pathname === path || (path !== '/' && location.pathname.startsWith(`${path}/`))
   const title = t(nav.find(item => isCurrent(item.path))?.name || 'Sozlamalar')
@@ -96,8 +98,10 @@ export default function App() {
           <span className="brand-text">xonim<span>RESTAURANT WORKSPACE</span></span>
         </Link>
         <div className="workspace">
-          <span className="workspace-avatar">X</span>
-          <div><strong>Xonim Restaurant</strong><small>{t('Asosiy restoran')}</small></div>
+          {/* Filial nomi sessiyadan olinadi. Ilgari u kodda yozib qo'yilgan
+              edi va ikkinchi filialda ham «Xonim Restaurant» ko'rinardi. */}
+          <span className="workspace-avatar">{(user?.branch || 'X').charAt(0).toUpperCase()}</span>
+          <div><strong>{user?.branch || 'Xonim'}</strong><small>{t('Asosiy restoran')}</small></div>
           <ChevronRight size={14} />
         </div>
         <p className="nav-caption">{t('ISH MAYDONI')}</p>
@@ -123,13 +127,12 @@ export default function App() {
             <span className="promo-icon"><UtensilsCrossed size={20} /></span>
             <strong>{t('Mehmonlar uchun menyu')}</strong>
             <p>{t('Taomlaringiz bir skan masofada.')}</p>
-            <Link to="/menu" target="_blank" onClick={closeMobileNav}>{t('Menyuni ochish')} <ArrowUpRight size={16} /></Link>
+            <Link to={menuPath} target="_blank" onClick={closeMobileNav}>{t('Menyuni ochish')} <ArrowUpRight size={16} /></Link>
           </div>
-          {user?.role !== 'kitchen' && (
-            <Link to="/settings" className="settings-link" onClick={closeMobileNav}>
-              <Settings2 size={19} />{t('Sozlamalar va QR')}
-            </Link>
-          )}
+          {/* Oshxonaga ham ochiq: parolni almashtirish shu sahifada. */}
+          <Link to="/settings" className="settings-link" onClick={closeMobileNav}>
+            <Settings2 size={19} />{t('Sozlamalar va QR')}
+          </Link>
           <button className="profile" onClick={logout} title={t('Tizimdan chiqish')}>
             <span className="avatar">{user?.name.charAt(0)}</span>
             <span><strong>{user?.name}</strong><small>{t(roleName(user?.role))}</small></span>

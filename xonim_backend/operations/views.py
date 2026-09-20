@@ -1,7 +1,7 @@
 from datetime import timedelta
 from decimal import Decimal
 
-from django.db import IntegrityError, OperationalError, transaction
+from django.db import transaction
 from django.db.models import Count, F, Prefetch, Sum
 from django.db.models.functions import Coalesce, TruncDate
 from django.http import HttpResponse
@@ -9,6 +9,7 @@ from django.utils import timezone
 from rest_framework import mixins, serializers, viewsets
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from core.i18n import _
@@ -66,14 +67,8 @@ from .services import (
     refund_order,
     remove_order_line,
     reprice_recipes,
+    safely,
 )
-
-
-def safely(call, *args):
-    try:
-        return call(*args)
-    except (IntegrityError, OperationalError):
-        raise Conflict(_('Amal boshqa so‘rov bilan to‘qnashdi. Shu amalni qayta tekshiring.')) from None
 
 
 class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
@@ -241,11 +236,17 @@ class KitchenView(APIView):
     def get(self, request):
         # Bekor qilingan yoki qaytarilgan hisob oshxona taxtasida turmasligi
         # kerak — aks holda pishirilib ketardi.
+        # Oxirgi sutka bilan cheklanadi. Talon qog'ozda ishlaganda hech kim
+        # buyurtmani «topshirildi» deb belgilamaydi, shuning uchun taxta
+        # cheksiz o'sib borardi: bir necha oydan keyin bitta javobda
+        # minglab qator qaytarardi.
+        since = timezone.now() - timedelta(days=1)
         orders = Order.objects.filter(
             branch=request.user.branch,
+            created_at__gte=since,
             preparation_status__in=['queued', 'preparing', 'ready'],
         ).exclude(status__in=['cancelled', 'refunded']).select_related('cashier').prefetch_related('lines').order_by('created_at', 'id')
-        return Response(OrderSerializer(orders, many=True).data)
+        return Response(OrderSerializer(orders[:200], many=True).data)
 
 
 class KitchenStatusView(APIView):
@@ -262,7 +263,8 @@ class KitchenStatusView(APIView):
         if order.preparation_status == requested:
             return Response(OrderSerializer(order).data)
         if requested != expected:
-            raise Conflict(f'Buyurtma hozir “{order.get_preparation_status_display()}” holatida. Sahifani yangilang.')
+            raise Conflict(_('Buyurtma hozir “{state}” holatida. Sahifani yangilang.').format(
+                state=_(order.get_preparation_status_display())))
         now = timezone.now()
         order.preparation_status = requested
         if requested == 'preparing':
@@ -276,9 +278,20 @@ class KitchenStatusView(APIView):
         return Response(OrderSerializer(order).data)
 
 
-class ExpenseViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
-    permission_classes = [SalesOnly]
+class ExpenseViewSet(mixins.ListModelMixin, mixins.UpdateModelMixin,
+                     mixins.DestroyModelMixin, viewsets.GenericViewSet):
+    """Kassir xarajat kiritadi; tuzatish va o‘chirish superadmin ishi.
+
+    Xarajat foyda hisobiga to‘g‘ridan-to‘g‘ri kiradi, shuning uchun noto‘g‘ri
+    kiritilgan summa tuzatilishi SHART — ilgari uni na tahrirlash, na o‘chirish
+    mumkin edi va xato raqam hisobotda abadiy qolardi. Ikkala amal ham
+    jurnalga tushadi va faqat egaga ochiq.
+    """
+
     serializer_class = ExpenseSerializer
+
+    def get_permissions(self):
+        return [SalesOnly() if self.action in ('list', 'create') else OwnerOnly()]
 
     def get_queryset(self):
         return Expense.objects.filter(branch=self.request.user.branch).select_related('actor')
@@ -287,6 +300,30 @@ class ExpenseViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         return Response(self.get_serializer(safely(create_expense, request.user, serializer.validated_data)).data, status=201)
+
+    def _guard_salary(self, expense):
+        """Ish haqi to‘lovi bilan bog‘langan xarajat bu yerdan o‘zgarmaydi.
+
+        U `SalaryPayment` bilan juft yuradi: bittasini yolg‘iz o‘zgartirish
+        xodimning balansini yozuvdan ajratib yuborardi.
+        """
+        if hasattr(expense, 'salary_payment'):
+            raise Conflict(_('Ish haqi to‘lovini bu yerdan o‘zgartirib bo‘lmaydi.'))
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        self._guard_salary(serializer.instance)
+        before = f'{serializer.instance.purpose} · {serializer.instance.amount} so‘m'
+        expense = serializer.save()
+        audit(self.request.user, 'expense.update',
+              f'{before} → {expense.purpose} · {expense.amount} so‘m · {expense.date}')
+
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        self._guard_salary(instance)
+        audit(self.request.user, 'expense.remove',
+              f'{instance.category} · {instance.purpose} · {instance.amount} so‘m · {instance.date}')
+        instance.delete()
 
 
 class IngredientViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):
@@ -534,8 +571,20 @@ class SalesReportExportView(APIView):
         return response
 
 
+class AssistantThrottle(ScopedRateThrottle):
+    """Har bir savol tashqi AI xizmatiga pullik so‘rov yuboradi.
+
+    Umumiy 600/min limit bu yerda juda bo‘sh: tugmani ushlab turgan barmoq
+    ham hisobni bo‘shatib yuborishi mumkin.
+    """
+
+    scope = 'assistant'
+
+
 class AssistantChatView(APIView):
     permission_classes = [OwnerOnly]
+    throttle_classes = [AssistantThrottle]
+    throttle_scope = 'assistant'
 
     def post(self, request):
         serializer = AssistantQuestion(data=request.data)
@@ -548,7 +597,15 @@ class AssistantChatView(APIView):
         if result:
             payload = {**result, 'source': 'crm'}
         else:
-            answer = ask_openai(question, snapshot)
+            # AI xizmati tashqarida: u yiqilsa yoki javob bermasa, bu bizning
+            # xatomiz emas. Ilgari RuntimeError DRF orqali o'tib ketib, egaga
+            # 500 sahifasi ko'rinardi.
+            try:
+                answer = ask_openai(question, snapshot)
+            except RuntimeError as failure:
+                return Response({
+                    'answer': str(failure), 'charts': [], 'source': 'offline',
+                }, status=503)
             if answer is None:
                 payload = {
                     'answer': _('AI kaliti hali ulanmagan. Bugun, kecha yoki hafta bo‘yicha tezkor savollardan birini bosing, yoki OpenAI kalitini ulang.'),

@@ -52,8 +52,12 @@ AUDIT_LABELS = {
     'stock.receipt': 'Omborga kirim',
     'stock.consumption': 'Ombordan chiqim',
     'stock.sale_consumption': 'Savdo bo‘yicha sarf',
+    'stock.refund': 'Qaytarilgan masalliq',
     'stock.shortage': 'Qoldiqdan ko‘p sarflandi',
+    'prep.remove': 'Tayyorlangan yozuv o‘chirildi',
     'expense.create': 'Xarajat kiritildi',
+    'expense.update': 'Xarajat tuzatildi',
+    'expense.remove': 'Xarajat o‘chirildi',
     'salary.pay': 'Ish haqi berildi',
     'attendance.mark': 'Davomat belgilandi',
     'staff.create': 'Xodim qo‘shildi',
@@ -72,6 +76,8 @@ AUDIT_LABELS = {
     'table.remove': 'Stol olib tashlandi',
     'auth.login': 'Tizimga kirdi',
     'auth.logout': 'Tizimdan chiqdi',
+    'auth.failed': 'Parol noto‘g‘ri kiritildi',
+    'auth.password': 'Parol almashtirildi',
 }
 
 # Jurnalda guruhlash uchun: har harakat qaysi bo'limga tegishli.

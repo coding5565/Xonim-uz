@@ -83,7 +83,8 @@ createdb -O xonim xonim
 # 2. Backend
 cd xonim_backend
 pip install -r requirements.lock
-export DJANGO_SECRET_KEY=...            # ixtiyoriy kalit
+export DJANGO_DEBUG=1                   # faqat mahalliy ishlash uchun
+export DJANGO_SECRET_KEY=...            # DEBUG=1 da ixtiyoriy
 export POSTGRES_DB=xonim POSTGRES_USER=xonim POSTGRES_PASSWORD=...
 python manage.py migrate
 python manage.py runserver 127.0.0.1:8000
@@ -100,16 +101,22 @@ Windowsda ikkalasini birdan ishga tushirish uchun `start-local.ps1` bor.
 Mahalliy sinov login/paroli `.local-access.txt` faylida yaratiladi — u Git'ga
 kiritilmaydi.
 
+`DJANGO_DEBUG` sukut bo'yicha **o'chiq**: serverda o'zgaruvchini qo'yish
+unutilsa, tizim xato izlari ochiq holda ko'tarilmasligi kerak. Mahalliy
+ishga tushirishda uni ataylab yoqasiz (`start-local.ps1` buni o'zi qiladi).
+Productionda `DJANGO_SECRET_KEY` majburiy va kamida 50 belgi bo'lsin.
+
 ---
 
 ## Tekshirish
 
 ```bash
-cd xonim_backend && python manage.py test   # 222 ta test
+cd xonim_backend && python manage.py test   # 248 ta test
 ruff check xonim_backend                    # Python linteri
+DJANGO_DEBUG=0 python manage.py check --deploy --fail-level WARNING
 
 cd xonim_frontend && npm run typecheck      # TypeScript
-npm run lint                                # ESLint
+npm run lint                                # ESLint, ogohlantirish ham xato
 npm run build                               # yig'ish
 ```
 

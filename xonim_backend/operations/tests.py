@@ -3823,3 +3823,405 @@ class WaiterServiceChargeTests(TestCase):
         text = receipt_bytes(order).decode('cp866', errors='ignore')
         self.assertIn('Xizmat haqi', text)
         self.assertIn('110 000', text)
+
+
+class LostRaceTests(TestCase):
+    """Bir vaqtda yozishda 409 qaytishi kerak, 500 emas.
+
+    Har bir amalda «o'qi — tekshir — yoz» oynasi bor: ikkinchi kassir
+    o'sha qatorni oraliqda yozib ulgursa, unique cheklov ishlaydi. Bu
+    foydalanuvchi qayta urinib ko'radigan to'qnashuv, server nosozligi
+    emas. Ilgari beshta yo'lda ham 500 chiqardi.
+    """
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+        self.day = timezone.localdate()
+        # Yakshanbaga davomat yuritilmaydi, shuning uchun sinov shanbaga suriladi.
+        while self.day.weekday() == 6:
+            self.day -= timedelta(days=1)
+
+    def test_shift_close_that_loses_the_race(self):
+        from operations import shift as shift_module
+
+        real = shift_module.day_figures
+
+        def figures_then_race(*args, **kwargs):
+            result = real(*args, **kwargs)
+            ShiftClose.objects.get_or_create(
+                branch=self.branch, date=timezone.localdate(),
+                defaults={
+                    'actor': self.owner, 'expected_cash': Decimal('0'),
+                    'counted_cash': Decimal('0'), 'difference': Decimal('0'),
+                    'revenue': Decimal('0'), 'orders': 0, 'breakdown': [],
+                },
+            )
+            return result
+
+        with patch('operations.shift.day_figures', side_effect=figures_then_race):
+            response = self.client.post('/api/v1/shift/', {'counted_cash': '0', 'note': ''}, format='json')
+        self.assertEqual(response.status_code, 409)
+
+    def test_attendance_that_loses_the_race(self):
+        from .models import Attendance
+        Attendance.objects.create(
+            branch=self.branch, employee=self.cashier, actor=self.owner,
+            date=self.day, present=True, daily_wage=Decimal('0'),
+        )
+        with patch('users.payroll.Attendance.objects.select_for_update') as blind:
+            blind.return_value.filter.return_value = Attendance.objects.none()
+            response = self.client.post('/api/v1/attendance/', {
+                'date': self.day.isoformat(),
+                'rows': [{'employee': self.cashier.id, 'present': True}],
+            }, format='json')
+        self.assertEqual(response.status_code, 409)
+
+    def test_salary_payment_that_loses_the_race(self):
+        payload = {'key': str(uuid4()), 'amount': '50000', 'payment_method': 'cash',
+                   'paid_on': self.day.isoformat()}
+        self.client.post(f'/api/v1/staff/{self.cashier.id}/salary-payments/', payload, format='json')
+        with patch('users.views.SalaryPayment.objects.filter') as blind:
+            blind.return_value.first.return_value = None
+            response = self.client.post(
+                f'/api/v1/staff/{self.cashier.id}/salary-payments/', payload, format='json')
+        self.assertEqual(response.status_code, 409)
+
+    def test_waiter_payment_that_loses_the_race(self):
+        waiter = Waiter.objects.create(branch=self.branch, name='Ali', commission=Decimal('10'))
+        WaiterPayment.objects.create(
+            branch=self.branch, waiter=waiter, actor=self.owner, key=uuid4(),
+            amount=Decimal('1000'), payment_method='cash', paid_on=self.day,
+        )
+        # Hisobda pul bo'lishi kerak, aks holda to'lov balans tekshiruvida to'xtaydi.
+        Order.objects.create(
+            branch=self.branch, cashier=self.owner, key=uuid4(), request_hash='x',
+            table='1', waiter_ref=waiter, waiter_commission=Decimal('10'),
+            service_charge=Decimal('90000'), total=Decimal('900000'),
+            status='paid', payment_method='cash', paid_at=timezone.now(),
+        )
+        key = str(uuid4())
+        WaiterPayment.objects.create(
+            branch=self.branch, waiter=waiter, actor=self.owner, key=key,
+            amount=Decimal('5000'), payment_method='cash', paid_on=self.day,
+        )
+        with patch('operations.waiters.WaiterPayment.objects.filter') as blind:
+            blind.return_value.first.return_value = None
+            response = self.client.post(f'/api/v1/waiters/{waiter.id}/payments/', {
+                'key': key, 'amount': '5000', 'payment_method': 'cash',
+                'paid_on': self.day.isoformat(),
+            }, format='json')
+        self.assertEqual(response.status_code, 409)
+
+    def test_daily_usage_that_loses_the_race(self):
+        item = Ingredient.objects.create(
+            branch=self.branch, name='Guruch', unit='kg',
+            quantity=Decimal('10'), unit_cost=Decimal('100'))
+        DailyUsage.objects.create(
+            branch=self.branch, actor=self.owner, ingredient=item,
+            date=self.day, quantity=Decimal('2'))
+        with patch('operations.daily_usage.DailyUsage.objects.select_for_update') as blind:
+            blind.return_value.filter.return_value = DailyUsage.objects.none()
+            response = self.client.post('/api/v1/daily-usage/', {
+                'date': self.day.isoformat(),
+                'lines': [{'ingredient': item.id, 'quantity': '3'}],
+            }, format='json')
+        self.assertEqual(response.status_code, 409)
+
+
+class CorrectingMistakesTests(TestCase):
+    """Xato kiritilgan raqamni qaytarib olish yo'li bo'lishi kerak."""
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.category = Category.objects.create(branch=self.branch, name='Main')
+        self.dish = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('40000'))
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+
+    def add_expense(self, amount='1000000'):
+        return self.client.post('/api/v1/expenses/', {
+            'key': str(uuid4()), 'category': 'Ijara', 'purpose': 'oy',
+            'amount': amount, 'payment_method': 'cash',
+            'date': timezone.localdate().isoformat(),
+        }, format='json').data['id']
+
+    def test_a_mistyped_expense_can_be_corrected(self):
+        expense = self.add_expense('1000000')
+        response = self.client.patch(f'/api/v1/expenses/{expense}/', {'amount': '100000'}, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Expense.objects.get(pk=expense).amount, Decimal('100000'))
+        self.assertTrue(AuditEvent.objects.filter(action='expense.update').exists())
+
+    def test_a_mistyped_expense_can_be_deleted(self):
+        expense = self.add_expense()
+        self.assertEqual(self.client.delete(f'/api/v1/expenses/{expense}/').status_code, 204)
+        self.assertFalse(Expense.objects.filter(pk=expense).exists())
+        self.assertTrue(AuditEvent.objects.filter(action='expense.remove').exists())
+
+    def test_the_cashier_cannot_delete_an_expense(self):
+        expense = self.add_expense()
+        till = APIClient()
+        till.force_authenticate(self.cashier)
+        self.assertEqual(till.delete(f'/api/v1/expenses/{expense}/').status_code, 403)
+
+    def test_a_salary_expense_stays_locked(self):
+        self.client.post(f'/api/v1/staff/{self.cashier.id}/salary-payments/', {
+            'key': str(uuid4()), 'amount': '50000', 'payment_method': 'cash',
+            'paid_on': timezone.localdate().isoformat(),
+        }, format='json')
+        expense = SalaryPayment.objects.get().expense_id
+        self.assertEqual(self.client.delete(f'/api/v1/expenses/{expense}/').status_code, 409)
+        self.assertEqual(
+            self.client.patch(f'/api/v1/expenses/{expense}/', {'amount': '1'}, format='json').status_code, 409)
+
+    def test_a_mistyped_prep_batch_can_be_removed(self):
+        self.client.post('/api/v1/dish-prep/', {
+            'lines': [{'dish': self.dish.id, 'quantity': 200}],
+        }, format='json')
+        row = DishPrep.objects.get()
+        response = self.client.delete(f'/api/v1/dish-prep/{row.id}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(DishPrep.objects.exists())
+        self.assertEqual(response.data['summary']['prepared'], 0)
+        self.assertTrue(AuditEvent.objects.filter(action='prep.remove').exists())
+
+    def test_yesterdays_prep_batch_is_left_alone(self):
+        row = DishPrep.objects.create(
+            branch=self.branch, dish=self.dish, actor=self.owner,
+            date=timezone.localdate() - timedelta(days=1), quantity=20)
+        self.assertEqual(self.client.delete(f'/api/v1/dish-prep/{row.id}/').status_code, 400)
+        self.assertTrue(DishPrep.objects.filter(pk=row.id).exists())
+
+    def test_two_dishes_cannot_share_a_name(self):
+        response = self.client.post('/api/v1/dishes/', {
+            'category': self.category.id, 'name': 'osh', 'price': '55000',
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Dish.objects.filter(branch=self.branch).count(), 1)
+
+
+class PasswordTests(TestCase):
+    """Parolni almashtirish yo'li bo'lishi kerak — hisobni tashlab ketmasdan."""
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cook = User.objects.create_user('cook', password='test-only-long-password', role='kitchen', branch=self.branch)
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+
+    def test_the_owner_resets_a_staff_password(self):
+        response = self.client.patch(f'/api/v1/staff/{self.cook.id}/', {
+            'password': 'another-long-password',
+        }, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.cook.refresh_from_db()
+        self.assertTrue(self.cook.check_password('another-long-password'))
+
+    def test_a_short_password_is_refused(self):
+        response = self.client.patch(f'/api/v1/staff/{self.cook.id}/', {'password': 'qisqa'}, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.cook.refresh_from_db()
+        self.assertTrue(self.cook.check_password('test-only-long-password'))
+
+    def test_anyone_changes_their_own_password(self):
+        kitchen = APIClient()
+        kitchen.force_authenticate(self.cook)
+        response = kitchen.post('/api/v1/auth/password/', {
+            'current_password': 'test-only-long-password',
+            'new_password': 'brand-new-long-password',
+        }, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.cook.refresh_from_db()
+        self.assertTrue(self.cook.check_password('brand-new-long-password'))
+
+    def test_the_old_password_is_required(self):
+        kitchen = APIClient()
+        kitchen.force_authenticate(self.cook)
+        response = kitchen.post('/api/v1/auth/password/', {
+            'current_password': 'wrong-password-here',
+            'new_password': 'brand-new-long-password',
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.cook.refresh_from_db()
+        self.assertTrue(self.cook.check_password('test-only-long-password'))
+
+    def test_a_wrong_password_is_written_to_the_log(self):
+        guest = APIClient()
+        guest.post('/api/v1/auth/login/', {'username': 'cook', 'password': 'nope'}, format='json')
+        self.assertTrue(AuditEvent.objects.filter(action='auth.failed').exists())
+
+    def test_an_unknown_login_does_not_fill_the_log(self):
+        guest = APIClient()
+        guest.post('/api/v1/auth/login/', {'username': 'hech-kim', 'password': 'nope'}, format='json')
+        self.assertFalse(AuditEvent.objects.filter(action='auth.failed').exists())
+
+
+class FrozenNumbersTests(TestCase):
+    """Bir marta yozilgan raqam keyingi kelishuvdan qayta hisoblanmasligi kerak."""
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cashier = User.objects.create_user(
+            'cashier', password='test-only-long-password', role='cashier',
+            branch=self.branch, daily_wage=Decimal('100000'))
+        self.day = timezone.localdate()
+        while self.day.weekday() == 6:
+            self.day -= timedelta(days=1)
+
+    def test_re_marking_a_day_keeps_the_wage_that_was_agreed_then(self):
+        from users.payroll import mark_attendance
+
+        from .models import Attendance
+        rows = [{'employee': self.cashier.id, 'present': True, 'note': ''}]
+        mark_attendance(self.owner, {'date': self.day, 'rows': rows})
+        self.cashier.daily_wage = Decimal('900000')
+        self.cashier.save(update_fields=['daily_wage'])
+        mark_attendance(self.owner, {'date': self.day, 'rows': rows})
+        self.assertEqual(
+            Attendance.objects.get(employee=self.cashier, date=self.day).daily_wage,
+            Decimal('100000'),
+        )
+
+    def test_a_day_turned_from_absent_to_present_takes_todays_wage(self):
+        from users.payroll import mark_attendance
+
+        from .models import Attendance
+        mark_attendance(self.owner, {'date': self.day, 'rows': [
+            {'employee': self.cashier.id, 'present': False, 'note': ''}]})
+        mark_attendance(self.owner, {'date': self.day, 'rows': [
+            {'employee': self.cashier.id, 'present': True, 'note': ''}]})
+        self.assertEqual(
+            Attendance.objects.get(employee=self.cashier, date=self.day).daily_wage,
+            Decimal('100000'),
+        )
+
+
+class ProfitChainTests(TestCase):
+    """Bitta sahifadagi ikkita «sof foyda» bir xil bo'lishi shart."""
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.category = Category.objects.create(branch=self.branch, name='Main')
+        self.dish = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('40000'))
+
+    def test_the_monthly_chart_subtracts_waste_like_the_headline(self):
+        from .finance import build_finance, monthly_trend
+        prepare(self.owner, self.dish)
+        client = APIClient()
+        client.force_authenticate(self.owner)
+        client.post('/api/v1/orders/', {
+            'key': str(uuid4()), 'table': '', 'lines': [{'dish': self.dish.id, 'quantity': 1}],
+            'payment_method': 'cash',
+        }, format='json')
+        item = Ingredient.objects.create(
+            branch=self.branch, name='Guruch', unit='kg',
+            quantity=Decimal('100'), unit_cost=Decimal('20000'))
+        StockMovement.objects.create(
+            branch=self.branch, ingredient=item, actor=self.owner, key=uuid4(),
+            request_hash='x', kind='consumption', quantity=Decimal('5'),
+            unit_cost=Decimal('20000'), cost_total=Decimal('100000'),
+            date=timezone.localdate(), note='isrof',
+        )
+        today = timezone.localdate()
+        headline = build_finance(self.branch, today.replace(day=1), today, today)
+        this_month = monthly_trend(self.branch, today)[-1]
+        self.assertEqual(this_month['net_profit'], headline['profit']['net_profit'])
+
+    def test_a_refund_takes_its_cost_back_out_of_consumption(self):
+        from .finance import build_finance
+        item = Ingredient.objects.create(
+            branch=self.branch, name='Guruch', unit='kg',
+            quantity=Decimal('100'), unit_cost=Decimal('1000'))
+        recipe = Recipe.objects.create(
+            branch=self.branch, dish=self.dish, name='Osh', yield_quantity=Decimal('1'))
+        RecipeLine.objects.create(
+            recipe=recipe, ingredient=item, quantity=Decimal('2'), batch_cost=Decimal('2000'))
+        prepare(self.owner, self.dish)
+        client = APIClient()
+        client.force_authenticate(self.owner)
+        order = client.post('/api/v1/orders/', {
+            'key': str(uuid4()), 'table': '', 'lines': [{'dish': self.dish.id, 'quantity': 1}],
+            'payment_method': 'cash',
+        }, format='json').data['id']
+        client.post(f'/api/v1/orders/{order}/refund/', {'reason': 'mijoz qaytardi'}, format='json')
+        today = timezone.localdate()
+        report = build_finance(self.branch, today.replace(day=1), today, today)
+        # Sotuv qaytarildi: sarflangan tannarx ham nolga qaytishi kerak.
+        self.assertEqual(report['stock']['consumed'], '0.00')
+        # Qaytarish xarid emas — ombor xaridiga qo'shilmaydi.
+        self.assertEqual(report['cash']['stock_purchases'], '0.00')
+
+
+class WaiterBalanceTests(TestCase):
+    """Ofitsiantga yig'ilganidan ko'p pul berib bo'lmaydi."""
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.waiter = Waiter.objects.create(branch=self.branch, name='Ali', commission=Decimal('10'))
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+
+    def hand_over(self, amount):
+        return self.client.post(f'/api/v1/waiters/{self.waiter.id}/payments/', {
+            'key': str(uuid4()), 'amount': amount, 'payment_method': 'cash',
+            'paid_on': timezone.localdate().isoformat(),
+        }, format='json')
+
+    def earn(self, service):
+        Order.objects.create(
+            branch=self.branch, cashier=self.owner, key=uuid4(), request_hash='x',
+            table='1', waiter_ref=self.waiter, waiter_commission=Decimal('10'),
+            service_charge=service, total=service * 10, status='paid',
+            payment_method='cash', paid_at=timezone.now(),
+        )
+
+    def test_nothing_earned_means_nothing_to_hand_over(self):
+        self.assertEqual(self.hand_over('5000000').status_code, 400)
+        self.assertFalse(WaiterPayment.objects.exists())
+
+    def test_the_collected_amount_can_be_handed_over(self):
+        self.earn(Decimal('50000'))
+        self.assertEqual(self.hand_over('50000').status_code, 201)
+
+    def test_one_som_over_the_balance_is_refused(self):
+        self.earn(Decimal('50000'))
+        self.assertEqual(self.hand_over('50001').status_code, 400)
+
+
+class BackendTranslationTests(SimpleTestCase):
+    """Server yuboradigan har bir xabar uch tilda bo'lishi shart.
+
+    Tekshiruv manba kodini o'qiydi: yangi `_('…')` qo'shilsa-yu, tarjimasi
+    yozilmasa, ruscha ekranda o'zbekcha xabar paydo bo'ladi. Ilgari
+    shunday sakkizta xabar yig'ilib qolgan edi.
+    """
+
+    def test_every_message_has_russian_and_english(self):
+        import ast
+
+        from core.translations import EN, RU
+
+        root = Path(settings.BASE_DIR)
+        used = {}
+        for path in root.rglob('*.py'):
+            if 'migrations' in path.parts or path.name in ('tests.py', 'translations.py'):
+                continue
+            for node in ast.walk(ast.parse(path.read_text(encoding='utf-8'))):
+                if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                        and node.func.id == '_' and node.args
+                        and isinstance(node.args[0], ast.Constant)
+                        and isinstance(node.args[0].value, str)):
+                    used[node.args[0].value] = path.name
+
+        self.assertEqual(sorted(key for key in used if key not in RU), [], 'ruscha tarjimasi yo‘q')
+        self.assertEqual(sorted(key for key in used if key not in EN), [], 'inglizcha tarjimasi yo‘q')

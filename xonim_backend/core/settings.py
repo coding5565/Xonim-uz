@@ -12,7 +12,11 @@ for env_line in (BASE_DIR / '.env').read_text(encoding='utf-8').splitlines() if 
         env_key, env_value = env_line.split('=', 1)
         os.environ.setdefault(env_key.strip(), env_value.strip())
 
-DEBUG = os.environ.get('DJANGO_DEBUG', '1') == '1'
+# Sukut bo'yicha O'CHIQ. Ilgari sukut «1» edi: serverda o'zgaruvchini
+# qo'yish unutilsa, tizim xato izlari ochiq va HTTPS majburlamagan holda
+# ko'tarilardi. Xavfsizlik sozlamasining sukuti hech qachon «ochiq» bo'lmasligi
+# kerak — mahalliy ishga tushirish esa uni ataylab yoqadi (start-local.ps1).
+DEBUG = os.environ.get('DJANGO_DEBUG', '0') == '1'
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
 if not SECRET_KEY:
     if not DEBUG:
@@ -58,7 +62,7 @@ else:
     }}
 PASSWORD_HASHERS = ['django.contrib.auth.hashers.Argon2PasswordHasher', 'django.contrib.auth.hashers.PBKDF2PasswordHasher']
 AUTH_PASSWORD_VALIDATORS = [{'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', 'OPTIONS': {'min_length': 12}}, {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'}, {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'}]
-REST_FRAMEWORK = {'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.SessionAuthentication'], 'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'], 'DEFAULT_THROTTLE_CLASSES': ['rest_framework.throttling.UserRateThrottle', 'rest_framework.throttling.AnonRateThrottle'], 'DEFAULT_THROTTLE_RATES': {'user': '600/min', 'anon': '100/min', 'login': '10/min'}, 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination', 'PAGE_SIZE': 100, 'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer']}
+REST_FRAMEWORK = {'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.SessionAuthentication'], 'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'], 'DEFAULT_THROTTLE_CLASSES': ['rest_framework.throttling.UserRateThrottle', 'rest_framework.throttling.AnonRateThrottle'], 'DEFAULT_THROTTLE_RATES': {'user': '600/min', 'anon': '100/min', 'login': '10/min', 'assistant': '20/min'}, 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination', 'PAGE_SIZE': 100, 'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer']}
 CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', 'http://127.0.0.1:5173,http://localhost:5173').split(',')
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
@@ -67,6 +71,12 @@ SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 SECURE_SSL_REDIRECT = not DEBUG
 SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
+# HSTS butun domenga tarqaladi. Tizim bitta domenda ishlaydi va hammasi
+# HTTPS orqali beriladi, shuning uchun subdomenlarni ham qamrab olamiz.
+# `PRELOAD` faqat sarlavhaga belgi qo'yadi — domen brauzer ro'yxatiga
+# o'z-o'zidan tushmaydi, buning uchun uni alohida yuborish kerak.
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+SECURE_HSTS_PRELOAD = not DEBUG
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
 DATA_UPLOAD_MAX_MEMORY_SIZE = 6 * 1024 * 1024

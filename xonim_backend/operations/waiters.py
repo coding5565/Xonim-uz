@@ -33,7 +33,7 @@ from .models import Order, Waiter, WaiterPayment
 from .money import ZERO, day_window, money, percent
 from .reports import ReportFilters
 from .serializers import WaiterSerializer
-from .services import Conflict, audit
+from .services import Conflict, audit, safely
 
 
 class WaiterViewSet(mixins.ListModelMixin, mixins.CreateModelMixin,
@@ -122,19 +122,23 @@ class WaiterEarningsView(APIView):
 
         # Ulush har buyurtmaning O'Z foizidan hisoblangan va qatorga
         # muzlatilgan — ofitsiantning bugungi foizidan emas, aks holda eski
-        # hisobotlar o'zgarib ketardi.
-        rows = {}
-        for order in paid.values('waiter_ref', 'waiter_ref__name', 'total', 'service_charge'):
-            slot = rows.setdefault(order['waiter_ref'], {
-                'id': order['waiter_ref'],
-                'name': order['waiter_ref__name'],
-                'orders': 0,
-                'revenue': ZERO,
-                'fee': ZERO,
-            })
-            slot['orders'] += 1
-            slot['revenue'] += order['total']
-            slot['fee'] += order['service_charge']
+        # hisobotlar o'zgarib ketardi. Yig'indi bazada olinadi: ilgari bu
+        # yerda har bir buyurtma Pythonda bitta-bitta sanalardi va bir
+        # yillik oraliq butun jadvalni xotiraga tortardi.
+        rows = {
+            row['waiter_ref']: {
+                'id': row['waiter_ref'],
+                'name': row['waiter_ref__name'],
+                'orders': row['orders'],
+                'revenue': row['revenue'],
+                'fee': row['fee'],
+            }
+            for row in paid.values('waiter_ref', 'waiter_ref__name').annotate(
+                orders=Count('id'),
+                revenue=Coalesce(Sum('total'), ZERO),
+                fee=Coalesce(Sum('service_charge'), ZERO),
+            ).order_by()
+        }
 
         total_revenue = sum((row['revenue'] for row in rows.values()), ZERO)
         total_fee = sum((row['fee'] for row in rows.values()), ZERO)
@@ -246,19 +250,39 @@ class WaiterPaymentView(APIView):
             payment_payload(item, item.actor.first_name or item.actor.username) for item in payments
         ])
 
-    @transaction.atomic
     def post(self, request, pk):
-        waiter = self.waiter_of(request, pk)
         data = WaiterPaymentInput(data=request.data)
         data.is_valid(raise_exception=True)
-        fields = data.validated_data
+        # `safely` tashqarida: bir xil kalit bilan kelgan ikkinchi so'rov
+        # unique cheklovga urilib 500 berardi, endi 409 qaytadi.
+        payment, fresh = safely(self._record, request, pk, data.validated_data)
+        return Response(
+            payment_payload(payment, payment.actor.first_name or payment.actor.username),
+            status=201 if fresh else 200,
+        )
+
+    @transaction.atomic
+    def _record(self, request, pk, fields):
+        waiter = self.waiter_of(request, pk)
 
         # Takroriy yuborish yangi pul bermaydi: avvalgi yozuvning o'zi qaytadi.
         again = WaiterPayment.objects.filter(branch=request.user.branch, key=fields['key']).first()
         if again:
             if again.waiter_id != waiter.id or again.amount != fields['amount']:
                 raise Conflict(_('Bir xil amal kaliti boshqa ma’lumot bilan yuborildi.'))
-            return Response(payment_payload(again, again.actor.first_name or again.actor.username))
+            return again, False
+
+        # Bu pul mijozdan ofitsiant nomiga yig'ilgan. Yig'ilganidan ko'p
+        # berish — restoranning o'z pulini berish, ya'ni boshqa narsa.
+        # Ish haqidan farqi shunda: u yerda avans mumkin, bu yerda esa
+        # berishga hech narsa yo'q. Ilgari bu tekshirilmasdi va balans
+        # jimgina minusga tushib ketardi.
+        earned, handed = waiter_books(request.user.branch)
+        balance = earned.get(waiter.id, ZERO) - handed.get(waiter.id, ZERO)
+        if fields['amount'] > balance:
+            raise serializers.ValidationError({'amount': _(
+                'Ofitsiant hisobida {balance} so‘m bor, undan ko‘p berib bo‘lmaydi.',
+            ).format(balance=money(balance))})
 
         payment = WaiterPayment.objects.create(
             branch=request.user.branch, waiter=waiter, actor=request.user,
@@ -269,5 +293,4 @@ class WaiterPaymentView(APIView):
             request.user, 'waiter.pay',
             f'{waiter.name} · {payment.amount} so‘m · {payment.paid_on:%d.%m.%Y}',
         )
-        return Response(
-            payment_payload(payment, request.user.first_name or request.user.username), status=201)
+        return payment, True

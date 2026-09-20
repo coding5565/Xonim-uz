@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 from html import escape
@@ -5,9 +6,15 @@ from io import BytesIO
 from uuid import uuid4
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from django.contrib.auth import authenticate, login, logout, password_validation
+from django.contrib.auth import (
+    authenticate,
+    login,
+    logout,
+    password_validation,
+    update_session_auth_hash,
+)
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Max, OuterRef, Subquery, Sum
 from django.http import HttpResponse
 from django.middleware.csrf import get_token
 from django.utils import timezone
@@ -20,11 +27,18 @@ from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
 from core.i18n import _
-from operations.models import SALE_PAYMENT_METHODS, WORK_DAYS_PER_WEEK, SalaryPayment
-from operations.services import Conflict, audit, create_expense
+from operations.models import (
+    SALE_PAYMENT_METHODS,
+    WORK_DAYS_PER_WEEK,
+    Attendance,
+    SalaryPayment,
+)
+from operations.services import Conflict, audit, create_expense, safely
 
 from .models import AuditEvent, User, audit_group, audit_label
-from .permissions import OwnerOnly, SalesOnly
+from .permissions import BranchMember, OwnerOnly, SalesOnly
+
+logger = logging.getLogger(__name__)
 
 
 def salary_register_xlsx(payments):
@@ -68,6 +82,10 @@ def profile(user):
     return {
         'id': user.id, 'username': user.username, 'name': user.first_name or user.username,
         'role': user.role, 'branch': user.branch.name if user.branch else None,
+        # Mijoz menyusining manzili filialga bog'liq. Ilgari u frontendda
+        # «xonim» deb yozib qo'yilgan edi va ikkinchi filial o'z menyusini
+        # umuman ocholmasdi.
+        'branch_slug': user.branch.slug if user.branch else None,
         # Session bootstrap config: the till and the reports render whatever is listed here.
         'payment_methods': [{'method': method, 'label': label} for method, label in SALE_PAYMENT_METHODS],
     }
@@ -82,6 +100,25 @@ class CsrfView(APIView):
 
 class LoginThrottle(AnonRateThrottle):
     scope = 'login'
+
+
+def failed_login(request, username):
+    """Muvaffaqiyatsiz kirish urinishini jurnalga yozadi.
+
+    `AuditEvent` filial va xodimga bog'langan, shuning uchun yozuv faqat
+    mavjud login uchun tushadi — aynan o'sha muhim holat: kimdir HAQIQIY
+    hisobning parolini terib ko'ryapti. Noma'lum login server jurnaliga
+    tushadi, bazaga emas: aks holda tasodifiy matn bilan jadvalni
+    to'ldirib tashlash mumkin bo'lardi.
+    """
+    person = User.objects.filter(username__iexact=username).exclude(branch__isnull=True).first()
+    if not person:
+        logger.info('Nomaʼlum login bilan kirishga urinildi')
+        return
+    AuditEvent.objects.create(
+        branch=person.branch, actor=person, action='auth.failed',
+        description=f'{person.first_name or person.username} · parol noto‘g‘ri',
+    )
 
 
 class LoginInput(serializers.Serializer):
@@ -99,6 +136,10 @@ class LoginView(APIView):
         data.is_valid(raise_exception=True)
         user = authenticate(request, **data.validated_data)
         if not user or not user.branch_id:
+            # Muvaffaqiyatsiz urinish ham jurnalga tushadi: parol terib
+            # ko'rayotganini egasi «Harakatlar» bo'limida ko'rishi kerak.
+            # Kiritilgan parol hech qachon yozilmaydi.
+            failed_login(request, data.validated_data['username'])
             return Response({'detail': _('Login yoki parol noto‘g‘ri.')}, status=400)
         login(request, user)
         audit(user, 'auth.login', f'{user.first_name or user.username} · {user.get_role_display()}')
@@ -236,6 +277,50 @@ class StaffUpdateInput(serializers.Serializer):
     hired_at = serializers.DateField(allow_null=True, required=False)
     notes = serializers.CharField(max_length=300, allow_blank=True, required=False)
     active = serializers.BooleanField(required=False)
+    # Yangi parol shu yerdan qo'yiladi. Ilgari maydon yo'q edi va yuborilgan
+    # parolni DRF jimgina tashlab yuborardi: so'rov 200 qaytarar, parol esa
+    # eski bo'lib qolardi.
+    password = serializers.CharField(min_length=12, max_length=128, trim_whitespace=False,
+                                     required=False, write_only=True)
+
+    def validate_password(self, value):
+        password_validation.validate_password(value)
+        return value
+
+
+class PasswordChangeInput(serializers.Serializer):
+    """Xodim o'z parolini almashtiradi. Eski parol tasdiq uchun so'raladi."""
+
+    current_password = serializers.CharField(max_length=256, trim_whitespace=False)
+    new_password = serializers.CharField(min_length=12, max_length=128, trim_whitespace=False)
+
+    def validate_new_password(self, value):
+        password_validation.validate_password(value)
+        return value
+
+
+class PasswordChangeView(APIView):
+    """Har qanday xodim o'z parolini o'zgartiradi.
+
+    Parolni almashtirishning yo'li umuman yo'q edi: unutilgan parol
+    xodimga yangi hisob ochishni talab qilardi, jurnal esa eski hisobga
+    bog'langanicha qolardi.
+    """
+
+    permission_classes = [BranchMember]
+
+    def post(self, request):
+        data = PasswordChangeInput(data=request.data)
+        data.is_valid(raise_exception=True)
+        if not request.user.check_password(data.validated_data['current_password']):
+            raise serializers.ValidationError({'current_password': _('Joriy parol noto‘g‘ri.')})
+        request.user.set_password(data.validated_data['new_password'])
+        request.user.save(update_fields=['password'])
+        # Sessiya parol o'zgargach yaroqsiz bo'lib qolmasligi kerak — xodim
+        # o'z ishini davom ettiradi, boshqa qurilmalardagi sessiyalar esa uziladi.
+        update_session_auth_hash(request, request.user)
+        audit(request.user, 'auth.password', f'{request.user.first_name or request.user.username} · parol almashtirildi')
+        return Response({'detail': _('Parol almashtirildi.')})
 
 
 class SalaryPaymentInput(serializers.Serializer):
@@ -258,11 +343,41 @@ class SalaryPaymentInput(serializers.Serializer):
         return value
 
 
-def staff_payload(user):
-    latest = max(user.salary_payments.all(), key=lambda item: (item.paid_on, item.id), default=None)
+def staff_totals(branch):
+    """Har bir xodimning umrlik balansi, bitta so'rov bilan.
+
+    Ilgari bu qiymatlar har bir xodim uchun uning BUTUN davomat va to'lov
+    tarixini xotiraga yuklab hisoblanardi. Bir yil ishlagan oshxonada bu
+    xodimlar ro'yxatini ochishning o'zi minglab qator degani edi.
+    """
+    worked = {
+        row['employee_id']: row
+        for row in Attendance.objects.filter(branch=branch, present=True)
+        .values('employee_id').annotate(total=Sum('daily_wage'), days=Count('id')).order_by()
+    }
+    # Oxirgi to'lov: eng so'nggi sana, teng bo'lsa eng so'nggi yozuv.
+    newest = SalaryPayment.objects.filter(
+        branch=branch, employee_id=OuterRef('employee_id'),
+    ).order_by('-paid_on', '-id')
+    given = {
+        row['employee_id']: row
+        for row in SalaryPayment.objects.filter(branch=branch)
+        .values('employee_id').annotate(
+            total=Sum('amount'),
+            count=Count('id'),
+            last=Max('paid_on'),
+            last_amount=Subquery(newest.values('amount')[:1]),
+        ).order_by()
+    }
+    return worked, given
+
+
+def staff_payload(user, totals=None):
+    worked, given = totals if totals is not None else staff_totals(user.branch)
+    work_row, pay_row = worked.get(user.id, {}), given.get(user.id, {})
     # Balans hamma vaqt bo'yicha: yig'ilgan haq − berilgan pul.
-    earned = sum((row.daily_wage for row in user.attendances.all() if row.present), Decimal('0'))
-    paid = sum((item.amount for item in user.salary_payments.all()), Decimal('0'))
+    earned = work_row.get('total') or Decimal('0')
+    paid = pay_row.get('total') or Decimal('0')
     return {
         'id': user.id,
         'name': user.first_name or user.username,
@@ -275,12 +390,12 @@ def staff_payload(user):
         'hired_at': user.hired_at,
         'notes': user.notes,
         'last_login': user.last_login,
-        'days_worked': sum(1 for row in user.attendances.all() if row.present),
+        'days_worked': work_row.get('days', 0),
         'earned': str(earned),
         'paid': str(paid),
         'balance': str(earned - paid),
-        'last_salary_amount': str(latest.amount) if latest else None,
-        'last_salary_paid_on': latest.paid_on if latest else None,
+        'last_salary_amount': str(pay_row['last_amount']) if pay_row.get('last_amount') is not None else None,
+        'last_salary_paid_on': pay_row.get('last'),
     }
 
 
@@ -295,8 +410,10 @@ class StaffView(APIView):
     permission_classes = [OwnerOnly]
 
     def get(self, request):
-        staff = User.objects.filter(branch=request.user.branch).prefetch_related('salary_payments', 'attendances').order_by('role', 'first_name', 'username')
-        return Response([staff_payload(user) for user in staff])
+        staff = User.objects.filter(branch=request.user.branch).order_by('role', 'first_name', 'username')
+        # Yig'indilar bir marta olinadi va hamma qatorga tarqatiladi.
+        totals = staff_totals(request.user.branch)
+        return Response([staff_payload(user, totals) for user in staff])
 
     @transaction.atomic
     def post(self, request):
@@ -333,7 +450,10 @@ class StaffDetailView(APIView):
             raise serializers.ValidationError(_('Superadmin hisobini bu yerdan o‘zgartirib bo‘lmaydi.'))
         serializer = StaffUpdateInput(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
+        data = dict(serializer.validated_data)
+        # Parol alohida yo'l bilan yoziladi: uni boshqa maydonlar kabi
+        # o'rnatib qo'ysak, bazaga ochiq matn tushib qolardi.
+        password = data.pop('password', None)
         field_map = {'name': 'first_name', 'active': 'is_active'}
         changed = []
         for field, value in data.items():
@@ -341,6 +461,9 @@ class StaffDetailView(APIView):
             if getattr(user, model_field) != value:
                 setattr(user, model_field, value)
                 changed.append(model_field)
+        if password:
+            user.set_password(password)
+            changed.append('password')
         if changed:
             user.save(update_fields=changed)
             AuditEvent.objects.create(branch=request.user.branch, actor=request.user, action='staff.update', description=f'{user.first_name} · {", ".join(changed)}')
@@ -372,16 +495,25 @@ class SalaryPaymentView(APIView):
             payment_payload(item, item.actor.first_name or item.actor.username) for item in payments
         ])
 
-    @transaction.atomic
     def post(self, request, pk):
+        serializer = SalaryPaymentInput(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        # `safely` tashqarida: takroriy kalit bilan kelgan ikkinchi so'rov
+        # birinchisi yozilib ulgurgan paytda unique cheklovga urilardi va
+        # foydalanuvchi 500 ko'rardi. Endi bu 409 bo'lib qaytadi.
+        payment, fresh = safely(self._record, request, pk, serializer.validated_data)
+        return Response(
+            payment_payload(payment, payment.actor.first_name or payment.actor.username),
+            status=201 if fresh else 200,
+        )
+
+    @transaction.atomic
+    def _record(self, request, pk, data):
         employee = User.objects.select_for_update().filter(branch=request.user.branch, pk=pk).first()
         if not employee:
             raise serializers.ValidationError(_('Xodim topilmadi.'))
         if employee.role == User.Role.OWNER:
             raise serializers.ValidationError(_('Superadmin ish haqi bu bo‘limda yuritilmaydi.'))
-        serializer = SalaryPaymentInput(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
 
         # Takroriy yuborish: bir xil kalit bilan kelgan so'rov yangi pul
         # bermaydi, avvalgi yozuvning o'zini qaytaradi.
@@ -389,7 +521,7 @@ class SalaryPaymentView(APIView):
         if again:
             if again.employee_id != employee.id or again.amount != data['amount']:
                 raise Conflict(_('Bir xil amal kaliti boshqa ma’lumot bilan yuborildi.'))
-            return Response(payment_payload(again, again.actor.first_name or again.actor.username), status=200)
+            return again, False
 
         expense = create_expense(request.user, {
             'key': uuid4(),
@@ -417,8 +549,7 @@ class SalaryPaymentView(APIView):
             branch=request.user.branch, actor=request.user, action='salary.pay',
             description=f'{employee.first_name or employee.username} · {payment.amount} so‘m · {payment.paid_on:%d.%m.%Y}',
         )
-        return Response(
-            payment_payload(payment, request.user.first_name or request.user.username), status=201)
+        return payment, True
 
 
 class SalaryPaymentExportView(APIView):

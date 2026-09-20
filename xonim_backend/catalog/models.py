@@ -38,7 +38,14 @@ class Dish(models.Model):
 
     class Meta:
         ordering = ['category__position', 'id']
-        constraints = [models.CheckConstraint(condition=Q(price__gt=0), name='dish_positive_price')]
+        constraints = [
+            models.CheckConstraint(condition=Q(price__gt=0), name='dish_positive_price'),
+            # Nom filial ichida yagona: chek, oshxona taloni va hisobotlar
+            # taomni NOMI bilan ko'rsatadi, shuning uchun ikkita bir xil nom
+            # ularni ajratib bo'lmaydigan qilib qo'yardi. Kategoriyada bu
+            # cheklov boshidan bor edi, taomda esa tushib qolgan.
+            models.UniqueConstraint(fields=['branch', 'name'], name='dish_branch_name'),
+        ]
 
     @property
     def print_station(self):

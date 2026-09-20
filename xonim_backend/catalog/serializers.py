@@ -38,6 +38,16 @@ class DishSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(_('Kategoriya ushbu filialga tegishli emas.'))
         return category
 
+    def validate_name(self, name):
+        # Filial ichida nom yagona (UniqueConstraint). Bu yerda tekshirilmasa
+        # baza IntegrityError beradi va foydalanuvchi 500 xatosini ko'rardi.
+        query = Dish.objects.filter(branch=self.context['request'].user.branch, name__iexact=name)
+        if self.instance:
+            query = query.exclude(pk=self.instance.pk)
+        if query.exists():
+            raise serializers.ValidationError(_('Bu nomli taom allaqachon bor.'))
+        return name
+
     def validate_image(self, value):
         if not value:
             return value

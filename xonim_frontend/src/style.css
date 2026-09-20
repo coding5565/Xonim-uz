@@ -851,6 +851,21 @@ tbody tr{transition:background var(--fast) var(--ease)}
 .spin{animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
+/* Jadval qatoridagi tuzatish/o'chirish tugmalari */
+.row-actions{white-space:nowrap;text-align:right}
+.row-actions .icon-button{width:30px;height:30px}
+.row-actions .icon-button+.icon-button{margin-left:4px}
+
+/* Parolni almashtirish shakli */
+.password-form{padding:16px}
+.password-form .form-row{margin-bottom:12px}
+
+/* Sahifa yuklanayotgani. Ilgari bu joyda bo'sh ekran turardi va tarmoq
+   sekin bo'lganda ilova osilib qolgandek ko'rinardi. */
+.route-loading{display:grid;place-items:center;min-height:60vh}
+.route-spinner{width:26px;height:26px;border-radius:50%;border:2.5px solid var(--line);border-top-color:#4b8f6c;animation:spin .8s linear infinite}
+@media(prefers-reduced-motion:reduce){.route-spinner{animation-duration:2.4s}}
+
 /* ── 3. Fokus: klaviatura bilan ishlash ko'rinadigan bo'lsin ───────────── */
 :where(button,a,input,select,textarea,[tabindex]):focus-visible{
   outline:2px solid var(--green-600);

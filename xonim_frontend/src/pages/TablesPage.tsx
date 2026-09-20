@@ -31,6 +31,12 @@ const COUNTERS: { channel: SaleChannel; path: string; name: string; mark?: strin
 /** Matn tarjimoni — modul darajasidagi funksiyalarga hook o'rniga uzatiladi. */
 type Translate = (text: string, vars?: Record<string, string | number>) => string
 
+/** Ochiq tasdiq oynasi. `undefined` — hech narsa so'ralmayapti. */
+type Dialog =
+  | { kind: 'remove-line'; lineId: number; name: string }
+  | { kind: 'discount' }
+  | { kind: 'cancel' }
+
 function minutesSince(iso: string, t: Translate) {
   const passed = Math.round((Date.now() - new Date(iso).getTime()) / 60000)
   if (passed < 1) return t('hozir')
@@ -74,6 +80,13 @@ export default function TablesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  // Tasdiqlash va matn so'rash uchun brauzerning confirm()/prompt() oynalari
+  // ishlatilardi. Planshetda ular ilovaning o'ziga o'xshamaydi, uslub
+  // qo'llab bo'lmaydi va kiosk rejimida umuman o'chirib qo'yilishi mumkin —
+  // shunda chegirma ham, bekor qilish ham ishlamay qolardi.
+  const [dialog, setDialog] = useState<Dialog>()
+  const [reasonText, setReasonText] = useState('')
+  const [discountText, setDiscountText] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -136,7 +149,6 @@ export default function TablesPage() {
   /** Noto'g'ri bosilgan taomni ochiq hisobdan olib tashlaydi. */
   async function removeLine(lineId: number, name: string) {
     if (!bill) return
-    if (!confirm(t('«{name}» hisobdan olib tashlansinmi?', { name }))) return
     setBusy(true)
     setError('')
     setNotice('')
@@ -148,37 +160,32 @@ export default function TablesPage() {
       setError((exception as Error).message)
     } finally {
       setBusy(false)
+      setDialog(undefined)
     }
   }
 
   /** Chegirma so'mda kiritiladi; foiz tanlansa summaga aylantiriladi. */
-  async function setDiscount() {
+  async function applyDiscount() {
     if (!bill) return
     const gross = Number(bill.total) + Number(bill.discount)
-    const typed = prompt(
-      t('Chegirma summasi, so‘m (yoki «10%» ko‘rinishida).\nHisob summasi: {sum} so‘m.\nOlib tashlash uchun 0 yozing.',
-        { sum: money(gross) }),
-      bill.discount === '0.00' ? '' : bill.discount,
-    )
-    if (typed === null) return
-    const trimmed = typed.trim()
-    const amount = trimmed.endsWith('%')
-      ? Math.round(gross * Number(trimmed.slice(0, -1)) / 100)
-      : Number(trimmed)
+    const typed = discountText.trim()
+    const amount = typed.endsWith('%')
+      ? Math.round(gross * Number(typed.slice(0, -1)) / 100)
+      : Number(typed)
     if (!Number.isFinite(amount) || amount < 0) return setError(t('Chegirma noto‘g‘ri kiritildi.'))
-    const reason = amount ? prompt(t('Chegirma sababi?')) : ''
-    if (amount && (!reason || !reason.trim())) return
+    if (amount && !reasonText.trim()) return setError(t('Chegirma sababini yozing.'))
     setBusy(true)
     setError('')
     setNotice('')
     try {
       setBill(await api<Order>(`orders/${bill.id}/discount/`, {
         method: 'POST',
-        body: JSON.stringify({ amount: String(amount), reason: (reason || '').trim() }),
+        body: JSON.stringify({ amount: String(amount), reason: reasonText.trim() }),
       }))
       setNotice(amount
         ? t('Chegirma qo‘llandi: {sum} so‘m.', { sum: money(amount) })
         : t('Chegirma olib tashlandi.'))
+      setDialog(undefined)
       await load()
     } catch (exception) {
       setError((exception as Error).message)
@@ -190,12 +197,12 @@ export default function TablesPage() {
   /** Butun hisobni to'lovsiz yopadi. Sabab so'raladi — jurnalga yoziladi. */
   async function cancelBill() {
     if (!bill) return
-    const reason = prompt(t('Nima uchun bekor qilinyapti?'))
-    if (!reason || reason.trim().length < 3) return
+    if (reasonText.trim().length < 3) return setError(t('Sababni yozing.'))
     setBusy(true)
     setError('')
     try {
-      await api(`orders/${bill.id}/cancel/`, { method: 'POST', body: JSON.stringify({ reason: reason.trim() }) })
+      await api(`orders/${bill.id}/cancel/`, { method: 'POST', body: JSON.stringify({ reason: reasonText.trim() }) })
+      setDialog(undefined)
       setSelected(undefined)
       setBill(undefined)
       await load()
@@ -204,6 +211,14 @@ export default function TablesPage() {
     } finally {
       setBusy(false)
     }
+  }
+
+  /** Oynani ochadi va maydonlarni tozalaydi. */
+  function ask(next: Dialog) {
+    setError('')
+    setReasonText('')
+    setDiscountText(next.kind === 'discount' && bill?.discount !== '0.00' ? (bill?.discount || '') : '')
+    setDialog(next)
   }
 
   async function reprint() {
@@ -356,7 +371,7 @@ export default function TablesPage() {
                       ? t('Oxirgi qator — butun hisobni bekor qiling')
                       : t('Olib tashlash')}
                     aria-label={t('{name} ni olib tashlash', { name: line.name })}
-                    onClick={() => removeLine(line.id, line.name)}
+                    onClick={() => ask({ kind: 'remove-line', lineId: line.id, name: line.name })}
                   >
                     <Trash2 size={15} />
                   </button>
@@ -391,13 +406,105 @@ export default function TablesPage() {
             <button className="button secondary full" disabled={busy} onClick={reprint}>
               <Printer size={17} />{t('Chekni chop etish')}
             </button>
-            <button className="button secondary full" disabled={busy} onClick={setDiscount}>
+            <button className="button secondary full" disabled={busy} onClick={() => ask({ kind: 'discount' })}>
               <BadgePercent size={17} />{Number(bill.discount) > 0 ? t('Chegirmani o‘zgartirish') : t('Chegirma berish')}
             </button>
-            <button className="button danger full" disabled={busy} onClick={cancelBill}>
+            <button className="button danger full" disabled={busy} onClick={() => ask({ kind: 'cancel' })}>
               <Ban size={17} />{t('Hisobni bekor qilish')}
             </button>
           </>
+        )}
+      </AppModal>
+
+      {/* Tasdiqlash oynalari. Ilgari bu uchtasi brauzerning confirm() va
+          prompt() oynalari edi. */}
+      <AppModal
+        open={dialog?.kind === 'remove-line'}
+        title={t('Taomni olib tashlash')}
+        onClose={() => { if (!busy) setDialog(undefined) }}
+      >
+        {dialog?.kind === 'remove-line' && (
+          <>
+            <p className="data-note">
+              {t('«{name}» hisobdan olib tashlansinmi?', { name: dialog.name })}
+            </p>
+            {error && <p className="alert error">{error}</p>}
+            <button
+              className="button danger full"
+              disabled={busy}
+              onClick={() => removeLine(dialog.lineId, dialog.name)}
+            >
+              <Trash2 size={17} />{t('Olib tashlash')}
+            </button>
+            <button className="button secondary full" disabled={busy} onClick={() => setDialog(undefined)}>
+              {t('Bekor qilish')}
+            </button>
+          </>
+        )}
+      </AppModal>
+
+      <AppModal
+        open={dialog?.kind === 'discount'}
+        title={t('Chegirma')}
+        onClose={() => { if (!busy) setDialog(undefined) }}
+      >
+        {dialog?.kind === 'discount' && bill && (
+          <form onSubmit={event => { event.preventDefault(); applyDiscount() }}>
+            <p className="data-note">
+              {t('Hisob summasi: {sum} so‘m. Olib tashlash uchun 0 yozing.', {
+                sum: money(Number(bill.total) + Number(bill.discount)),
+              })}
+            </p>
+            <label>
+              {t('Chegirma summasi, so‘m (yoki «10%» ko‘rinishida)')}
+              <input
+                value={discountText}
+                onChange={event => setDiscountText(event.target.value)}
+                placeholder="0"
+                autoFocus
+              />
+            </label>
+            <label>
+              {t('Chegirma sababi')}
+              <input
+                value={reasonText}
+                onChange={event => setReasonText(event.target.value)}
+                maxLength={120}
+                placeholder={t('Masalan: doimiy mijoz')}
+              />
+            </label>
+            {error && <p className="alert error">{error}</p>}
+            <button className="button primary full" disabled={busy}>
+              {busy ? t('Saqlanmoqda…') : t('Saqlash')}
+            </button>
+          </form>
+        )}
+      </AppModal>
+
+      <AppModal
+        open={dialog?.kind === 'cancel'}
+        title={t('Hisobni bekor qilish')}
+        onClose={() => { if (!busy) setDialog(undefined) }}
+      >
+        {dialog?.kind === 'cancel' && (
+          <form onSubmit={event => { event.preventDefault(); cancelBill() }}>
+            <p className="data-note">{t('Hisob tarixda qoladi, lekin tushumga kirmaydi.')}</p>
+            <label>
+              {t('Nima uchun bekor qilinyapti?')}
+              <input
+                value={reasonText}
+                onChange={event => setReasonText(event.target.value)}
+                maxLength={200}
+                minLength={3}
+                required
+                autoFocus
+              />
+            </label>
+            {error && <p className="alert error">{error}</p>}
+            <button className="button danger full" disabled={busy}>
+              <Ban size={17} />{busy ? t('Saqlanmoqda…') : t('Bekor qilish')}
+            </button>
+          </form>
         )}
       </AppModal>
     </>

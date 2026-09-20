@@ -14,7 +14,7 @@ from catalog.models import Category, Dish
 from core.i18n import _
 
 from .models import SALE_CHANNEL_LABELS, SALE_PAYMENT_LABELS, Order, OrderLine
-from .money import CENT
+from .money import CENT, money, percent
 
 
 def discount_cuts(lines):
@@ -136,24 +136,21 @@ def build_sales_report(user, filters):
         lines = lines.filter(dish__category_id=filters['category'])
     if filters.get('dish'):
         lines = lines.filter(dish_id=filters['dish'])
-    line_rows = list(lines)
-    included_order_ids = {line.order_id for line in line_rows}
-    included_orders = [order for order in orders if order.id in included_order_ids]
-    earned = allocate_discount(line_rows)
-
-    revenue = sum(earned.values(), Decimal('0'))
-    cost = sum((line.cost_total for line in line_rows), Decimal('0'))
-    items_sold = sum(line.quantity for line in line_rows)
-    order_count = len(included_orders)
-    order_method = {order.id: order.payment_method for order in included_orders}
+    revenue = cost = Decimal('0')
+    items_sold = 0
+    order_method = {}
     method_map = defaultdict(Decimal)
-
     trend_map = defaultdict(lambda: {'revenue': Decimal('0'), 'cost': Decimal('0'), 'orders': set(), 'items': 0})
     category_map = defaultdict(lambda: {'category_id': 0, 'category': '', 'quantity': 0, 'revenue': Decimal('0'), 'cost': Decimal('0'), 'orders': set()})
     dish_map = defaultdict(lambda: {'dish_id': 0, 'dish': '', 'category': '', 'quantity': 0, 'revenue': Decimal('0'), 'cost': Decimal('0'), 'orders': set()})
-    for line in line_rows:
+
+    def collect(line, amount):
+        nonlocal revenue, cost, items_sold
+        revenue += amount
+        cost += line.cost_total
+        items_sold += line.quantity
+        order_method[line.order_id] = line.order.payment_method
         period = _period_key(line.order.paid_at, filters['group'])
-        amount = earned[line.id]
         trend_map[period]['revenue'] += amount
         trend_map[period]['cost'] += line.cost_total
         trend_map[period]['orders'].add(line.order_id)
@@ -171,7 +168,27 @@ def build_sales_report(user, filters):
         item['revenue'] += amount
         item['cost'] += line.cost_total
         item['orders'].add(line.order_id)
-        method_map[order_method.get(line.order_id, '')] += amount
+        method_map[line.order.payment_method or ''] += amount
+
+    # Qatorlar oqim bilan o'qiladi va darhol yig'indilarga qo'shiladi.
+    # Ilgari butun davr (uch yilgacha) ro'yxatga yig'ilardi — katta bazada
+    # bu bitta so'rovda yuz minglab obyekt degani.
+    #
+    # Xotirada faqat CHEGIRMALI hisoblarning qatorlari qoladi: ularning
+    # tushumini bilish uchun bitta hisobning hamma qatorini birga ko'rish
+    # kerak. Chegirmasiz qatorning tushumi esa menyu narxining o'zi, ya'ni
+    # uni saqlab turishning hojati yo'q.
+    discounted = []
+    for line in lines.iterator(chunk_size=2000):
+        if line.order.discount:
+            discounted.append(line)
+        else:
+            collect(line, line.price * line.quantity)
+    earned = allocate_discount(discounted)
+    for line in discounted:
+        collect(line, earned[line.id])
+
+    order_count = len(order_method)
 
     trend = []
     cursor = filters['start'].replace(day=1) if filters['group'] == 'month' else filters['start']
@@ -195,9 +212,12 @@ def build_sales_report(user, filters):
             'category': filters.get('category'), 'dish': filters.get('dish'),
         },
         'summary': {
+            # Yaxlitlash sahifaning qolgan qismi bilan bir xil: ikki xona.
+            # Ilgari bu yerda xom bo'linma turardi va hisobot «33.33333333…»
+            # ko'rsatib, Moliya sahifasidagi «33.33» dan farq qilardi.
             'revenue': str(revenue), 'cost': str(cost), 'gross_profit': str(revenue - cost),
-            'gross_margin': str((revenue - cost) / revenue * 100 if revenue else 0), 'orders': order_count, 'items': items_sold,
-            'average_check': str(revenue / order_count if order_count else 0),
+            'gross_margin': percent(revenue - cost, revenue), 'orders': order_count, 'items': items_sold,
+            'average_check': money(revenue / order_count) if order_count else money(Decimal('0')),
             'by_method': [
                 {'method': method, 'label': SALE_PAYMENT_LABELS.get(method, method or '—'), 'revenue': str(total)}
                 for method, total in sorted(method_map.items(), key=lambda row: row[1], reverse=True)
@@ -300,8 +320,9 @@ def build_sales_board(user, filters):
     left out: this board is for the people selling, not for costing.
     """
     branch = user.branch
-    money = DecimalField(max_digits=18, decimal_places=2)
-    revenue_sum = Sum(F('price') * F('quantity'), output_field=money)
+    # Modul darajasidagi `money()` ni yopib qo'ymaslik uchun boshqa nom.
+    money_field = DecimalField(max_digits=18, decimal_places=2)
+    revenue_sum = Sum(F('price') * F('quantity'), output_field=money_field)
 
     lines = OrderLine.objects.filter(
         order__branch=branch,

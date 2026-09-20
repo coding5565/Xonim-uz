@@ -27,10 +27,14 @@ from .models import Ingredient, StockMovement
 from .money import money, quantity, share
 
 OUT_KINDS = ['consumption', 'sale_consumption']
+# Qoldiqni oshiradigan harakatlar. Qaytarish ham qoldiqni oshiradi, lekin
+# XARID emas — shuning uchun miqdorga kiradi, xarid puliga kirmaydi.
+IN_KINDS = ['receipt', 'refund']
 KIND_LABELS = {
     'receipt': 'Kirim',
     'consumption': 'Qo‘lda sarf',
     'sale_consumption': 'Sotuv sarfi',
+    'refund': 'Qaytarish',
 }
 class UsageFilters(serializers.Serializer):
     start = serializers.DateField(required=False)
@@ -58,8 +62,13 @@ class UsageFilters(serializers.Serializer):
 # Har aggregatsiyada .order_by() shart: StockMovement.Meta.ordering GROUP BY'ga
 # qo'shilib jamini qatorlarga bo'lib yuborardi.
 SPLIT = {
-    'in_quantity': Sum('quantity', filter=Q(kind='receipt')),
+    # Miqdor bo'yicha qaytarish ham kirim: mahsulot haqiqatan omborga qaytdi
+    # va qoldiqni qayta tiklashda hisobga olinishi shart. Puli esa faqat
+    # haqiqiy xariddan olinadi.
+    'in_quantity': Sum('quantity', filter=Q(kind__in=IN_KINDS)),
     'in_value': Sum('cost_total', filter=Q(kind='receipt')),
+    'returned_quantity': Sum('quantity', filter=Q(kind='refund')),
+    'returned_value': Sum('cost_total', filter=Q(kind='refund')),
     'out_quantity': Sum('quantity', filter=Q(kind__in=OUT_KINDS)),
     'out_value': Sum('cost_total', filter=Q(kind__in=OUT_KINDS)),
     'sale_quantity': Sum('quantity', filter=Q(kind='sale_consumption')),
@@ -136,7 +145,7 @@ def build_usage(user, filters):
     per_item_after = {
         row['ingredient_id']: row
         for row in scope.filter(date__gt=end).values('ingredient_id').annotate(
-            in_quantity=Sum('quantity', filter=Q(kind='receipt')),
+            in_quantity=Sum('quantity', filter=Q(kind__in=IN_KINDS)),
             out_quantity=Sum('quantity', filter=Q(kind__in=OUT_KINDS)),
         ).order_by()
     }
