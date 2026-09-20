@@ -95,7 +95,9 @@ createRoot(document.getElementById('app')!).render(
               <Route path="/recipes" element={<Allow roles={owners}><RecipesPage /></Allow>} />
               <Route path="/staff" element={<Allow roles={['owner']}><StaffPage /></Allow>} />
               <Route path="/activity" element={<Allow roles={['owner']}><ActivityPage /></Allow>} />
-              <Route path="/payroll" element={<Allow roles={['owner']}><PayrollPage /></Allow>} />
+              {/* Davomat va ish haqi kassirga ham ochiq: davomatni u belgilaydi
+                  va pulni ko'pincha u beradi. */}
+              <Route path="/payroll" element={<Allow roles={sales}><PayrollPage /></Allow>} />
               <Route path="/finance" element={<Allow roles={['owner']}><FinancePage /></Allow>} />
               <Route path="/waiters" element={<Allow roles={['owner']}><WaitersPage /></Allow>} />
               <Route path="/tayyor" element={<Allow roles={sales}><PrepPage /></Allow>} />

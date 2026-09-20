@@ -7,6 +7,7 @@ import {
 import { api, money, today as todayKey } from '../api'
 import AppModal from '../components/AppModal'
 import { useI18n } from '../i18n'
+import { useSession } from '../session'
 import { CardsSkeleton, TableSkeleton } from '../components/Skeleton'
 import type { Payroll, PayrollEmployee } from '../types'
 
@@ -27,6 +28,10 @@ function shiftWeek(start: string, days: number) {
 
 export default function PayrollPage() {
   const { t, tn } = useI18n()
+  // Xodimlar bo'limi faqat superadminniki: kassirga havola ko'rsatilsa,
+  // bosgan zahoti uni Kassaga qaytarib yuborardi.
+  const { user } = useSession()
+  const owner = user?.role === 'owner'
   const [params, setParams] = useSearchParams()
   const [data, setData] = useState<Payroll>()
   const [loading, setLoading] = useState(true)
@@ -122,7 +127,7 @@ export default function PayrollPage() {
           <p>{t('Kim keldi, kimga qancha yig‘ildi va kimga qancha berildi.')}</p>
         </div>
         <div className="heading-actions">
-          <Link to="/staff" className="button secondary"><Users size={17} />{t('Xodimlar')}</Link>
+          {owner && <Link to="/staff" className="button secondary"><Users size={17} />{t('Xodimlar')}</Link>}
           <button className="button secondary" disabled={loading} onClick={() => load()}>
             <RefreshCw size={17} className={loading ? 'spin' : undefined} />{t('Yangilash')}
           </button>
@@ -406,7 +411,7 @@ export default function PayrollPage() {
           {!!data.summary.without_wage && (
             <p className="alert">
               {tn('{count} ta xodimning kunlik haqi kiritilmagan — ularga haq yig‘ilmaydi.', data.summary.without_wage)}
-              {' '}<Link to="/staff" className="text-link">{t('Xodimlar bo‘limi')} →</Link>
+              {owner && <> <Link to="/staff" className="text-link">{t('Xodimlar bo‘limi')} →</Link></>}
             </p>
           )}
         </>
