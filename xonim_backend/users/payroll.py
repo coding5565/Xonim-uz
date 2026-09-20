@@ -38,7 +38,7 @@ from operations.money import (
     parse_month,
     short_label,
 )
-from operations.services import audit
+from operations.services import audit, safely
 
 from .models import User
 from .permissions import OwnerOnly, SalesOnly
@@ -354,6 +354,13 @@ def mark_attendance(user, data):
         wage = person.daily_wage if row['present'] else Decimal('0')
         record = existing.get(employee_id)
         if record:
+            # Bir marta yozilgan haq MUZLATILADI. Kunni qayta belgilash uni
+            # bugungi kelishuv bo'yicha qayta hisoblamaydi: aks holda oylikni
+            # ko'tarish o'tgan ikki haftani ham qayta yozib yuborardi.
+            # Yangi summa faqat haq umuman yozilmagan kunga qo'yiladi
+            # (masalan «kelmadi» keyin «keldi»ga o'zgartirilganda).
+            if row['present'] and record.daily_wage:
+                wage = record.daily_wage
             record.present = row['present']
             record.daily_wage = wage
             record.note = row['note']
@@ -390,7 +397,9 @@ class AttendanceView(APIView):
     def post(self, request):
         data = AttendanceInput(data=request.data)
         data.is_valid(raise_exception=True)
-        day = mark_attendance(request.user, data.validated_data)
+        # Ikki kassir bir vaqtda belgilasa, ikkinchisi unique cheklovga
+        # urilib 500 berardi. `safely` uni 409 ga aylantiradi.
+        day = safely(mark_attendance, request.user, data.validated_data)
         today = timezone.localdate()
         return Response(
             build_payroll(request.user.branch, today, today.replace(day=1), day),

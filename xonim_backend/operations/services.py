@@ -1,10 +1,10 @@
 import hashlib
 import json
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from uuid import NAMESPACE_URL, uuid5
 
 from django.conf import settings
-from django.db import transaction
+from django.db import IntegrityError, OperationalError, transaction
 from django.db.models import F
 from django.utils import timezone
 from rest_framework.exceptions import APIException, ValidationError
@@ -39,6 +39,20 @@ class Conflict(APIException):
         # Tarjima aynan shu yerda bajariladi: sinf maydonida yozilsa matn
         # modul yuklanayotganda muzlab qolardi va doim o'zbekcha chiqardi.
         super().__init__(detail or _('Amal holati o‘zgargan. Ma’lumotni yangilang.'), code)
+
+
+def safely(call, *args, **kwargs):
+    """Runs a write and turns a lost insert race into 409 instead of 500.
+
+    Every «read, check, then insert» path has a window: another till can commit
+    the same row between the check and the insert, and the unique constraint
+    then fires. That is a conflict the caller can retry, not a server fault, so
+    it must never reach the user as a 500.
+    """
+    try:
+        return call(*args, **kwargs)
+    except (IntegrityError, OperationalError):
+        raise Conflict(_('Amal boshqa so‘rov bilan to‘qnashdi. Shu amalni qayta tekshiring.')) from None
 
 
 def fingerprint(data):
@@ -284,7 +298,8 @@ def _record_order(user, data):
         channel_commission=platform_commission(user.branch, channel),
         total=total, status='paid' if paid else 'open',
         # Xizmat haqi hisob ustiga qo'shiladi va to'liq ofitsiantga o'tadi.
-        service_charge=(total * commission / 100).quantize(Decimal('0.01'))
+        # Yaxlitlash `service_charge_for` bilan bir xil bo'lishi shart.
+        service_charge=(total * commission / 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         if waiter and channel == 'hall' else Decimal('0'),
         payment_method=data['payment_method'], paid_at=timezone.now() if paid else None,
     )
@@ -388,13 +403,28 @@ def _open_order(user, order_id):
     if not order:
         raise ValidationError(_('Buyurtma topilmadi.'))
     if order.status != 'open':
-        raise Conflict(f'Bu hisob «{ORDER_STATUS_LABELS[order.status]}» holatida — o‘zgartirib bo‘lmaydi.')
+        raise Conflict(_('Bu hisob «{status}» holatida — o‘zgartirib bo‘lmaydi.').format(
+            status=_(ORDER_STATUS_LABELS[order.status])))
+    return order
+
+
+def remove_order_line(user, order_id, line_id):
+    """Ochiq hisobdan bitta qatorni olib tashlaydi, so'ng bekor talonini chiqaradi.
+
+    Chop etish tranzaksiyadan TASHQARIDA — `create_order` dagi bilan bir xil
+    sabab: bu yerda hisob qatori `select_for_update` bilan qulflangan, javob
+    bermagan printer esa ularni 20 soniyagacha ushlab turardi (SQLite'da bu
+    butun bazani yozuvga yopadi).
+    """
+    order, removed = _record_line_removal(user, order_id, line_id)
+    order.print_problems = print_void_ticket(order, removed)
+    _log_print_problems(user, order, order.print_problems)
     return order
 
 
 @transaction.atomic
-def remove_order_line(user, order_id, line_id):
-    """Ochiq hisobdan bitta qatorni olib tashlaydi.
+def _record_line_removal(user, order_id, line_id):
+    """Qatorni o'chiradi. Qaytaradi: (hisob, talonga yoziladigan matn).
 
     Kassir noto'g'ri taom bosib yuborsa shu yo'l bilan qaytaradi. Oxirgi
     qatorni olib tashlab bo'lmaydi: summasi nol hisob mavjud bo'lolmaydi,
@@ -420,16 +450,27 @@ def remove_order_line(user, order_id, line_id):
     order.total = order.total - removed
     order.save(update_fields=refresh_service_charge(order, ['total']))
     audit(user, 'order.line_remove', f'#{order.id} · {name} x{amount} olib tashlandi · −{removed} so‘m')
+    order.refresh_from_db()
     # Oshxona allaqachon talonni olgan bo'lishi mumkin, shuning uchun bekor
     # qilingani ham qog'ozda chiqadi — aks holda taom baribir pishirilardi.
-    order.print_problems = print_void_ticket(order, f'{name} x{amount} BEKOR')
-    order.refresh_from_db()
+    return order, f'{name} x{amount} BEKOR'
+
+
+def cancel_order(user, order_id, reason):
+    """To'lovsiz hisobni bekor qiladi, so'ng oshxonaga bekor talonini yuboradi.
+
+    Chop etish tranzaksiyadan tashqarida: qulflangan hisob qatori printer
+    javobini kutib turmasligi kerak.
+    """
+    order = _record_cancellation(user, order_id, reason)
+    order.print_problems = print_void_ticket(order, 'HISOB BEKOR QILINDI')
+    _log_print_problems(user, order, order.print_problems)
     return order
 
 
 @transaction.atomic
-def cancel_order(user, order_id, reason):
-    """To'lovsiz hisobni bekor qiladi. Yozuv o'chmaydi — tarixda qoladi."""
+def _record_cancellation(user, order_id, reason):
+    """Hisobni bekor qilingan deb belgilaydi. Yozuv o'chmaydi — tarixda qoladi."""
     order = _open_order(user, order_id)
     order.status = 'cancelled'
     order.void_reason = reason
@@ -437,7 +478,6 @@ def cancel_order(user, order_id, reason):
     order.voided_by = user
     order.save(update_fields=['status', 'void_reason', 'voided_at', 'voided_by'])
     audit(user, 'order.cancel', f'#{order.id} · {order.total} so‘m · {reason}')
-    order.print_problems = print_void_ticket(order, 'HISOB BEKOR QILINDI')
     return order
 
 
@@ -454,7 +494,8 @@ def refund_order(user, order_id, reason):
     if order.status == 'refunded':
         return order
     if order.status != 'paid':
-        raise Conflict(f'Faqat to‘langan hisob qaytariladi. Bu hisob «{ORDER_STATUS_LABELS[order.status]}».')
+        raise Conflict(_('Faqat to‘langan hisob qaytariladi. Bu hisob «{status}».').format(
+            status=_(ORDER_STATUS_LABELS[order.status])))
 
     restored = restore_order_stock(user, order)
     order.status = 'refunded'
@@ -472,8 +513,10 @@ def refund_order(user, order_id, reason):
 @transaction.atomic
 def restore_order_stock(user, order):
     """Qaytarilgan buyurtma masalliqlarini omborga qaytaradi."""
+    # Prefiks ataylab ajratuvchi bilan: «#1 buyurtma» qidiruvi «#12 buyurtma»
+    # qatorlarini ham tutib olmasligi kerak.
     moves = list(StockMovement.objects.filter(
-        branch=user.branch, kind='sale_consumption', note__startswith=f'#{order.id} buyurtma',
+        branch=user.branch, kind='sale_consumption', note__startswith=f'#{order.id} buyurtma · ',
     ).select_related('ingredient'))
     if not moves:
         return 0
@@ -489,15 +532,20 @@ def restore_order_stock(user, order):
         ingredient = locked[ingredient_id]
         Ingredient.objects.filter(pk=ingredient_id).update(quantity=F('quantity') + amount)
         key = uuid5(NAMESPACE_URL, f'xonim-refund-stock:{order.id}:{ingredient_id}')
+        # Alohida tur: qaytarish XARID emas. Ilgari u «kirim» bo'lib yozilardi
+        # va ombor tarixida yangi partiya kabi ko'rinardi. Qiymati ham
+        # yoziladi, aks holda «sotilgan tannarx» qaytarilgandan keyin ham
+        # kamaymay qolardi.
         StockMovement.objects.create(
             branch=user.branch, ingredient=ingredient, actor=user, key=key,
             request_hash=fingerprint({'refund': order.id, 'ingredient': ingredient_id, 'quantity': str(amount)}),
-            kind='receipt', quantity=amount, date=timezone.localdate(),
-            unit_cost=ingredient.unit_cost, cost_total=Decimal('0'),
+            kind='refund', quantity=amount, date=timezone.localdate(),
+            unit_cost=ingredient.unit_cost,
+            cost_total=(ingredient.unit_cost * amount).quantize(Decimal('0.01')),
             note=f'#{order.id} buyurtma qaytarildi',
         )
         rows.append((
-            'stock.receipt',
+            'stock.refund',
             f'#{order.id} qaytarildi · {ingredient.name} · +{quantity_text(amount)} {ingredient.unit}',
         ))
     audit_many(user, rows)
@@ -565,7 +613,11 @@ def service_charge_for(order):
     """
     if order.channel != 'hall' or not order.waiter_ref_id or not order.waiter_commission:
         return Decimal('0')
-    return (order.total * order.waiter_commission / 100).quantize(Decimal('0.01'))
+    # ROUND_HALF_UP ataylab: kassa ekrani summani JavaScript'dagi Math.round
+    # bilan ko'rsatadi, u ham yarimni yuqoriga yaxlitlaydi. Decimal'ning
+    # sukutdagi ROUND_HALF_EVEN qoidasi bilan ular rosa yarim tiyinda
+    # ajralib, kassir ekranda boshqa raqam ko'rardi.
+    return (order.total * order.waiter_commission / 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
 
 def refresh_service_charge(order, fields):
@@ -630,6 +682,11 @@ def weighted_unit_cost(stock, quantity, spent):
     """
     if spent is None or spent <= 0:
         return stock.unit_cost
+    # Manfiy qoldiq — hisob haqiqatdan ajralgani belgisi. Uni o'rtachaga
+    # qo'shsak, mavjud bo'lmagan mahsulot yangi partiya narxini pastga
+    # tortib yuborardi. Bunday holatda faqat yangi partiya narxi olinadi.
+    if stock.quantity <= 0:
+        return (spent / quantity).quantize(Decimal('0.0001'))
     total_quantity = stock.quantity + quantity
     if total_quantity <= 0:
         return stock.unit_cost

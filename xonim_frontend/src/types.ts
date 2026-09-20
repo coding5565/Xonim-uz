@@ -1,6 +1,6 @@
 export interface PaymentMethod { method: string; label: string }
 export interface MethodRevenue { method: string; label: string; revenue: string }
-export interface User { id: number; username: string; name: string; role: 'owner' | 'cashier' | 'kitchen'; branch: string; payment_methods: PaymentMethod[] }
+export interface User { id: number; username: string; name: string; role: 'owner' | 'cashier' | 'kitchen'; branch: string; branch_slug: string | null; payment_methods: PaymentMethod[] }
 export type Station = 'kitchen' | 'counter'
 export type TableZone = 'hall_left' | 'hall_right' | 'outside'
 /** Stol ustidagi ochiq hisob. `payable` — mijoz to'laydigan summa. */

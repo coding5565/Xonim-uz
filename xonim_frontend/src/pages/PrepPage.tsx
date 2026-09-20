@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { AlertTriangle, ChefHat, CircleCheck, ClipboardList, CookingPot, Search, Soup } from 'lucide-react'
+import { AlertTriangle, ChefHat, CircleCheck, ClipboardList, CookingPot, Search, Soup, Trash2 } from 'lucide-react'
 import { api, dateLabel } from '../api'
 import { useI18n } from '../i18n'
 import { useSession } from '../session'
 import type { PrepHistory, PrepLeftovers, PrepStatus } from '../types'
+import AppModal from '../components/AppModal'
 import { CardsSkeleton, TableSkeleton } from '../components/Skeleton'
 
 /** Bugun oshxona nechta porsiya tayyorlagani va nechtasi qolgani.
@@ -27,6 +28,8 @@ export default function PrepPage() {
   const [note, setNote] = useState('')
   // Kiritilayotgan miqdorlar: taom id -> matn. Bo'sh qatorlar yuborilmaydi.
   const [draft, setDraft] = useState<Record<number, string>>({})
+  // O'chirish tasdig'i kutayotgan yozuv.
+  const [removing, setRemoving] = useState<PrepHistory['rows'][number]>()
 
   const load = useCallback(async () => {
     try {
@@ -46,7 +49,10 @@ export default function PrepPage() {
     load()
   }, [load])
 
-  const dishes = status?.dishes || []
+  // `status?.dishes || []` har renderda yangi massiv yaratardi va quyidagi
+  // useMemo hech qachon keshni ishlatmasdi. Endi bo'sh ro'yxat ham
+  // barqaror bo'ladi.
+  const dishes = useMemo(() => status?.dishes || [], [status])
   const filtered = useMemo(
     () => dishes.filter(row => row.name.toLocaleLowerCase().includes(query.toLocaleLowerCase())),
     [dishes, query],
@@ -67,6 +73,23 @@ export default function PrepPage() {
       setStatus(await api<PrepStatus>('dish-prep/', { method: 'POST', body: JSON.stringify({ lines }) }))
       setDraft({})
       setNote('')
+      setHistory(await api<PrepHistory>('dish-prep/history/'))
+      if (owner) setLeftovers(await api<PrepLeftovers>('dish-prep/leftovers/'))
+    } catch (exception) {
+      setFormError((exception as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Xato kiritilgan partiyani olib tashlaydi. Faqat bugungi yozuv. */
+  async function removeRow() {
+    if (!removing || busy) return
+    setBusy(true)
+    setFormError('')
+    try {
+      setStatus(await api<PrepStatus>(`dish-prep/${removing.id}/`, { method: 'DELETE' }))
+      setRemoving(undefined)
       setHistory(await api<PrepHistory>('dish-prep/history/'))
       if (owner) setLeftovers(await api<PrepLeftovers>('dish-prep/leftovers/'))
     } catch (exception) {
@@ -299,6 +322,7 @@ export default function PrepPage() {
               <tr>
                 <th>{t('TAOM')}</th><th>{t('MIQDOR')}</th><th>{t('IZOH')}</th>
                 <th>{t('KIRITGAN')}</th><th>{t('VAQT')}</th>
+                <th aria-label={t('Amallar')} />
               </tr>
             </thead>
             <tbody>
@@ -309,6 +333,20 @@ export default function PrepPage() {
                   <td>{row.note || <span className="muted">—</span>}</td>
                   <td>{row.actor}</td>
                   <td>{dateLabel(row.created_at)}</td>
+                  <td className="row-actions">
+                    {/* Yozuvlar qo'shilib boradi va manfiy miqdor kiritib
+                        bo'lmaydi, shuning uchun «20 o'rniga 200» xatosini
+                        tuzatishning yagona yo'li — yozuvni olib tashlash. */}
+                    <button
+                      className="icon-button"
+                      aria-label={t('Yozuvni o‘chirish')}
+                      title={t('Yozuvni o‘chirish')}
+                      disabled={busy}
+                      onClick={() => { setFormError(''); setRemoving(row) }}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -320,6 +358,30 @@ export default function PrepPage() {
           )}
         </div>
       </section>
+
+      <AppModal
+        open={!!removing}
+        title={t('Yozuvni o‘chirish')}
+        onClose={() => { if (!busy) setRemoving(undefined) }}
+      >
+        {removing && (
+          <>
+            <p className="data-note">
+              {t('«{name}» · +{count} porsiya — yozuv o‘chirilsinmi?', {
+                name: removing.name, count: removing.quantity,
+              })}
+            </p>
+            <p className="alert">{t('Bugungi qoldiq shu miqdorga kamayadi. Amal jurnalga yoziladi.')}</p>
+            {formError && <p className="alert error">{formError}</p>}
+            <button className="button danger full" disabled={busy} onClick={removeRow}>
+              <Trash2 size={17} />{t(busy ? 'Saqlanmoqda…' : 'O‘chirish')}
+            </button>
+            <button className="button secondary full" disabled={busy} onClick={() => setRemoving(undefined)}>
+              {t('Bekor qilish')}
+            </button>
+          </>
+        )}
+      </AppModal>
 
       <p className="data-note">
         {t('Bu bo‘lim ombordan masalliq ayirmaydi — masalliq sotuv paytida retsept bo‘yicha hisobdan chiqadi. Bu yerda faqat porsiyalar sanaladi.')}

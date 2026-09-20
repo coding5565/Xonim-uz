@@ -1,0 +1,29 @@
+# Tasvirga TUSHMASLIGI kerak bo'lgan narsalar. Birinchi navbatda sirlar:
+# .env va .local-secret tasvirga tushsa, ular tasvirni ochgan har kimga
+# ochiq bo'lardi.
+**/.env
+**/.env.*
+!deploy/.env.example
+**/.local-secret
+.local-access.txt
+
+# Mahalliy baza va yuklangan fayllar — serverda ular alohida diskda.
+**/db.sqlite3
+**/media/
+
+# Qayta yig'iladigan narsalar
+**/node_modules/
+**/dist/
+**/staticfiles/
+.venv/
+**/__pycache__/
+**/*.pyc
+.ruff_cache/
+.run/
+
+# Kerak bo'lmagan kontekst
+.git/
+.github/
+docs/
+*.md
+!deploy/README.md

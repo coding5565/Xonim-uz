@@ -6,6 +6,9 @@ $taskFrontend = Join-Path $taskRoot 'xonim_frontend'
 $taskLogs = Join-Path $taskRoot '.run'
 New-Item -ItemType Directory -Path $taskLogs -Force | Out-Null
 if (-not (Test-Path -LiteralPath $taskPython)) { throw 'Install Python dependencies first; see README.md.' }
+# DJANGO_DEBUG sukut bo'yicha o'chiq (serverda xato izlari ochilib qolmasligi
+# uchun). Mahalliy ishga tushirish uni ataylab yoqadi.
+if (-not $env:DJANGO_DEBUG) { $env:DJANGO_DEBUG = '1' }
 function Start-XonimProcess {
     param([string]$FilePath, [string[]]$Arguments, [string]$WorkingDirectory, [string]$PidPath)
     $taskInfo = [System.Diagnostics.ProcessStartInfo]::new()

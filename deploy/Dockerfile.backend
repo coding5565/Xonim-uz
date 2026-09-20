@@ -1,0 +1,36 @@
+# Django + gunicorn. Statik fayllar va media nginx konteyneriga
+# umumiy disk orqali beriladi (deploy/docker-compose.yml ga qarang).
+FROM python:3.12-slim
+
+# Python konteynerda buferlamasin: aks holda `docker compose logs` da
+# xabarlar kechikib, nosozlikni kuzatish qiyin bo'ladi.
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    DJANGO_SETTINGS_MODULE=core.settings
+
+WORKDIR /app
+
+# Pillow uchun kerak bo'ladigan kutubxonalar. `--no-install-recommends`
+# ataylab: tasvir kichik qolsin.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libjpeg62-turbo zlib1g \
+    && rm -rf /var/lib/apt/lists/*
+
+# Bog'liqliklar alohida qatlamda: kod o'zgarganda ular qayta o'rnatilmaydi.
+COPY xonim_backend/requirements.lock deploy/requirements-deploy.txt ./
+RUN pip install -r requirements.lock -r requirements-deploy.txt
+
+COPY xonim_backend/ /app/
+COPY deploy/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Ildiz huquqi bilan ishlamaydi: konteynerdan chiqib ketilsa ham zarar
+# cheklangan bo'ladi. Statik va media papkalari shu foydalanuvchiniki.
+RUN useradd --system --create-home --uid 10001 xonim \
+    && mkdir -p /var/lib/xonim/static /var/lib/xonim/media \
+    && chown -R xonim:xonim /app /var/lib/xonim
+USER xonim
+
+EXPOSE 8000
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

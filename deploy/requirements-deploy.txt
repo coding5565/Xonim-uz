@@ -1,0 +1,7 @@
+# Faqat serverda kerak bo'ladigan qo'shimcha. Ilova bog'liqliklari
+# xonim_backend/requirements.lock da — u tegilmaydi, chunki CI o'sha
+# ro'yxat bo'yicha testlarni yuritadi.
+#
+# `runserver` serverda ishlatilmaydi: u bitta oqimli va ishlab chiqish
+# uchun mo'ljallangan. gunicorn bir nechta jarayon bilan ishlaydi.
+gunicorn==23.0.0

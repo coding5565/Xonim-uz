@@ -38,6 +38,15 @@ const PrepPage = lazy(() => import('./pages/PrepPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 
 /** Resolves the session before any protected page renders. */
+/** Sahifa yuklanguncha ko'rinadigan belgi. Oq ekran «osilib qoldi»ga o'xshaydi. */
+function Loading() {
+  return (
+    <div className="route-loading" role="status" aria-live="polite">
+      <span className="route-spinner" />
+    </div>
+  )
+}
+
 function RequireAuth() {
   const { user, ready } = useSession()
   const [failed, setFailed] = useState(false)
@@ -47,7 +56,7 @@ function RequireAuth() {
   }, [])
 
   if (failed) return <Navigate to="/login" replace />
-  if (!ready) return null
+  if (!ready) return <Loading />
   if (!user) return <Navigate to="/login" replace />
   return <Outlet />
 }
@@ -62,16 +71,19 @@ function Allow({ roles, children }: { roles: Role[]; children: React.ReactNode }
 const owners: Role[] = ['owner']
 const sales: Role[] = ['owner', 'cashier']
 const kitchen: Role[] = ['owner', 'kitchen']
-const staffed: Role[] = ['owner', 'cashier']
+// Sozlamalar hamma rolga ochiq: parolni almashtirish shu yerda.
+const staffed: Role[] = ['owner', 'cashier', 'kitchen']
 
 createRoot(document.getElementById('app')!).render(
   <StrictMode>
     <I18nProvider>
       <BrowserRouter>
-      <Suspense fallback={null}>
+      <Suspense fallback={<Loading />}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/menu" element={<PublicMenu />} />
+          {/* Har bir filialning o'z manzili bor: /menu/<slug>. */}
+          <Route path="/menu/:slug" element={<PublicMenu />} />
           <Route element={<RequireAuth />}>
             <Route element={<App />}>
               <Route path="/" element={<Allow roles={['owner']}><DashboardPage /></Allow>} />

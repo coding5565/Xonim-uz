@@ -691,6 +691,8 @@ export const ru: Record<string, string> = {
   'O‘zgarishlarni saqlash': 'Сохранить изменения',
   'O‘zgarishni saqlash': 'Сохранить изменение',
   'Parol': 'Пароль',
+  'Parol almashtirildi': 'Пароль изменён',
+  'Parol noto‘g‘ri kiritildi': 'Введён неверный пароль',
   'Parolingizni kiriting': 'Введите пароль',
   'Porsiya': 'Порция',
   'PORSIYA': 'ПОРЦИИ',
@@ -714,6 +716,8 @@ export const ru: Record<string, string> = {
   'Qaysi yo‘nalish ko‘proq sotildi?': 'Что продаётся лучше?',
   'Qayta urinish': 'Повторить',
   'Qaytarilgan': 'Возвращён',
+  'Qaytarilgan masalliq': 'Возвращённый продукт',
+  'Qaytarish': 'Возврат',
   'Qaytim': 'Сдача',
   'Qidirish': 'Поиск',
   'Qidiruv bo‘yicha taom topilmadi.': 'По запросу блюда не найдены.',
@@ -933,6 +937,7 @@ export const ru: Record<string, string> = {
   'TAYYORLANGAN': 'ПРИГОТОВЛЕНО',
   'Tayyorlangan': 'Приготовлено',
   'Tayyorlangan miqdordan ko‘p:': 'Больше, чем приготовлено:',
+  'Tayyorlangan yozuv o‘chirildi': 'Запись о приготовлении удалена',
   'Tayyorlangan − sotilgan = qoldiq': 'Приготовлено − продано = остаток',
   'Tayyorlangandan ko‘p sotildi': 'Продано больше приготовленного',
   'Tayyorlanmoqda': 'Готовится',
@@ -1017,6 +1022,8 @@ export const ru: Record<string, string> = {
   'Xarajat': 'Расход',
   'Xarajat kiritildi': 'Внесён расход',
   'Xarajat kiritish': 'Внести расход',
+  'Xarajat tuzatildi': 'Расход исправлен',
+  'Xarajat o‘chirildi': 'Расход удалён',
   'Xarajat qidirish': 'Поиск расхода',
   'Xarajat qo‘shish': 'Добавить расход',
   'Xarajat tarkibi': 'Структура расходов',
@@ -1186,4 +1193,44 @@ export const ru: Record<string, string> = {
   '«{name}» ro‘yxatdan olinsinmi? Eski hisoblari saqlanib qoladi.': 'Убрать «{name}» из списка? Прежние счета сохранятся.',
   '«{name}» tizimda tugagan. Baribir qo‘shilsinmi?': '«{name}» в системе закончилось. Всё равно добавить?',
   '−{fee} ushlanma ({percent}%) · hisobga {net}': '−{fee} удержание ({percent}%) · на счёт {net}',
+
+  // --- Tasdiq oynalari (ilgari brauzerning confirm/prompt oynalari edi) ---
+  'Taomni olib tashlash': 'Убрать блюдо',
+  'Hisob summasi: {sum} so‘m. Olib tashlash uchun 0 yozing.':
+    'Сумма счёта: {sum} сум. Чтобы убрать скидку, введите 0.',
+  'Chegirma summasi, so‘m (yoki «10%» ko‘rinishida)': 'Сумма скидки, сум (или в виде «10%»)',
+  'Chegirma sababi': 'Причина скидки',
+  'Chegirma sababini yozing.': 'Укажите причину скидки.',
+  'Masalan: doimiy mijoz': 'Например: постоянный гость',
+  'Hisob tarixda qoladi, lekin tushumga kirmaydi.':
+    'Счёт останется в истории, но в выручку не войдёт.',
+  'Sababni yozing.': 'Укажите причину.',
+  'Amallar': 'Действия',
+
+  // --- Xarajatni tuzatish va o'chirish ---
+  'Tuzatish': 'Исправить',
+  'Xarajatni tuzatish': 'Исправить расход',
+  'Tuzatishni saqlash': 'Сохранить исправление',
+  'Tuzatish jurnalga yoziladi: eski va yangi qiymat ko‘rinib turadi.':
+    'Исправление попадёт в журнал: видно старое и новое значение.',
+  'Xarajatni o‘chirish': 'Удалить расход',
+  '«{purpose}» · {sum} so‘m · {date} — o‘chirilsinmi?': '«{purpose}» · {sum} сум · {date} — удалить?',
+  'Yozuv butunlay o‘chadi, lekin o‘chirilgani jurnalda qoladi.':
+    'Запись удаляется полностью, но факт удаления остаётся в журнале.',
+
+  // --- Tayyorlangan yozuvni o'chirish ---
+  'Yozuvni o‘chirish': 'Удалить запись',
+  '«{name}» · +{count} porsiya — yozuv o‘chirilsinmi?': '«{name}» · +{count} порций — удалить запись?',
+  'Bugungi qoldiq shu miqdorga kamayadi. Amal jurnalga yoziladi.':
+    'Сегодняшний остаток уменьшится на это количество. Действие попадёт в журнал.',
+
+  // --- Parolni almashtirish ---
+  'Parolni almashtirish': 'Смена пароля',
+  'Kamida 12 belgi. Almashtirilgandan keyin boshqa qurilmalardagi sessiyalar uziladi.':
+    'Минимум 12 символов. После смены сессии на других устройствах завершатся.',
+  'Joriy parol': 'Текущий пароль',
+  'Yangi parol': 'Новый пароль',
+  'Yangi parolni takrorlang': 'Повторите новый пароль',
+  'Yangi parollar bir xil emas.': 'Новые пароли не совпадают.',
+  'Parol almashtirildi.': 'Пароль изменён.',
 }

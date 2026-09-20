@@ -153,6 +153,15 @@ class ExpenseSerializer(serializers.ModelSerializer):
         fields = ['id', 'key', 'category', 'purpose', 'recipient', 'amount', 'payment_method', 'date', 'actor_name']
         extra_kwargs = {'amount': {'min_value': 1}}
 
+    def get_fields(self):
+        fields = super().get_fields()
+        if self.instance is not None:
+            # Kalit takroriy yuborishdan himoya qiladi. Tahrirda uni
+            # o'zgartirsa bo'lganda, o'sha xarajatni ikkinchi marta yozish
+            # yo'li ochilib qolardi.
+            fields['key'].read_only = True
+        return fields
+
     def validate_date(self, value):
         if value > timezone.localdate():
             raise serializers.ValidationError(_('Kelajakdagi xarajatni hisobga olish mumkin emas.'))
@@ -263,24 +272,31 @@ class RecipeSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(_('Bu nomli retsept allaqachon bor.'))
         return value
 
+    # Pul maydonlari MATN bo'lib chiqadi, xuddi qolgan hamma joydagi kabi.
+    # SerializerMethodField Decimal'ni JSON soniga (float) aylantiradi va
+    # bu yerdagi to'rtta qiymat butun tizimda yagona istisno bo'lib qolgan
+    # edi — `IngredientSerializer` da bu xato allaqachon tuzatilgan.
     def _cost(self, obj):
         return sum((line.batch_cost for line in obj.lines.all()), Decimal('0'))
 
+    def _unit_cost(self, obj):
+        return (self._cost(obj) / obj.yield_quantity).quantize(Decimal('0.01'))
+
     def get_batch_cost(self, obj):
-        return self._cost(obj)
+        return str(self._cost(obj).quantize(Decimal('0.01')))
 
     def get_unit_cost(self, obj):
-        return self._cost(obj) / obj.yield_quantity
+        return str(self._unit_cost(obj))
 
     def get_selling_price(self, obj):
         """Taom narxi. Retseptga alohida narx yozilmaydi."""
-        return obj.dish.price if obj.dish else Decimal('0')
+        return str(obj.dish.price if obj.dish else Decimal('0'))
 
     def get_gross_profit(self, obj):
         """Taomga bog'lanmagan retsept yarim tayyor mahsulot — foydasi yo'q."""
         if not obj.dish:
-            return Decimal('0')
-        return obj.dish.price - self.get_unit_cost(obj)
+            return str(Decimal('0'))
+        return str(obj.dish.price - self._unit_cost(obj))
 
     def validate(self, attrs):
         request = self.context['request']

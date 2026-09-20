@@ -691,6 +691,8 @@ export const en: Record<string, string> = {
   'O‘zgarishlarni saqlash': 'Save changes',
   'O‘zgarishni saqlash': 'Save the change',
   'Parol': 'Password',
+  'Parol almashtirildi': 'Password changed',
+  'Parol noto‘g‘ri kiritildi': 'Wrong password entered',
   'Parolingizni kiriting': 'Enter your password',
   'Porsiya': 'Portion',
   'PORSIYA': 'PORTIONS',
@@ -714,6 +716,8 @@ export const en: Record<string, string> = {
   'Qaysi yo‘nalish ko‘proq sotildi?': 'Which line sells best?',
   'Qayta urinish': 'Try again',
   'Qaytarilgan': 'Refunded',
+  'Qaytarilgan masalliq': 'Returned ingredient',
+  'Qaytarish': 'Return',
   'Qaytim': 'Change',
   'Qidirish': 'Search',
   'Qidiruv bo‘yicha taom topilmadi.': 'No dishes match the search.',
@@ -933,6 +937,7 @@ export const en: Record<string, string> = {
   'TAYYORLANGAN': 'COOKED',
   'Tayyorlangan': 'Cooked',
   'Tayyorlangan miqdordan ko‘p:': 'More than was cooked:',
+  'Tayyorlangan yozuv o‘chirildi': 'Cooked-batch entry removed',
   'Tayyorlangan − sotilgan = qoldiq': 'Cooked − sold = left',
   'Tayyorlangandan ko‘p sotildi': 'Sold beyond what was cooked',
   'Tayyorlanmoqda': 'Cooking',
@@ -1017,6 +1022,8 @@ export const en: Record<string, string> = {
   'Xarajat': 'Costs',
   'Xarajat kiritildi': 'Expense entered',
   'Xarajat kiritish': 'Add expense',
+  'Xarajat tuzatildi': 'Expense corrected',
+  'Xarajat o‘chirildi': 'Expense removed',
   'Xarajat qidirish': 'Search expenses',
   'Xarajat qo‘shish': 'Add expense',
   'Xarajat tarkibi': 'Cost breakdown',
@@ -1186,4 +1193,44 @@ export const en: Record<string, string> = {
   '«{name}» ro‘yxatdan olinsinmi? Eski hisoblari saqlanib qoladi.': 'Remove «{name}» from the list? Their past bills are kept.',
   '«{name}» tizimda tugagan. Baribir qo‘shilsinmi?': '«{name}» has run out in the system. Add it anyway?',
   '−{fee} ushlanma ({percent}%) · hisobga {net}': '−{fee} fee ({percent}%) · {net} to the account',
+
+  // --- Tasdiq oynalari (ilgari brauzerning confirm/prompt oynalari edi) ---
+  'Taomni olib tashlash': 'Remove dish',
+  'Hisob summasi: {sum} so‘m. Olib tashlash uchun 0 yozing.':
+    'Bill total: {sum} so‘m. Enter 0 to clear the discount.',
+  'Chegirma summasi, so‘m (yoki «10%» ko‘rinishida)': 'Discount amount in so‘m (or as «10%»)',
+  'Chegirma sababi': 'Reason for the discount',
+  'Chegirma sababini yozing.': 'Give a reason for the discount.',
+  'Masalan: doimiy mijoz': 'For example: regular guest',
+  'Hisob tarixda qoladi, lekin tushumga kirmaydi.':
+    'The bill stays in the history but does not count as takings.',
+  'Sababni yozing.': 'Give a reason.',
+  'Amallar': 'Actions',
+
+  // --- Xarajatni tuzatish va o'chirish ---
+  'Tuzatish': 'Correct',
+  'Xarajatni tuzatish': 'Correct the expense',
+  'Tuzatishni saqlash': 'Save the correction',
+  'Tuzatish jurnalga yoziladi: eski va yangi qiymat ko‘rinib turadi.':
+    'The correction is logged: both the old and the new value stay visible.',
+  'Xarajatni o‘chirish': 'Delete the expense',
+  '«{purpose}» · {sum} so‘m · {date} — o‘chirilsinmi?': '«{purpose}» · {sum} so‘m · {date} — delete it?',
+  'Yozuv butunlay o‘chadi, lekin o‘chirilgani jurnalda qoladi.':
+    'The row is deleted for good, but the deletion stays in the log.',
+
+  // --- Tayyorlangan yozuvni o'chirish ---
+  'Yozuvni o‘chirish': 'Delete the entry',
+  '«{name}» · +{count} porsiya — yozuv o‘chirilsinmi?': '«{name}» · +{count} portions — delete this entry?',
+  'Bugungi qoldiq shu miqdorga kamayadi. Amal jurnalga yoziladi.':
+    'Today’s remaining count drops by that much. The action is logged.',
+
+  // --- Parolni almashtirish ---
+  'Parolni almashtirish': 'Change password',
+  'Kamida 12 belgi. Almashtirilgandan keyin boshqa qurilmalardagi sessiyalar uziladi.':
+    'At least 12 characters. Sessions on other devices end after the change.',
+  'Joriy parol': 'Current password',
+  'Yangi parol': 'New password',
+  'Yangi parolni takrorlang': 'Repeat the new password',
+  'Yangi parollar bir xil emas.': 'The new passwords do not match.',
+  'Parol almashtirildi.': 'Password changed.',
 }

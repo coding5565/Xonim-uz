@@ -33,7 +33,10 @@ jobs:
           --health-retries 10
 
     env:
-      DJANGO_SECRET_KEY: ci-only-not-a-real-secret-key-value
+      # Kamida 50 belgi: `check --deploy` qisqa kalitni xavfsizlik
+      # ogohlantirishi sifatida belgilaydi, biz esa endi ogohlantirishda
+      # ham to'xtaymiz.
+      DJANGO_SECRET_KEY: ci-only-not-a-real-secret-key-value-long-enough-for-the-deploy-check
       POSTGRES_DB: xonim
       POSTGRES_USER: xonim
       POSTGRES_PASSWORD: xonim-ci-password
@@ -57,9 +60,15 @@ jobs:
       - name: Linter
         run: ruff check xonim_backend
 
-      - name: Django tekshiruvi
+      # Bu qadam ilgari hech narsani ushlamasdi: DJANGO_DEBUG berilmagani
+      # uchun tekshiruv DEBUG yoqiq holatda yurar, `--deploy` topgan hamma
+      # narsa esa WARNING darajasida bo'lgani uchun `--fail-level ERROR`
+      # ularni o'tkazib yuborardi — shu jumladan «DEBUG=True».
+      - name: Django xavfsizlik tekshiruvi
         working-directory: xonim_backend
-        run: python manage.py check --deploy --fail-level ERROR
+        env:
+          DJANGO_DEBUG: '0'
+        run: python manage.py check --deploy --fail-level WARNING
 
       - name: Qo‘llanmagan migratsiya qolmaganini tekshirish
         working-directory: xonim_backend

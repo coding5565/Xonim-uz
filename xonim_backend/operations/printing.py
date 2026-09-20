@@ -20,7 +20,7 @@ import logging
 import socket
 import sys
 from ctypes import wintypes
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.conf import settings
 from django.utils import timezone
@@ -66,11 +66,15 @@ def ascii_only(text):
 def som_text(value):
     """Chek uchun: 40000.00 -> '40 000'.
 
-    Bu API javoblaridagi `operations/money.py: som_text()` dan ataylab farq
+    Bu API javoblaridagi `operations/money.py: money()` dan ataylab farq
     qiladi — chekda tiyin ko'rsatilmaydi va razryadlar probel bilan
-    ajratiladi. Nomi ham shuning uchun boshqacha.
+    ajratiladi.
+
+    Yaxlitlanadi, KESILMAYDI. Ilgari `int()` ishlatilardi va 3666.70
+    chekda «3 666» bo'lib chiqardi: mijoz o'zi to'lagan summadan kichik
+    raqamni ko'rar, qismlar esa jamiga to'g'ri kelmasdi.
     """
-    return f'{int(Decimal(value)):,}'.replace(',', ' ')
+    return f'{int(Decimal(value).quantize(Decimal("1"), rounding=ROUND_HALF_UP)):,}'.replace(',', ' ')
 
 
 class Ticket:

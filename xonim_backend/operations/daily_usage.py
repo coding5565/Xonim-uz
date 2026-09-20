@@ -26,7 +26,7 @@ from users.permissions import OwnerOnly, SalesOnly
 
 from .models import DailyUsage, Ingredient, StockMovement
 from .money import CENT, money, quantity, share
-from .services import audit, audit_many, quantity_text
+from .services import audit, audit_many, quantity_text, safely
 
 # Shu foizdan katta farq e'tibor talab qiladi.
 ALERT_SHARE = Decimal('15')
@@ -52,7 +52,8 @@ class DailyUsageInput(serializers.Serializer):
         if value > today:
             raise serializers.ValidationError(_('Kelajakdagi kun uchun sarf kiritilmaydi.'))
         if (today - value).days > BACKDATE_DAYS:
-            raise serializers.ValidationError(f'Faqat oxirgi {BACKDATE_DAYS} kun uchun kiritish mumkin.')
+            raise serializers.ValidationError(
+                _('Faqat oxirgi {days} kun uchun kiritish mumkin.').format(days=BACKDATE_DAYS))
         return value
 
     def validate_lines(self, lines):
@@ -96,7 +97,7 @@ def save_daily_usage(user, data):
     for ingredient_id, line in wanted.items():
         item = stock[ingredient_id]
         if item.unit == 'dona' and line['quantity'] != line['quantity'].to_integral_value():
-            raise serializers.ValidationError({'lines': f'{item.name}: dona butun son bo‘lishi kerak.'})
+            raise serializers.ValidationError({'lines': _('{name}: dona butun son bo‘lishi kerak.').format(name=item.name)})
 
     existing = {
         row.ingredient_id: row
@@ -197,7 +198,13 @@ def build_comparison(branch, start, end):
         counted = actual.get(ingredient_id, {}).get('quantity') or Decimal('0')
         gap = counted - expected
         expected_value = system.get(ingredient_id, {}).get('value') or Decimal('0')
-        counted_value = (counted * item.unit_cost).quantize(CENT)
+        # Ikkala tomon BIR XIL narxda baholanadi. Tizim hisobi sotuv
+        # paytidagi muzlatilgan narxda yozilgan, admin kiritgani esa faqat
+        # miqdor. Uni bugungi narxda baholasak, mahsulot podorojasa yo'qdan
+        # farq paydo bo'lardi. Shuning uchun davrning o'rtacha sotuv narxi
+        # olinadi; u yo'q bo'lsagina joriy narxga tushiladi.
+        price = (expected_value / expected) if expected else item.unit_cost
+        counted_value = (counted * price).quantize(CENT)
         system_value += expected_value
         actual_value += counted_value
         gap_share = share(abs(gap), expected)
@@ -213,7 +220,7 @@ def build_comparison(branch, start, end):
             'expected': quantity(expected),
             'counted': quantity(counted),
             'gap': quantity(gap),
-            'gap_value': money((gap * item.unit_cost).quantize(CENT)),
+            'gap_value': money((gap * price).quantize(CENT)),
             'share': gap_share,
             'expected_value': money(expected_value),
             'counted_value': money(counted_value),
@@ -266,7 +273,9 @@ class DailyUsageView(APIView):
     def post(self, request):
         serializer = DailyUsageInput(data=request.data)
         serializer.is_valid(raise_exception=True)
-        return Response(save_daily_usage(request.user, serializer.validated_data), status=201)
+        # Bir kun + bir mahsulot uchun bitta qator. Ikki admin bir vaqtda
+        # yuborsa ikkinchisi unique cheklovga urilardi — endi 409.
+        return Response(safely(save_daily_usage, request.user, serializer.validated_data), status=201)
 
 
 class UsageComparisonView(APIView):

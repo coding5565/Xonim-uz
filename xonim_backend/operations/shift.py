@@ -22,7 +22,7 @@ from users.permissions import OwnerOnly, SalesOnly
 
 from .models import SALE_PAYMENT_METHODS, Expense, Order, ShiftClose, WaiterPayment
 from .money import day_window, money, platform_fee, takings
-from .services import audit
+from .services import audit, safely
 
 # Shu summadan katta farq e'tibor talab qiladi.
 ALERT_SOM = Decimal('20000')
@@ -45,7 +45,11 @@ def day_figures(branch, day):
     by_method = {
         row['payment_method']: row
         for row in paid.values('payment_method')
-        .annotate(fee=platform_fee(), amount=takings(), count=Count('id'))
+        .annotate(
+            fee=platform_fee(), amount=takings(), count=Count('id'),
+            sales=Coalesce(Sum('total'), Decimal('0')),
+            tips=Coalesce(Sum('service_charge'), Decimal('0')),
+        )
         .order_by('-amount')
     }
     cash_in = by_method.get('cash', {}).get('amount') or Decimal('0')
@@ -70,7 +74,14 @@ def day_figures(branch, day):
         breakdown.append({
             'method': method,
             'label': label,
+            # `amount` — kassaga tushgan pul: hisob + ofitsiant xizmat haqi.
+            # Ular alohida ham beriladi, chunki qatorlar yig'indisi
+            # sahifadagi «tushum» bilan teng bo'lmaydi: xizmat haqi
+            # tushum emas. Ilgari faqat `amount` bor edi va kassir
+            # qatorlarni qo'shganda jami tushumdan katta chiqib qolardi.
             'amount': money(amount),
+            'sales': money(row.get('sales') or Decimal('0')),
+            'service': money(row.get('tips') or Decimal('0')),
             'count': row.get('count', 0),
             # Faqat naqd kassada qoladi.
             'in_drawer': method == 'cash',
@@ -96,7 +107,8 @@ class ShiftFilters(serializers.Serializer):
         if value > today:
             raise serializers.ValidationError(_('Kelajakdagi kunni yopib bo‘lmaydi.'))
         if (today - value).days > BACKDATE_DAYS:
-            raise serializers.ValidationError(f'Faqat oxirgi {BACKDATE_DAYS} kunni yopish mumkin.')
+            raise serializers.ValidationError(
+                _('Faqat oxirgi {days} kunni yopish mumkin.').format(days=BACKDATE_DAYS))
         return value
 
 
@@ -181,7 +193,9 @@ class ShiftView(APIView):
     def post(self, request):
         data = ShiftCloseInput(data=request.data)
         data.is_valid(raise_exception=True)
-        return Response(close_payload(close_shift(request.user, data.validated_data)), status=201)
+        # Ikkinchi kassir shu kunni tekshiruv bilan yozuv orasida yopib
+        # ulgursa, unique cheklov ishlaydi. Bu 409, 500 emas.
+        return Response(close_payload(safely(close_shift, request.user, data.validated_data)), status=201)
 
 
 class ShiftHistoryView(APIView):

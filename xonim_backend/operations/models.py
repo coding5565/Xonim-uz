@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from django.db import models
-from django.db.models import Q
+from django.db.models import F, Q
 
 from users.models import Branch, User
 
@@ -378,6 +378,14 @@ class ShiftClose(models.Model):
             # Bir kunni ikki marta yopib bo'lmaydi.
             models.UniqueConstraint(fields=['branch', 'date'], name='shift_one_close_per_day'),
             models.CheckConstraint(condition=Q(counted_cash__gte=0), name='shift_nonnegative_count'),
+            # Farq har doim «sanalgan − kutilgan»ga teng. Uni dastur hisoblaydi,
+            # lekin uchta raqam bir-biriga bog'liq bo'lgani uchun bog'liqlik
+            # bazada ham turishi kerak: aks holda kelajakdagi xato tuzatib
+            # bo'lmaydigan nomutanosib yozuv qoldirardi.
+            models.CheckConstraint(
+                condition=Q(difference=F('counted_cash') - F('expected_cash')),
+                name='shift_difference_matches',
+            ),
         ]
 
 
@@ -415,7 +423,9 @@ class StockMovement(models.Model):
     actor = models.ForeignKey(User, on_delete=models.PROTECT)
     key = models.UUIDField()
     request_hash = models.CharField(max_length=64)
-    kind = models.CharField(max_length=18, choices=[('receipt', 'Kirim'), ('consumption', 'Kunlik sarf'), ('sale_consumption', 'Sotuv bo‘yicha sarf')])
+    # «refund» — qaytarilgan buyurtma masallig'i omborga qaytgani. U kirim
+    # EMAS: xarid bo'lmagan, shuning uchun xarajat hisobiga ham tushmaydi.
+    kind = models.CharField(max_length=18, choices=[('receipt', 'Kirim'), ('consumption', 'Kunlik sarf'), ('sale_consumption', 'Sotuv bo‘yicha sarf'), ('refund', 'Qaytarish')])
     # Sotuvda ayriladigan miqdor retsept ulushidan chiqadi va u juda
     # mayda bo'lishi mumkin — ombor maydoni bilan bir xil aniqlikda.
     quantity = models.DecimalField(max_digits=14, decimal_places=6)

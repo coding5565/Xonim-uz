@@ -93,8 +93,17 @@ export async function download(path: string, filename: string) {
 
 // Raqam va sana tanlangan tilda ko'rinadi: ruscha ekranda «20-sen» degan
 // o'zbekcha qisqartma turishi kerak emas.
-export const money = (value: string | number) =>
-  new Intl.NumberFormat(currentLocale(), { maximumFractionDigits: 2 }).format(Number(value))
+// Butun summa tiyinsiz ko'rinadi («40 000»), kasrlisi esa doim ikki xona
+// bilan («3 666,30»). Ilgari faqat yuqori chegara berilgan edi va 3666.30
+// ekranda «3 666,3» bo'lib chiqardi — pul hech qachon shunday yozilmaydi.
+export const money = (value: string | number) => {
+  const amount = Number(value)
+  const fraction = Number.isInteger(amount) ? 0 : 2
+  return new Intl.NumberFormat(currentLocale(), {
+    minimumFractionDigits: fraction,
+    maximumFractionDigits: fraction,
+  }).format(amount)
+}
 
 export const dateLabel = (value: string) =>
   new Intl.DateTimeFormat(currentLocale(), {

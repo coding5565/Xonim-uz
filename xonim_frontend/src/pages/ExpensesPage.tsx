@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Filter, Plus, Search, Wallet, X } from 'lucide-react'
+import { Filter, Pencil, Plus, Search, Trash2, Wallet, X } from 'lucide-react'
 import { api, list, money, today } from '../api'
 import { useI18n } from '../i18n'
+import { useSession } from '../session'
 import type { Expense } from '../types'
 import AppModal from '../components/AppModal'
 
@@ -25,6 +26,9 @@ export default function ExpensesPage() {
   // Davr va kategoriya manzil satridan olinadi: «Umumiy moliya» sahifasidagi
   // xarajat qatorini bosganda aynan o'sha kesim ochilishi kerak.
   const { t, tn } = useI18n()
+  const { user } = useSession()
+  // Tuzatish va o'chirish — nazorat amali, shuning uchun faqat superadminda.
+  const owner = user?.role === 'owner'
   const [params, setParams] = useSearchParams()
   const range = {
     start: params.get('start') || '',
@@ -49,6 +53,10 @@ export default function ExpensesPage() {
   // Body of a request whose outcome is unknown; a retry reuses it unchanged.
   const [submitted, setSubmitted] = useState<string>()
   const [form, setForm] = useState<ExpenseForm>(emptyForm)
+  // Tuzatish va o'chirish: noto'g'ri kiritilgan summa foyda hisobiga
+  // to'g'ridan-to'g'ri kiradi, shuning uchun uni qaytarib olish kerak.
+  const [editing, setEditing] = useState<Expense>()
+  const [removing, setRemoving] = useState<Expense>()
 
   const update = (patch: Partial<ExpenseForm>) => setForm(previous => ({ ...previous, ...patch }))
 
@@ -78,6 +86,7 @@ export default function ExpensesPage() {
 
   function start() {
     setOpen(true)
+    setEditing(undefined)
     setFormError('')
     if (!submitted) {
       setKey(crypto.randomUUID())
@@ -85,13 +94,33 @@ export default function ExpensesPage() {
     }
   }
 
+  /** Noto'g'ri kiritilgan xarajatni tuzatish. Faqat superadmin ko'radi. */
+  function edit(row: Expense) {
+    setEditing(row)
+    setFormError('')
+    setForm({
+      category: row.category, purpose: row.purpose, recipient: row.recipient,
+      amount: row.amount, payment_method: row.payment_method, date: row.date,
+    })
+    setOpen(true)
+  }
+
   async function save(event: FormEvent) {
     event.preventDefault()
     setBusy(true)
     setFormError('')
-    const body = submitted ?? JSON.stringify({ ...form, key })
-    if (!submitted) setSubmitted(body)
     try {
+      if (editing) {
+        // Tahrirda takroriy yuborish xavfi yo'q: manzil aniq bir yozuvga
+        // ishora qiladi, shuning uchun amal kaliti ham kerak emas.
+        await api(`expenses/${editing.id}/`, { method: 'PATCH', body: JSON.stringify(form) })
+        setOpen(false)
+        setEditing(undefined)
+        await load()
+        return
+      }
+      const body = submitted ?? JSON.stringify({ ...form, key })
+      if (!submitted) setSubmitted(body)
       await api('expenses/', { method: 'POST', body })
       setSubmitted(undefined)
       setOpen(false)
@@ -99,6 +128,21 @@ export default function ExpensesPage() {
     } catch (exception) {
       setFormError((exception as Error).message)
       if ((exception as { status?: number }).status === 400) setSubmitted(undefined)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function remove() {
+    if (!removing) return
+    setBusy(true)
+    setFormError('')
+    try {
+      await api(`expenses/${removing.id}/`, { method: 'DELETE' })
+      setRemoving(undefined)
+      await load()
+    } catch (exception) {
+      setFormError((exception as Error).message)
     } finally {
       setBusy(false)
     }
@@ -171,6 +215,7 @@ export default function ExpensesPage() {
               <tr>
                 <th>{t('MAQSAD / OLUVCHI')}</th><th>{t('KATEGORIYA')}</th><th>{t('SANA')}</th>
                 <th>{t('SUMMA')}</th><th>{t('TO‘LOV')}</th><th>{t('KIRITGAN')}</th>
+                {owner && <th aria-label={t('Amallar')} />}
               </tr>
             </thead>
             <tbody>
@@ -186,6 +231,26 @@ export default function ExpensesPage() {
                     </span>
                   </td>
                   <td>{row.actor_name}</td>
+                  {owner && (
+                    <td className="row-actions">
+                      <button
+                        className="icon-button"
+                        aria-label={t('Tuzatish')}
+                        title={t('Tuzatish')}
+                        onClick={() => edit(row)}
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      <button
+                        className="icon-button"
+                        aria-label={t('O‘chirish')}
+                        title={t('O‘chirish')}
+                        onClick={() => { setFormError(''); setRemoving(row) }}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -203,9 +268,13 @@ export default function ExpensesPage() {
         {t('Bu bo‘lim kundalik xarajatlar uchun. Ombor xaridi qiymati va ikkiyoqlama buxgalteriya registri hali ulanmagan.')}
       </p>
 
-      <AppModal open={open} title={t('Yangi xarajat')} onClose={() => { if (!busy) setOpen(false) }}>
+      <AppModal
+        open={open}
+        title={t(editing ? 'Xarajatni tuzatish' : 'Yangi xarajat')}
+        onClose={() => { if (!busy) { setOpen(false); setEditing(undefined) } }}
+      >
         <form onSubmit={save}>
-          <fieldset disabled={!!submitted || busy}>
+          <fieldset disabled={(!editing && !!submitted) || busy}>
             <div className="form-row">
               <label>
                 {t('Kategoriya')}
@@ -267,12 +336,43 @@ export default function ExpensesPage() {
               </label>
             </div>
           </fieldset>
-          <p className="alert">{t('Saqlangach darhol hisobga olinadi. Superadmin tasdig‘i talab qilinmaydi.')}</p>
+          <p className="alert">
+            {t(editing
+              ? 'Tuzatish jurnalga yoziladi: eski va yangi qiymat ko‘rinib turadi.'
+              : 'Saqlangach darhol hisobga olinadi. Superadmin tasdig‘i talab qilinmaydi.')}
+          </p>
           {formError && <p className="alert error">{formError}</p>}
           <button className="button primary full" disabled={busy}>
-            {t(busy ? 'Saqlanmoqda…' : submitted ? 'Oldingi amalni qayta tekshirish' : 'Xarajatni saqlash')}
+            {t(busy ? 'Saqlanmoqda…'
+              : editing ? 'Tuzatishni saqlash'
+              : submitted ? 'Oldingi amalni qayta tekshirish'
+              : 'Xarajatni saqlash')}
           </button>
         </form>
+      </AppModal>
+
+      <AppModal
+        open={!!removing}
+        title={t('Xarajatni o‘chirish')}
+        onClose={() => { if (!busy) setRemoving(undefined) }}
+      >
+        {removing && (
+          <>
+            <p className="data-note">
+              {t('«{purpose}» · {sum} so‘m · {date} — o‘chirilsinmi?', {
+                purpose: removing.purpose, sum: money(removing.amount), date: removing.date,
+              })}
+            </p>
+            <p className="alert">{t('Yozuv butunlay o‘chadi, lekin o‘chirilgani jurnalda qoladi.')}</p>
+            {formError && <p className="alert error">{formError}</p>}
+            <button className="button danger full" disabled={busy} onClick={remove}>
+              <Trash2 size={17} />{t(busy ? 'Saqlanmoqda…' : 'O‘chirish')}
+            </button>
+            <button className="button secondary full" disabled={busy} onClick={() => setRemoving(undefined)}>
+              {t('Bekor qilish')}
+            </button>
+          </>
+        )}
       </AppModal>
     </>
   )
