@@ -275,6 +275,22 @@ export default function FinancePage() {
                 <span>{t('Platforma ushlab qoldi')}</span><b>−{money(cash.platform_fee)}</b>
               </div>
             )}
+            {/* Ofitsiant xizmat haqi tushum emas, lekin kassaga tushadi va
+                ofitsiantga berilganda chiqib ketadi. */}
+            {!!Number(cash.service_collected) && (
+              <Link to="/waiters" className="cash-row">
+                <span>{t('Ofitsiantlar uchun yig‘ildi')}</span>
+                <b>+{money(cash.service_collected)}</b>
+                <ArrowRight size={14} />
+              </Link>
+            )}
+            {!!Number(cash.service_paid) && (
+              <Link to="/waiters" className="cash-row">
+                <span>{t('Ofitsiantlarga berildi')}</span>
+                <b>−{money(cash.service_paid)}</b>
+                <ArrowRight size={14} />
+              </Link>
+            )}
             <div className="cash-row total">
               <span>{t('Sof pul oqimi')}</span><b>{money(cash.net)} {t('so‘m')}</b>
             </div>
@@ -378,6 +394,17 @@ export default function FinancePage() {
             <Link to={`/payroll${filters.month ? `?month=${filters.month}` : ''}`} className="cash-row">
               <span>{t('Ish haqiga to‘langan')}</span><b>{money(data.salary.total)}</b><ArrowRight size={14} />
             </Link>
+            {/* Ofitsiantlar puli alohida turadi: u xarajat emas, mijozdan
+                ularning nomiga yig'ilgan va berilishi kerak bo'lgan pul. */}
+            {(!!Number(data.service.collected) || !!Number(data.service.owed)) && (
+              <Link to="/waiters" className="cash-row">
+                <span>{t('Ofitsiantlarga qarz')}</span>
+                <b className={Number(data.service.owed) > 0 ? 'owed' : undefined}>
+                  {money(data.service.owed)}
+                </b>
+                <ArrowRight size={14} />
+              </Link>
+            )}
           </div>
           {!!Number(data.salary.manual_total) && (
             <p className="alert">

@@ -90,7 +90,12 @@ export default function ShiftClosePanel() {
           <div>
             <small>{t('Kunlik savdo')}</small>
             <strong>{money(day.revenue)}</strong>
-            <em>{tn('{count} ta chek', day.orders)}</em>
+            <em>
+              {tn('{count} ta chek', day.orders)}
+              {/* Xizmat haqi kassada yotadi, lekin restoranning puli emas. */}
+              {Number(day.service || 0) > 0
+                && ` · ${t('ustiga xizmat haqi {amount}', { amount: money(day.service || 0) })}`}
+            </em>
           </div>
           {day.closed ? (
             <div>

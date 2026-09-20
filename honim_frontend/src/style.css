@@ -1240,3 +1240,12 @@ button.mark.tap.none{border-style:dashed;border-color:#d7e0d9}
 button.mark.tap:hover:not(:disabled){border-color:#2f7a55}
 button.mark.tap:disabled{opacity:.5;cursor:default}
 .theme-dark button.mark.tap.none{border-color:#2c4138}
+
+/* Xizmat haqi savatda alohida qator: kassir mijozdan qancha olishini
+   raqamga qarab biladi, hisoblab o'tirmaydi. */
+.cart-service{padding:10px 18px 0;display:flex;flex-direction:column;gap:5px}
+.cart-service p{display:flex;justify-content:space-between;gap:10px;margin:0;font-size:13.5px;color:#6f7d75}
+.cart-service p b{font:600 13.5px 'Manrope',sans-serif;color:#3a5b47;font-variant-numeric:tabular-nums}
+.data-note.center{text-align:center}
+.theme-dark .cart-service p{color:#b4c5bb}
+.theme-dark .cart-service p b{color:#d7e9de}

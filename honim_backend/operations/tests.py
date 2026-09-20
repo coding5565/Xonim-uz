@@ -34,6 +34,7 @@ from .models import (
     StockMovement,
     Table,
     Waiter,
+    WaiterPayment,
 )
 from .money import money, percent, quantity, share
 from .services import Conflict, append_order_lines, create_order, move_stock
@@ -2825,10 +2826,18 @@ class WholeDayConsistencyTests(TestCase):
         # ushlab qolgan ulush (24 000 ning 30% i = 7 200). Ushlangan pul hech
         # qachon hisobga tushmaydi, shuning uchun pul oqimida ham yo'q.
         platform_cut = Decimal('7200')
+        # Ofitsiant xizmat haqi esa aksincha: mijozdan olindi va hali
+        # ofitsiantga berilmadi, demak pul kassada turibdi.
+        service = Decimal('2400')
         self.assertEqual(Decimal(finance['profit']['platform_fee']), platform_cut)
+        self.assertEqual(Decimal(finance['service']['collected']), service)
+        self.assertEqual(Decimal(finance['service']['owed']), service)
         self.assertEqual(
-            Decimal(dashboard['net_cash']), expected_revenue - Decimal('800000') - platform_cut)
+            Decimal(dashboard['net_cash']),
+            expected_revenue + service - Decimal('800000') - platform_cut)
         self.assertEqual(Decimal(finance['cash']['net']), Decimal(dashboard['net_cash']))
+        # Ko'prik foydadan pulga aniq olib borishi kerak.
+        self.assertEqual(Decimal(finance['cash']['bridge']), Decimal(finance['cash']['net']))
 
         # ── 2. Kanal kesimi jamiga teng bo'lishi shart ────────────────────
         channels = {row['channel']: Decimal(row['revenue']) for row in finance['channels']}
@@ -2840,9 +2849,14 @@ class WholeDayConsistencyTests(TestCase):
         self.assertEqual(board_channels, channels)
 
         # ── 3. Kassada faqat naqd qolishi kerak ──────────────────────────
-        # 48 000 naqd tushdi; qaytarilgan 12 000 kassadan chiqdi;
-        # karta va Uzum puli kassaga umuman tushmaydi.
-        self.assertEqual(Decimal(shift['expected_cash']), Decimal('48000'))
+        # 48 000 naqd tushdi; ustiga ofitsiant xizmat haqi 5% = 2 400 —
+        # mijoz uni ham naqd to'ladi, demak u ham kassada yotadi.
+        # Qaytarilgan 12 000 kassadan chiqdi; karta va Uzum puli kassaga
+        # umuman tushmaydi.
+        self.assertEqual(Decimal(shift['service']), Decimal('2400'))
+        self.assertEqual(Decimal(shift['expected_cash']), Decimal('50400'))
+        # Tushum esa o'zgarmaydi: xizmat haqi restoranning puli emas.
+        self.assertEqual(Decimal(shift['revenue']), expected_revenue)
         drawer = {row['method']: row['in_drawer'] for row in shift['breakdown']}
         self.assertTrue(drawer['cash'])
         self.assertFalse(drawer['card'])
@@ -2886,10 +2900,10 @@ class WholeDayConsistencyTests(TestCase):
         self.assertNotIn(returned.id, [item['id'] for item in kitchen.get('/api/v1/kitchen/orders/').data])
 
         # ── 9. Smena yopilgach kun muzlaydi va farq yoziladi ─────────────
-        closed = self.client.post('/api/v1/shift/', {'counted_cash': '47000', 'note': 'Sanaldi'}, format='json')
+        closed = self.client.post('/api/v1/shift/', {'counted_cash': '49400', 'note': 'Sanaldi'}, format='json')
         self.assertEqual(closed.status_code, 201)
         self.assertEqual(Decimal(closed.data['difference']), Decimal('-1000'))
-        self.assertEqual(Decimal(closed.data['expected_cash']), Decimal('48000'))
+        self.assertEqual(Decimal(closed.data['expected_cash']), Decimal('50400'))
         # Yopilgandan keyin ham tushum o'zgarmaydi.
         self.assertEqual(
             Decimal(self.owner_client.get('/api/v1/dashboard/').data['revenue']), expected_revenue)
@@ -3638,3 +3652,174 @@ class PlatformCommissionTests(TestCase):
         self.assertIsNotNone(entry)
         self.assertIn('30', entry.description)
         self.assertIn('35', entry.description)
+
+
+class WaiterServiceChargeTests(TestCase):
+    """Stolga xizmat haqi: hisob USTIGA qo'shiladi va ofitsiantniki bo'ladi.
+
+    100 000 lik stol hisobiga 10% qo'shilsa mijoz 110 000 to'laydi. O'sha
+    10 000 restoranning tushumi emas — u ofitsiant nomiga yig'ilgan pul va
+    unga topshirilguncha kassada turadi.
+    """
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.category = Category.objects.create(branch=self.branch, name='Taom')
+        self.dish = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('50000'))
+        self.waiter = Waiter.objects.create(branch=self.branch, name='Fazliddin', commission=Decimal('10'))
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+        prepare(self.cashier, *Dish.objects.filter(branch=self.branch))
+
+    def sell(self, quantity=2, waiter=True, channel='hall', method='cash', table='5'):
+        return create_order(self.cashier, {
+            'key': uuid4(), 'table': table, 'waiter': '',
+            'waiter_id': self.waiter.id if waiter else None,
+            'channel': channel, 'payment_method': method,
+            'lines': [{'dish': self.dish.id, 'quantity': quantity, 'note': ''}],
+        })
+
+    def hand_over(self, amount, key=None, client=None, method='cash'):
+        return (client or self.client).post(f'/api/v1/waiters/{self.waiter.id}/payments/', {
+            'key': str(key or uuid4()), 'amount': str(amount),
+            'payment_method': method, 'paid_on': str(timezone.localdate()), 'note': '',
+        }, format='json')
+
+    def books(self):
+        today = timezone.localdate()
+        data = self.client.get(f'/api/v1/reports/waiters/?start={today}&end={today}').data
+        return data['summary'], {row['name']: row for row in data['waiters']}
+
+    def test_a_table_order_with_a_waiter_adds_the_charge_on_top(self):
+        order = self.sell()                       # 100 000 lik hisob
+        self.assertEqual(order.total, Decimal('100000'))
+        self.assertEqual(order.service_charge, Decimal('10000'))
+        # Mijoz to'laydigan summa — ikkalasining yig'indisi.
+        self.assertEqual(order.payable, Decimal('110000'))
+
+    def test_takeaway_and_delivery_never_carry_a_service_charge(self):
+        # Olib ketishda ofitsiant xizmati yo'q, demak haq ham yo'q.
+        self.assertEqual(self.sell(channel='takeaway', table='').service_charge, Decimal('0'))
+        self.assertEqual(self.sell(channel='uzum', method='uzum', table='').service_charge, Decimal('0'))
+
+    def test_a_table_without_a_waiter_carries_nothing_either(self):
+        self.assertEqual(self.sell(waiter=False).service_charge, Decimal('0'))
+
+    def test_the_charge_follows_dishes_added_to_an_open_bill(self):
+        order = self.sell(quantity=2, method='')          # ochiq hisob
+        self.assertEqual(order.service_charge, Decimal('10000'))
+        append_order_lines(self.cashier, order.id, {
+            'key': uuid4(), 'lines': [{'dish': self.dish.id, 'quantity': 1, 'note': ''}],
+        })
+        order.refresh_from_db()
+        self.assertEqual(order.total, Decimal('150000'))
+        self.assertEqual(order.service_charge, Decimal('15000'))
+
+    def test_a_discount_lowers_the_charge_as_well(self):
+        order = self.sell(quantity=2, method='')
+        self.client.post(
+            f'/api/v1/orders/{order.id}/discount/',
+            {'amount': '20000', 'reason': 'Doimiy mijoz'}, format='json')
+        order.refresh_from_db()
+        # Chegirmadan keyin hisob 80 000, xizmat haqi esa shundan 10%.
+        self.assertEqual(order.total, Decimal('80000'))
+        self.assertEqual(order.service_charge, Decimal('8000'))
+        self.assertEqual(order.payable, Decimal('88000'))
+
+    def test_removing_a_dish_lowers_the_charge(self):
+        order = self.sell(quantity=2, method='')
+        line = order.lines.first()
+        self.client.post(f'/api/v1/orders/{order.id}/lines/', {
+            'key': str(uuid4()), 'lines': [{'dish': self.dish.id, 'quantity': 1, 'note': ''}],
+        }, format='json')
+        self.client.delete(f'/api/v1/orders/{order.id}/lines/{line.id}/')
+        order.refresh_from_db()
+        self.assertEqual(order.total, Decimal('50000'))
+        self.assertEqual(order.service_charge, Decimal('5000'))
+
+    def test_changing_the_rate_never_rewrites_a_past_bill(self):
+        older = self.sell()
+        self.client.patch(f'/api/v1/waiters/{self.waiter.id}/', {'commission': '5'}, format='json')
+        newer = self.sell()
+        older.refresh_from_db()
+        self.assertEqual(older.service_charge, Decimal('10000'))
+        self.assertEqual(newer.service_charge, Decimal('5000'))
+
+    def test_the_charge_is_not_revenue_but_it_is_in_the_drawer(self):
+        self.sell()                                   # 100 000 + 10 000
+        finance = self.client.get('/api/v1/finance/').data
+        # Tushum faqat taomlardan.
+        self.assertEqual(finance['profit']['revenue'], '100000.00')
+        self.assertEqual(finance['service']['collected'], '10000.00')
+        self.assertEqual(finance['service']['owed'], '10000.00')
+        # Pul esa kassada: mijoz 110 000 berdi.
+        self.assertEqual(finance['cash']['in'], '110000.00')
+
+        cashier = APIClient()
+        cashier.force_authenticate(self.cashier)
+        day = cashier.get('/api/v1/shift/').data
+        self.assertEqual(day['revenue'], '100000.00')
+        self.assertEqual(day['service'], '10000.00')
+        self.assertEqual(day['expected_cash'], '110000.00')
+
+    def test_the_balance_is_what_was_collected_minus_what_was_handed_over(self):
+        self.sell()
+        summary, rows = self.books()
+        self.assertEqual(rows['Fazliddin']['today_fee'], '10000.00')
+        self.assertEqual(rows['Fazliddin']['balance'], '10000.00')
+        self.assertEqual(summary['owed'], '10000.00')
+
+        self.assertEqual(self.hand_over(Decimal('6000')).status_code, 201)
+        summary, rows = self.books()
+        self.assertEqual(rows['Fazliddin']['paid'], '6000.00')
+        self.assertEqual(rows['Fazliddin']['balance'], '4000.00')
+        self.assertEqual(summary['owed'], '4000.00')
+
+    def test_an_open_bill_owes_the_waiter_nothing_yet(self):
+        # Pul hali olinmagan: ofitsiantga berish uchun ham hech narsa yo'q.
+        self.sell(method='')
+        summary, _rows = self.books()
+        self.assertEqual(summary['owed'], '0.00')
+
+    def test_handing_money_over_leaves_the_profit_alone(self):
+        self.sell()
+        before = self.client.get('/api/v1/finance/').data['profit']['net_profit']
+        self.hand_over(Decimal('10000'))
+        after = self.client.get('/api/v1/finance/').data
+        self.assertEqual(after['profit']['net_profit'], before)
+        # Xarajat ham yaratilmaydi: bu restoranning puli emas edi.
+        self.assertEqual(Expense.objects.filter(branch=self.branch).count(), 0)
+        # Lekin kassadan chiqadi.
+        self.assertEqual(after['cash']['service_paid'], '10000.00')
+        self.assertEqual(after['service']['owed'], '0.00')
+
+    def test_the_drawer_drops_when_the_waiter_is_paid_in_cash(self):
+        self.sell()
+        cashier = APIClient()
+        cashier.force_authenticate(self.cashier)
+        self.assertEqual(cashier.get('/api/v1/shift/').data['expected_cash'], '110000.00')
+        self.hand_over(Decimal('10000'), client=cashier)
+        self.assertEqual(cashier.get('/api/v1/shift/').data['expected_cash'], '100000.00')
+
+    def test_the_same_key_never_pays_a_waiter_twice(self):
+        self.sell()
+        key = uuid4()
+        self.assertEqual(self.hand_over(Decimal('5000'), key=key).status_code, 201)
+        self.assertEqual(self.hand_over(Decimal('5000'), key=key).status_code, 200)
+        self.assertEqual(WaiterPayment.objects.filter(waiter=self.waiter).count(), 1)
+        self.assertEqual(self.hand_over(Decimal('7000'), key=key).status_code, 409)
+
+    def test_the_kitchen_hands_over_nothing(self):
+        kitchen = APIClient()
+        kitchen.force_authenticate(User.objects.create_user(
+            'oshxona', password='test-only-long-password', role='kitchen', branch=self.branch))
+        self.assertEqual(self.hand_over(Decimal('1000'), client=kitchen).status_code, 403)
+
+    def test_the_receipt_shows_the_charge_on_its_own_line(self):
+        from operations.printing import receipt_bytes
+        order = self.sell()
+        text = receipt_bytes(order).decode('cp866', errors='ignore')
+        self.assertIn('Xizmat haqi', text)
+        self.assertIn('110 000', text)

@@ -154,6 +154,11 @@ class Order(models.Model):
     # Sotuv paytidagi foiz muzlatiladi: keyin foiz o'zgarsa ham
     # o'tgan buyurtmadagi ulush o'zgarmaydi.
     waiter_commission = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    # Xizmat haqi: hisob summasining ustiga QO'SHILADI va butunlay
+    # ofitsiantniki bo'ladi. 100 000 lik hisobga 10% qo'shilsa mijoz 110 000
+    # to'laydi, 10 000 esa ofitsiant hisobiga o'tadi. Shuning uchun u
+    # restoran tushumi EMAS: `total` tushum bo'lib qoladi, bu esa alohida.
+    service_charge = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     channel = models.CharField(max_length=10, default='hall', choices=SALE_CHANNELS)
     # Platforma ushlab qolgan foiz, sotuv paytida muzlatiladi. Zal va olib
     # ketishda nol: u yerda hech kim hech narsa ushlamaydi.
@@ -184,6 +189,7 @@ class Order(models.Model):
             models.UniqueConstraint(fields=['branch', 'key'], name='order_idempotency'),
             models.CheckConstraint(condition=Q(total__gt=0), name='order_positive_total'),
             models.CheckConstraint(condition=Q(discount__gte=0), name='order_nonnegative_discount'),
+            models.CheckConstraint(condition=Q(service_charge__gte=0), name='order_nonnegative_service'),
             # Bekor qilingan yoki qaytarilgan hisobda sabab ham, vaqt ham bo'lishi shart.
             models.CheckConstraint(
                 condition=~Q(status__in=['cancelled', 'refunded']) | (Q(voided_at__isnull=False) & ~Q(void_reason='')),
@@ -197,6 +203,11 @@ class Order(models.Model):
             models.Index(fields=['branch', 'created_at'], name='order_branch_created_idx'),
             models.Index(fields=['branch', 'paid_at'], name='order_branch_paid_idx'),
         ]
+
+    @property
+    def payable(self):
+        """Mijoz to'laydigan summa: hisob + ofitsiant xizmat haqi."""
+        return self.total + self.service_charge
 
 
 class OrderLine(models.Model):
@@ -308,6 +319,34 @@ class SalaryPayment(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['branch', 'key'], name='salary_payment_idempotency'),
             models.CheckConstraint(condition=Q(amount__gt=0), name='salary_payment_positive_amount'),
+        ]
+
+
+class WaiterPayment(models.Model):
+    """Ofitsiantga berilgan pul.
+
+    Bu restoranning xarajati EMAS: pul mijozdan ofitsiant nomiga yig'ilgan
+    va shu yerda unga topshiriladi. Shuning uchun Expense yaratilmaydi —
+    aks holda hech qachon tushum bo'lmagan pul foydadan ikki marta
+    ayirilardi.
+    """
+
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT)
+    waiter = models.ForeignKey(Waiter, on_delete=models.PROTECT, related_name='payments')
+    actor = models.ForeignKey(User, on_delete=models.PROTECT, related_name='waiter_payments')
+    # Ikki marta bosilgan tugma ikki marta pul bermasligi uchun.
+    key = models.UUIDField()
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    payment_method = models.CharField(max_length=10, choices=[('cash', 'Naqd'), ('card', 'Karta')])
+    paid_on = models.DateField()
+    note = models.CharField(max_length=250, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-paid_on', '-id']
+        constraints = [
+            models.UniqueConstraint(fields=['branch', 'key'], name='waiter_payment_idempotency'),
+            models.CheckConstraint(condition=Q(amount__gt=0), name='waiter_payment_positive_amount'),
         ]
 
 

@@ -143,7 +143,12 @@ def receipt_bytes(order, *, open_drawer=False):
     if order.discount:
         ticket.row('Oraliq jami', som_text(order.total + order.discount))
         ticket.row(f'Chegirma ({ascii_only(order.discount_reason)})', f'-{som_text(order.discount)}')
-    ticket.raw(BOLD_ON).row('JAMI', f'{som_text(order.total)} so‘m').raw(BOLD_OFF)
+    # Xizmat haqi chekda alohida turadi: mijoz nima uchun to'layotganini
+    # ko'rishi kerak, aks holda summa sababsiz katta ko'rinadi.
+    if order.service_charge:
+        ticket.row('Taomlar', som_text(order.total))
+        ticket.row(f'Xizmat haqi ({order.waiter_commission:.0f}%)', som_text(order.service_charge))
+    ticket.raw(BOLD_ON).row('JAMI', f'{som_text(order.payable)} so‘m').raw(BOLD_OFF)
     if order.status == 'paid':
         label = SALE_PAYMENT_LABELS.get(order.payment_method, order.payment_method or '-')
         ticket.text(f'To‘lov: {label}')

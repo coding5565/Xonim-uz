@@ -37,6 +37,14 @@ summasining bir qismini o'zida qoldiradi: tushum to'liq yoziladi, ushlanma esa
 alohida qator bo'lib ayriladi. Foiz superadmin qo'lida va har bir buyurtma o'z
 foizini sotuv paytida muzlatib oladi.
 
+**Ofitsiant xizmat haqi**
+Stolga xizmat uchun hisob ustiga foiz qo'shiladi: 100 000 lik hisobga 10%
+qo'shilsa mijoz 110 000 to'laydi va 10 000 ofitsiantning hisobiga o'tadi.
+Bu pul restoran tushumi emas — u ofitsiantga topshirilguncha kassada turadi,
+shuning uchun foydaga ta'sir qilmaydi, faqat pul oqimida ko'rinadi. Foizni
+superadmin belgilaydi, har bir hisob esa o'z foizini sotuv paytida
+muzlatib oladi.
+
 **Davomat va ish haqi**
 Haq kunlik yig'iladi: xodim kelgan kun uchun uning kunlik summasi balansiga
 qo'shiladi va o'sha summa qatorga muzlatiladi. Hafta olti kun — yakshanbaga haq

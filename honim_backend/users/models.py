@@ -66,6 +66,7 @@ AUDIT_LABELS = {
     'channel.fee': 'Platforma ulushi o‘zgardi',
     'waiter.create': 'Ofitsiant qo‘shildi',
     'waiter.update': 'Ofitsiant ma’lumoti o‘zgardi',
+    'waiter.pay': 'Ofitsiantga ulush berildi',
     'waiter.remove': 'Ofitsiant olib tashlandi',
     'table.update': 'Stol o‘zgartirildi',
     'table.remove': 'Stol olib tashlandi',

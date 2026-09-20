@@ -58,6 +58,20 @@ def platform_fee(condition=None):
     )
 
 
+def takings(condition=None):
+    """Kassaga tushgan summa: hisob + ofitsiant xizmat haqi.
+
+    Tushum bilan aralashtirmaslik kerak: xizmat haqi mijozdan yig'iladi,
+    lekin restoranning puli emas — u ofitsiantga topshiriladi. Kassada
+    esa ikkalasi birga yotadi, shuning uchun kun yakuni shu summani
+    sanaydi.
+    """
+    return Coalesce(
+        Sum(F('total') + F('service_charge'), filter=condition, output_field=MONEY),
+        ZERO, output_field=MONEY,
+    )
+
+
 def quantity(value):
     """Miqdor uchun uch kasr: kg va litr grammgacha aniq bo'lishi kerak."""
     return str((value if value is not None else ZERO).quantize(MILLI) + ZERO)

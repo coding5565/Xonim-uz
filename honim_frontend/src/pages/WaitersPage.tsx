@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { ConciergeBell, Coins, Pencil, Plus, Trash2, Users } from 'lucide-react'
+import { Banknote, ConciergeBell, Coins, Pencil, Plus, Trash2, Users } from 'lucide-react'
 import { api, list, money, today } from '../api'
 import { useI18n } from '../i18n'
-import type { Waiter, WaiterEarnings } from '../types'
+import type { Waiter, WaiterBook, WaiterEarnings } from '../types'
 import { CardsSkeleton, TableSkeleton } from '../components/Skeleton'
 import AppModal from '../components/AppModal'
 
@@ -11,6 +11,14 @@ interface WaiterForm {
   phone: string
   commission: string
   active: boolean
+}
+
+interface PayForm {
+  key: string
+  amount: string
+  payment_method: string
+  paid_on: string
+  note: string
 }
 
 const emptyForm = (): WaiterForm => ({ name: '', phone: '', commission: '5', active: true })
@@ -32,6 +40,10 @@ export default function WaitersPage() {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Waiter>()
   const [form, setForm] = useState<WaiterForm>(emptyForm)
+  const [paying, setPaying] = useState<WaiterBook>()
+  const [payForm, setPayForm] = useState<PayForm>({
+    key: '', amount: '', payment_method: 'cash', paid_on: today(), note: '',
+  })
 
   const update = (patch: Partial<WaiterForm>) => setForm(previous => ({ ...previous, ...patch }))
 
@@ -91,6 +103,35 @@ export default function WaitersPage() {
     }
   }
 
+  function startPay(row: WaiterBook) {
+    setPaying(row)
+    setPayForm({
+      // Kalit shu yerda tug'iladi: takroriy bosish ikki marta pul bermaydi.
+      key: crypto.randomUUID(),
+      amount: Number(row.balance) > 0 ? row.balance : '',
+      payment_method: 'cash',
+      paid_on: today(),
+      note: '',
+    })
+    setFormError('')
+  }
+
+  async function payWaiter(event: FormEvent) {
+    event.preventDefault()
+    if (!paying) return
+    setBusy(true)
+    setFormError('')
+    try {
+      await api(`waiters/${paying.id}/payments/`, { method: 'POST', body: JSON.stringify(payForm) })
+      setPaying(undefined)
+      await loadEarnings(range.start, range.end)
+    } catch (exception) {
+      setFormError((exception as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function remove(waiter: Waiter) {
     // O'chirilmaydi — faolsizlantiriladi, aks holda o'tgan hisoblar egasiz qolardi.
     if (!confirm(t('«{name}» ro‘yxatdan olinsinmi? Eski hisoblari saqlanib qoladi.', { name: waiter.name }))) return
@@ -102,8 +143,6 @@ export default function WaitersPage() {
     }
   }
 
-  const active = (rows || []).filter(row => row.active)
-  const retired = (rows || []).filter(row => !row.active)
   const summary = earnings?.summary
 
   return (
@@ -121,14 +160,6 @@ export default function WaitersPage() {
 
       {!earnings ? <CardsSkeleton count={4} /> : (
         <div className="metric-grid">
-          <article className="metric-card tone-in">
-            <div className="metric-top">
-              <span>{t('Ofitsiantlar savdosi')}</span>
-              <span className="metric-icon green"><Coins size={19} /></span>
-            </div>
-            <div className="metric-value">{money(summary!.revenue)}<small>{t('so‘m')}</small></div>
-            <p>{tn('{count} ta ofitsiant', summary!.waiters)}</p>
-          </article>
           <article className="metric-card tone-out">
             <div className="metric-top">
               <span>{t('Xizmat haqi')}</span>
@@ -139,19 +170,27 @@ export default function WaitersPage() {
           </article>
           <article className="metric-card tone-flat">
             <div className="metric-top">
+              <span>{t('Bugun yig‘ildi')}</span>
+              <span className="metric-icon blue"><ConciergeBell size={19} /></span>
+            </div>
+            <div className="metric-value">{money(summary!.today_fee)}<small>{t('so‘m')}</small></div>
+            <p>{t('bugungi stol savdosi {amount} so‘m', { amount: money(summary!.today_sales) })}</p>
+          </article>
+          <article className="metric-card tone-out">
+            <div className="metric-top">
+              <span>{t('Berilishi kerak')}</span>
+              <span className="metric-icon orange"><Banknote size={19} /></span>
+            </div>
+            <div className="metric-value">{money(summary!.owed)}<small>{t('so‘m')}</small></div>
+            <p>{t('yig‘ilgan haq − berilgan pul')}</p>
+          </article>
+          <article className="metric-card tone-flat">
+            <div className="metric-top">
               <span>{t('Ofitsiantsiz')}</span>
               <span className="metric-icon violet"><Users size={19} /></span>
             </div>
             <div className="metric-value">{money(summary!.unassigned_revenue)}<small>{t('so‘m')}</small></div>
             <p>{tn('{count} ta hisob bog‘lanmagan', summary!.unassigned_orders)}</p>
-          </article>
-          <article className="metric-card tone-flat">
-            <div className="metric-top">
-              <span>{t('Faol ofitsiantlar')}</span>
-              <span className="metric-icon blue"><Users size={19} /></span>
-            </div>
-            <div className="metric-value">{active.length}<small>{t('kishi')}</small></div>
-            <p>{retired.length ? tn('{count} tasi ro‘yxatdan olingan', retired.length) : t('Hammasi ishda')}</p>
           </article>
         </div>
       )}
@@ -186,7 +225,10 @@ export default function WaitersPage() {
 
       <section className="panel">
         <header className="panel-heading">
-          <div><h2>{t('Davr bo‘yicha ulush')}</h2><p>{t('Foiz sotuv paytida qanday bo‘lsa, shunday hisoblanadi')}</p></div>
+          <div>
+            <h2>{t('Davr bo‘yicha ulush')}</h2>
+            <p>{t('Xizmat haqi hisob ustiga qo‘shiladi va to‘liq ofitsiantga o‘tadi')}</p>
+          </div>
         </header>
         {!earnings ? <TableSkeleton rows={4} columns={5} /> : (
           <div className="table-wrap">
@@ -194,7 +236,7 @@ export default function WaitersPage() {
               <thead>
                 <tr>
                   <th>{t('OFITSIANT')}</th><th>{t('HISOBLAR')}</th><th>{t('SAVDO')}</th>
-                  <th>{t('ULUSHI')}</th><th>{t('SAVDODAGI ULUSH')}</th>
+                  <th>{t('ULUSHI')}</th><th>{t('BUGUN')}</th><th>{t('BALANS')}</th><th>{t('AMAL')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -204,9 +246,20 @@ export default function WaitersPage() {
                     <td className="number">{row.orders}</td>
                     <td className="number">{money(row.revenue)}</td>
                     <td className="number"><strong>{money(row.fee)}</strong></td>
+                    <td className="number">
+                      {money(row.today_fee)}
+                      <small>{tn('{count} ta hisob', row.today_orders)}</small>
+                    </td>
+                    <td className="number">
+                      <strong className={Number(row.balance) > 0 ? 'owed' : undefined}>
+                        {money(row.balance)}
+                      </strong>
+                      <small>{t('berilgan {amount}', { amount: money(row.paid) })}</small>
+                    </td>
                     <td>
-                      <div className="progress-track"><span style={{ width: `${row.share}%` }} /></div>
-                      <small className="muted">{row.share}%</small>
+                      <button className="button primary small" disabled={busy} onClick={() => startPay(row)}>
+                        <Banknote size={15} />{t('Pul berish')}
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -274,6 +327,74 @@ export default function WaitersPage() {
           </div>
         )}
       </section>
+
+      <AppModal
+        open={!!paying}
+        title={t('{name} · pul berish', { name: paying?.name || '' })}
+        onClose={() => { if (!busy) setPaying(undefined) }}
+      >
+        <form onSubmit={payWaiter}>
+          <div className="salary-amount">{money(payForm.amount || 0)} <small>{t('so‘m')}</small></div>
+          {!!paying && (
+            <p className="alert">
+              {t('Yig‘ilgan xizmat haqi {earned} so‘m, berilgani {paid} so‘m. Qoldiq: {balance} so‘m.', {
+                earned: money(paying.earned), paid: money(paying.paid), balance: money(paying.balance),
+              })}
+            </p>
+          )}
+          <div className="form-row">
+            <label>
+              {t('Summa')}
+              <input
+                value={payForm.amount}
+                onChange={event => setPayForm({ ...payForm, amount: event.target.value })}
+                type="number"
+                min="1"
+                step="1000"
+                required
+                autoFocus
+              />
+            </label>
+            <label>
+              {t('To‘lov sanasi')}
+              <input
+                value={payForm.paid_on}
+                onChange={event => setPayForm({ ...payForm, paid_on: event.target.value })}
+                type="date"
+                max={today()}
+                required
+              />
+            </label>
+          </div>
+          <label>
+            {t('To‘lov usuli')}
+            <select
+              value={payForm.payment_method}
+              onChange={event => setPayForm({ ...payForm, payment_method: event.target.value })}
+            >
+              <option value="cash">{t('Naqd')}</option>
+              <option value="card">{t('Karta')}</option>
+            </select>
+          </label>
+          <label>
+            {t('Izoh')}
+            <textarea
+              value={payForm.note}
+              onChange={event => setPayForm({ ...payForm, note: event.target.value })}
+              maxLength={250}
+              rows={2}
+              placeholder={t('Masalan, haftalik hisob-kitob')}
+            />
+          </label>
+          <p className="data-note">
+            {t('Bu pul mijozdan ofitsiant nomiga yig‘ilgan — restoran xarajati emas, shuning uchun foydaga ta’sir qilmaydi. Naqd berilsa kassadan chiqadi.')}
+          </p>
+          {formError && <p className="alert error">{formError}</p>}
+          <button className="button primary full" disabled={busy}>
+            {busy ? t('Saqlanmoqda…') : t('Pulni berildi deb yozish')}
+          </button>
+        </form>
+      </AppModal>
 
       <AppModal
         open={open}

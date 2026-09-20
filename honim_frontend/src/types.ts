@@ -3,7 +3,8 @@ export interface MethodRevenue { method: string; label: string; revenue: string 
 export interface User { id: number; username: string; name: string; role: 'owner' | 'cashier' | 'kitchen'; branch: string; payment_methods: PaymentMethod[] }
 export type Station = 'kitchen' | 'counter'
 export type TableZone = 'hall_left' | 'hall_right' | 'outside'
-export interface TableOpenOrder { id: number; total: string; items: number; waiter: string; created_at: string }
+/** Stol ustidagi ochiq hisob. `payable` — mijoz to'laydigan summa. */
+export interface TableOpenOrder { id: number; total: string; service_charge: string; payable: string; items: number; waiter: string; created_at: string }
 export interface Table {
   id: number
   number: number
@@ -33,7 +34,12 @@ export interface Order {
   channel_label: string
   status: OrderStatus
   status_label: string
+  /** Taomlar summasi — restoran tushumi. Xizmat haqi bunga kirmaydi. */
   total: string
+  /** Stolga xizmat haqi: hisob ustiga qo‘shiladi va ofitsiantniki bo‘ladi. */
+  service_charge: string
+  /** Mijoz to‘laydigan summa: total + service_charge. */
+  payable: string
   /** Chegirma summasi; `total` allaqachon undan ayirilgan. */
   discount: string
   discount_reason: string
@@ -244,6 +250,9 @@ export interface Finance {
     net: string
     settled_expenses: string
     stock_purchases: string
+    /** Ofitsiantlar uchun yig'ilgan va ularga berilgan pul. */
+    service_collected: string
+    service_paid: string
     unpaid: string
     bridge: string
   }
@@ -258,6 +267,8 @@ export interface Finance {
     manual_total: string
     manual_count: number
   }
+  /** Ofitsiant xizmat haqi: yig'ilgan, berilgan va qolgan. */
+  service: { collected: string; paid: string; payments: number; owed: string; share: string }
   stock: { value: string; purchases: string; consumed: string; gap: string; gap_share: string }
   trend: {
     period: string
@@ -341,6 +352,8 @@ export interface ShiftDay {
   closed: boolean
   expected_cash: string
   revenue: string
+  /** Ofitsiantlar uchun yig'ilgan xizmat haqi. Yopilgan kunda bo'lmasligi mumkin. */
+  service?: string
   orders: number
   breakdown: ShiftMethodRow[]
   backdate_days: number
@@ -383,6 +396,22 @@ export interface Waiter {
   commission: string
   active: boolean
 }
+/** Bitta ofitsiantning davr va umrlik hisobi. */
+export interface WaiterBook {
+  id: number
+  name: string
+  orders: number
+  revenue: string
+  fee: string
+  share: string
+  /** Umrlik: yig'ilgan, berilgan va qolgan pul. */
+  earned: string
+  paid: string
+  balance: string
+  today_sales: string
+  today_fee: string
+  today_orders: number
+}
 export interface WaiterEarnings {
   filters: { start: string; end: string }
   summary: {
@@ -391,8 +420,22 @@ export interface WaiterEarnings {
     waiters: number
     unassigned_revenue: string
     unassigned_orders: number
+    today_sales: string
+    today_fee: string
+    paid: string
+    owed: string
   }
-  waiters: { id: number; name: string; orders: number; revenue: string; fee: string; share: string }[]
+  waiters: WaiterBook[]
+}
+export interface WaiterPayment {
+  id: number
+  waiter: number
+  amount: string
+  payment_method: string
+  payment_label: string
+  paid_on: string
+  note: string
+  actor_name: string
 }
 export interface PrepRow {
   dish: number

@@ -283,6 +283,9 @@ def _record_order(user, data):
         # buyurtmaning hisobi o'zgarmaydi.
         channel_commission=platform_commission(user.branch, channel),
         total=total, status='paid' if paid else 'open',
+        # Xizmat haqi hisob ustiga qo'shiladi va to'liq ofitsiantga o'tadi.
+        service_charge=(total * commission / 100).quantize(Decimal('0.01'))
+        if waiter and channel == 'hall' else Decimal('0'),
         payment_method=data['payment_method'], paid_at=timezone.now() if paid else None,
     )
     for line in data['lines']:
@@ -363,7 +366,7 @@ def _record_extra_lines(user, order_id, data):
         )
 
     order.total = order.total + added
-    fields = ['total']
+    fields = refresh_service_charge(order, ['total'])
     # A bill the kitchen already finished has to come back on the board, or the
     # new dishes would never be cooked.
     if order.preparation_status in ('ready', 'served'):
@@ -415,7 +418,7 @@ def remove_order_line(user, order_id, line_id):
     name, amount = line.name, line.quantity
     line.delete()
     order.total = order.total - removed
-    order.save(update_fields=['total'])
+    order.save(update_fields=refresh_service_charge(order, ['total']))
     audit(user, 'order.line_remove', f'#{order.id} · {name} x{amount} olib tashlandi · −{removed} so‘m')
     # Oshxona allaqachon talonni olgan bo'lishi mumkin, shuning uchun bekor
     # qilingani ham qog'ozda chiqadi — aks holda taom baribir pishirilardi.
@@ -525,7 +528,9 @@ def apply_discount(user, order_id, amount, reason):
     order.discount = amount
     order.discount_reason = reason if amount else ''
     order.total = subtotal - amount
-    order.save(update_fields=['discount', 'discount_reason', 'total'])
+    # Xizmat haqi chegirmadan KEYINGI summadan olinadi: mijoz to'lagan
+    # narsadan hisoblansin.
+    order.save(update_fields=refresh_service_charge(order, ['discount', 'discount_reason', 'total']))
     if amount:
         audit(
             user, 'order.discount',
@@ -549,6 +554,32 @@ def platform_commission(branch, channel):
         return Decimal('0')
     fee = ChannelFee.objects.filter(branch=branch, channel=channel).first()
     return fee.commission if fee else DEFAULT_PLATFORM_COMMISSION
+
+
+def service_charge_for(order):
+    """Hisobga qo'shiladigan xizmat haqi.
+
+    Faqat zaldagi, ofitsiant biriktirilgan hisobga qo'shiladi: haq stolga
+    xizmat uchun. Olib ketish va yetkazib berishda ofitsiant xizmati yo'q,
+    demak haq ham yo'q.
+    """
+    if order.channel != 'hall' or not order.waiter_ref_id or not order.waiter_commission:
+        return Decimal('0')
+    return (order.total * order.waiter_commission / 100).quantize(Decimal('0.01'))
+
+
+def refresh_service_charge(order, fields):
+    """Hisob summasi o'zgarganda xizmat haqini qayta hisoblaydi.
+
+    Ochiq hisobga taom qo'shilishi yoki chegirma berilishi mumkin, xizmat
+    haqi esa oxirgi summadan olinadi. To'langandan keyin hech narsa
+    o'zgarmaydi — u yerda hisob allaqachon muzlatilgan.
+    """
+    charge = service_charge_for(order)
+    if order.service_charge != charge:
+        order.service_charge = charge
+        fields.append('service_charge')
+    return fields
 
 
 def check_payment_channel(channel, method):

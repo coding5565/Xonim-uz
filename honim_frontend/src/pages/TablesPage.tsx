@@ -47,7 +47,7 @@ function TableCard({ table, onOpen }: { table: Table; onOpen: (table: Table) => 
       <strong>{table.label}</strong>
       {open ? (
         <>
-          <span className="table-total">{money(open.total)} {t('so‘m')}</span>
+          <span className="table-total">{money(open.payable)} {t('so‘m')}</span>
           <span className="table-meta">{tn('{count} taom', open.items)} · {minutesSince(open.created_at, t)}</span>
           {open.waiter && <span className="table-meta">{open.waiter}</span>}
         </>
@@ -223,7 +223,7 @@ export default function TablesPage() {
   const zoneTables = (zone: TableZone) => tables.filter(item => item.zone === zone)
   const outside = zoneTables('outside')
   const busyCount = tables.filter(item => item.open_order).length
-  const openTotal = tables.reduce((sum, item) => sum + Number(item.open_order?.total || 0), 0)
+  const openTotal = tables.reduce((sum, item) => sum + Number(item.open_order?.payable || 0), 0)
   // Stol hisobi doim zal savdosi. Uzum va Yandex alohida kanal bo'lib, o'z
   // kirish joyidan kiritiladi va puli platforma hisobiga tushadi — zaldagi
   // mehmon ular bilan to'lay olmaydi, shuning uchun ro'yxatda turmaydi.
@@ -327,9 +327,19 @@ export default function TablesPage() {
                 <b className="owed">−{money(bill.discount)}</b>
               </div>
             )}
+            {/* Xizmat haqi hisob ustiga qo'shiladi: mijoz to'laydigan summa
+                undan katta bo'ladi, shuning uchun ikkalasi ham ko'rinadi. */}
+            {Number(bill.service_charge) > 0 && (
+              <div className="bill-discount">
+                <span>{t('Taomlar')}</span>
+                <b>{money(bill.total)}</b>
+                <span>{t('Xizmat haqi')} · {bill.waiter}</span>
+                <b>+{money(bill.service_charge)}</b>
+              </div>
+            )}
             <div className="cart-total">
-              <span>{t('Jami')}</span>
-              <strong>{money(bill.total)} <small>{t('so‘m')}</small></strong>
+              <span>{Number(bill.service_charge) > 0 ? t('Mijoz to‘laydi') : t('Jami')}</span>
+              <strong>{money(bill.payable)} <small>{t('so‘m')}</small></strong>
             </div>
             <div className="bill-lines">
               {bill.lines.map(line => (

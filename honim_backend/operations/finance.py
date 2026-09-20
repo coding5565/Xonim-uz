@@ -39,6 +39,7 @@ from .models import (
     OrderLine,
     SalaryPayment,
     StockMovement,
+    WaiterPayment,
 )
 from .money import (
     MONEY,
@@ -222,8 +223,24 @@ def build_finance(branch, start, end, today):
     )
     purchases, waste = moves['purchases'], moves['waste']
 
+    # Ofitsiant xizmat haqi: mijozdan yig'iladi, lekin restoranning puli
+    # emas. Shuning uchun tushumga ham, foydaga ham kirmaydi — faqat pul
+    # oqimida ko'rinadi va ofitsiantga berilguncha kassada turadi.
+    service_collected = paid.aggregate(total=Coalesce(Sum('service_charge'), Decimal('0')))['total']
+    handed = WaiterPayment.objects.filter(branch=branch, paid_on__gte=start, paid_on__lte=end).aggregate(
+        total=Coalesce(Sum('amount'), Decimal('0')), count=Count('id'),
+    )
+    # Qarz butun davr bo'yicha hisoblanadi: o'tgan oyning ulushi shu oyda
+    # berilsa ham balans to'g'ri qolsin.
+    owed = (
+        Order.objects.filter(branch=branch, status='paid').aggregate(
+            total=Coalesce(Sum('service_charge'), Decimal('0')))['total']
+        - WaiterPayment.objects.filter(branch=branch).aggregate(
+            total=Coalesce(Sum('amount'), Decimal('0')))['total']
+    )
+
     gross_profit = revenue - cogs
-    cash_out = settled + purchases
+    cash_out = settled + purchases + handed['total']
 
     categories = [{
         'category': row['category'],
@@ -318,15 +335,20 @@ def build_finance(branch, start, end, today):
         'coverage': cost_coverage(lines, revenue, branch),
         # Pul oqimi foydadan farq qiladi: tannarx pul emas, ombor xaridi esa foyda emas.
         'cash': {
-            'in': money(revenue),
+            'in': money(revenue + service_collected),
             'out': money(cash_out),
             # Platforma ushlagani hech qachon qo'lga tegmaydi — kirimdan ayriladi.
             'platform_fee': money(platform_total),
-            'net': money(revenue - platform_total - cash_out),
+            'net': money(revenue + service_collected - platform_total - cash_out),
             'settled_expenses': money(settled),
             'stock_purchases': money(purchases),
+            'service_collected': money(service_collected),
+            'service_paid': money(handed['total']),
             'unpaid': money(unpaid),
-            'bridge': money(net_profit + cogs + waste + unpaid - purchases),
+            # Ko'prik: foydadan pulga o'tish. Ofitsiant ulushi foydada yo'q,
+            # lekin kassada bor — shuning uchun farqi shu yerda qo'shiladi.
+            'bridge': money(
+                net_profit + cogs + waste + unpaid - purchases + service_collected - handed['total']),
         },
         'expenses': categories,
         'methods': methods,
@@ -344,6 +366,14 @@ def build_finance(branch, start, end, today):
         # Ikki mustaqil tannarx signali: retsept (OrderLine.cost_total) va ombor
         # (StockMovement.cost_total). Ular bir-biriga yaqin turishi kerak; katta
         # farq retseptdagi batch_cost eskirganini bildiradi.
+        # Ofitsiantlar hisobi: yig'ilgan, berilgan va qolgan.
+        'service': {
+            'collected': money(service_collected),
+            'paid': money(handed['total']),
+            'payments': handed['count'],
+            'owed': money(owed),
+            'share': percent(service_collected, revenue),
+        },
         'stock': {
             'value': money(stock_value),
             'purchases': money(purchases),

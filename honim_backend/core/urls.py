@@ -34,7 +34,7 @@ from operations.views import (
     StockView,
     TableViewSet,
 )
-from operations.waiters import WaiterEarningsView, WaiterViewSet
+from operations.waiters import WaiterEarningsView, WaiterPaymentView, WaiterViewSet
 from users.payroll import AttendanceHistoryView, AttendanceView, PayrollView
 from users.views import (
     AuditView,
@@ -88,6 +88,7 @@ urlpatterns = [
     path('api/v1/sales/board/', SalesBoardView.as_view()),
     path('api/v1/reports/sales/', SalesReportView.as_view()),
     path('api/v1/reports/waiters/', WaiterEarningsView.as_view()),
+    path('api/v1/waiters/<int:pk>/payments/', WaiterPaymentView.as_view()),
     path('api/v1/reports/sales/export/', SalesReportExportView.as_view()),
     path('api/v1/stock/', StockView.as_view()),
     path('api/v1/stock/usage/', StockUsageView.as_view()),

@@ -20,8 +20,8 @@ from rest_framework.views import APIView
 from core.i18n import _
 from users.permissions import OwnerOnly, SalesOnly
 
-from .models import SALE_PAYMENT_METHODS, Expense, Order, ShiftClose
-from .money import day_window, money, platform_fee
+from .models import SALE_PAYMENT_METHODS, Expense, Order, ShiftClose, WaiterPayment
+from .money import day_window, money, platform_fee, takings
 from .services import audit
 
 # Shu summadan katta farq e'tibor talab qiladi.
@@ -34,19 +34,27 @@ def day_figures(branch, day):
     """Bir kunning savdo va naqd manzarasi. Yopilmagan kun uchun jonli hisob."""
     since, until = day_window(day)
     paid = Order.objects.filter(branch=branch, status='paid', paid_at__gte=since, paid_at__lt=until)
-    totals = paid.aggregate(revenue=Coalesce(Sum('total'), Decimal('0')), orders=Count('id'))
+    totals = paid.aggregate(
+        revenue=Coalesce(Sum('total'), Decimal('0')),
+        # Ofitsiantlar uchun yig'ilgan pul: kassada yotadi, lekin restoranniki emas.
+        service=Coalesce(Sum('service_charge'), Decimal('0')),
+        orders=Count('id'),
+    )
     # Nom ataylab «amount»: `total=Sum('total')` maydonni yopib qo'yadi va
     # ushlanma ifodasidagi F('total') agregatga tushib ketardi.
     by_method = {
         row['payment_method']: row
         for row in paid.values('payment_method')
-        .annotate(fee=platform_fee(), amount=Sum('total'), count=Count('id'))
+        .annotate(fee=platform_fee(), amount=takings(), count=Count('id'))
         .order_by('-amount')
     }
     cash_in = by_method.get('cash', {}).get('amount') or Decimal('0')
-    # Kassadan naqd chiqqan xarajatlar.
+    # Kassadan naqd chiqqan xarajatlar va ofitsiantlarga naqd berilgan ulush.
     cash_out = Expense.objects.filter(
         branch=branch, date=day, payment_method='cash',
+    ).aggregate(total=Coalesce(Sum('amount'), Decimal('0')))['total']
+    cash_out += WaiterPayment.objects.filter(
+        branch=branch, paid_on=day, payment_method='cash',
     ).aggregate(total=Coalesce(Sum('amount'), Decimal('0')))['total']
 
     # Har bir to'lov usuli doim ro'yxatda turadi, sotuvsizi ham nol bo'lib:
@@ -71,6 +79,7 @@ def day_figures(branch, day):
         })
     return {
         'revenue': totals['revenue'],
+        'service': totals['service'],
         'orders': totals['orders'],
         'cash_in': cash_in,
         'cash_out': cash_out,
@@ -161,6 +170,7 @@ class ShiftView(APIView):
             'cash_in': money(figures['cash_in']),
             'cash_out': money(figures['cash_out']),
             'revenue': money(figures['revenue']),
+            'service': money(figures['service']),
             'orders': figures['orders'],
             'breakdown': figures['breakdown'],
             'open_orders': still_open,

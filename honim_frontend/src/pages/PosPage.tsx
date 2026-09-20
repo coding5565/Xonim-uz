@@ -162,7 +162,6 @@ export default function PosPage() {
     (!category || dish.category === category) &&
     dish.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
   )
-  const change = Math.max(0, Number(cashGiven) - total)
   const count = cart.reduce((sum, line) => sum + line.quantity, 0)
   const locked = !!lockedRequest
   // Uzum va Yandex endi alohida kanal: ularga o'z kirish joyidan kiriladi va
@@ -188,7 +187,13 @@ export default function PosPage() {
     .map(line => ({ name: line.dish.name, over: line.quantity - left(line.dish.id) }))
     .filter(item => item.over > 0)
   const pickedWaiter = waiters.find(item => String(item.id) === waiterId)
-  const waiterFee = pickedWaiter ? (total * Number(pickedWaiter.commission)) / 100 : 0
+  // Xizmat haqi faqat zal savdosida: haq stolga xizmat uchun olinadi.
+  // Hisob ustiga qo'shiladi, ya'ni mijoz shuncha ko'p to'laydi.
+  const waiterFee = pickedWaiter && channel === 'hall'
+    ? Math.round(total * Number(pickedWaiter.commission)) / 100
+    : 0
+  const payable = total + waiterFee
+  const change = Math.max(0, Number(cashGiven) - payable)
 
   // Sarlavhada kanal ko'rinib tursin: kassir qaysi joydan sotayotganini
   // ekranga qarab bilishi kerak, yozib qo'yilgandan keyin emas.
@@ -441,7 +446,9 @@ export default function PosPage() {
               </select>
               {!!pickedWaiter && !!waiterFee && (
                 <small className="muted">
-                  {t('Ulushi: {fee} so‘m ({percent}%)', { fee: money(waiterFee), percent: pickedWaiter.commission })}
+                  {t('Xizmat haqi: +{fee} so‘m ({percent}%) — mijoz to‘laydi', {
+                    fee: money(waiterFee), percent: pickedWaiter.commission,
+                  })}
                 </small>
               )}
             </label>
@@ -515,7 +522,21 @@ export default function PosPage() {
           </div>
 
           <footer className="cart-footer">
-            <div className="cart-total"><span>{t('Jami')}</span><strong>{money(total)} <small>{t('so‘m')}</small></strong></div>
+            {/* Xizmat haqi bo'lsa mijoz to'laydigan summa alohida turadi:
+                kassir undan kam pul olib qo'ymasligi kerak. */}
+            {!!waiterFee && (
+              <div className="cart-service">
+                <p><span>{t('Taomlar')}</span><b>{money(total)}</b></p>
+                <p>
+                  <span>{t('Xizmat haqi')} ({pickedWaiter?.commission}%)</span>
+                  <b>+{money(waiterFee)}</b>
+                </p>
+              </div>
+            )}
+            <div className="cart-total">
+              <span>{waiterFee ? t('Mijoz to‘laydi') : t('Jami')}</span>
+              <strong>{money(payable)} <small>{t('so‘m')}</small></strong>
+            </div>
             {locked ? (
               <>
                 <button className="button primary full" disabled={busy} onClick={() => submit(payment)}>
@@ -545,7 +566,7 @@ export default function PosPage() {
                 <button
                   className="button secondary full"
                   disabled={blocked}
-                  onClick={() => { setPayModal(true); setCashGiven(String(total)) }}
+                  onClick={() => { setPayModal(true); setCashGiven(String(payable)) }}
                 >
                   {t('Darhol to‘lov olish')}
                 </button>
@@ -560,12 +581,19 @@ export default function PosPage() {
       {!!cart.length && !sheet && (
         <button className="mobile-cart-cta" onClick={() => setSheet(true)}>
           <span><ShoppingBag size={17} /> {tn('{count} ta buyurtma', count)}</span>
-          <strong>{money(total)} →</strong>
+          <strong>{money(payable)} →</strong>
         </button>
       )}
 
       <AppModal open={payModal} title={t('To‘lovni qayd etish')} onClose={() => { if (!busy) setPayModal(false) }}>
-        <div className="payment-amount">{money(total)} <small>{t('so‘m')}</small></div>
+        <div className="payment-amount">{money(payable)} <small>{t('so‘m')}</small></div>
+        {!!waiterFee && (
+          <p className="data-note center">
+            {t('Shundan {fee} so‘m — {name} ning xizmat haqi', {
+              fee: money(waiterFee), name: pickedWaiter?.name || '',
+            })}
+          </p>
+        )}
         <form onSubmit={(event: FormEvent) => { event.preventDefault(); submit(payment) }}>
           {/* Yetkazib berishda tanlanadigan narsa yo'q: pul o'sha platformadan
               keladi, shuning uchun bitta tugmali ro'yxat ko'rsatilmaydi. */}
@@ -599,13 +627,13 @@ export default function PosPage() {
                   value={cashGiven}
                   onChange={event => setCashGiven(event.target.value)}
                   type="number"
-                  min={total}
+                  min={payable}
                   step="0.01"
                   required
                 />
               </label>
               <div className="pay-grid">
-                {[total, 50000, 100000, 200000].map((amount, index) => (
+                {[payable, 50000, 100000, 200000].map((amount, index) => (
                   <button key={index} type="button" onClick={() => setCashGiven(String(amount))}>
                     {index === 0 ? t('Tayyor pul') : money(amount)}
                   </button>
