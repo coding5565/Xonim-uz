@@ -4,7 +4,7 @@ export interface User { id: number; username: string; name: string; role: 'owner
 /** Zaxira nusxa holati: Telegram ulanganmi va serverda nima saqlangan. */
 export interface BackupFile { name: string; size: string; created_at: string; kind: 'db' | 'media' }
 export interface BackupState {
-  telegram: { configured: boolean; chat: string }
+  telegram: { configured: boolean; chat: string; recipients: number }
   backups: BackupFile[]
   keep_days: number
 }

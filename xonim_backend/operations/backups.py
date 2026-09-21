@@ -35,6 +35,18 @@ class BackupError(Exception):
     """Nusxa olinmadi. Sabab xabarda — egasi uni ekranda ko'radi."""
 
 
+def chat_ids():
+    """Nusxa yuboriladigan Telegram chatlari.
+
+    Bir nechta bo'lishi mumkin, vergul bilan ajratiladi: egasi va
+    hamkori bir vaqtda olishi kerak bo'lsa, nusxa ikkalasiga ham ketadi.
+    Bittasi xato bo'lsa qolganlariga yuborish davom etadi — bitta
+    noto'g'ri raqam butun zaxirani to'xtatib qo'ymasin.
+    """
+    raw = str(getattr(settings, 'TELEGRAM_CHAT_ID', '') or '')
+    return [item.strip() for item in raw.split(',') if item.strip()]
+
+
 def backup_dir():
     path = Path(getattr(settings, 'BACKUP_DIR', '/var/lib/xonim/backups'))
     path.mkdir(parents=True, exist_ok=True)
@@ -164,19 +176,27 @@ def run_backup(actor=None, source='cron'):
     archive_media(media)
 
     token = getattr(settings, 'TELEGRAM_BOT_TOKEN', '')
-    chat_id = getattr(settings, 'TELEGRAM_CHAT_ID', '')
-    sent = []
+    chats = chat_ids()
+    delivered, failed = 0, []
     note = ''
-    if token and chat_id:
+    if token and chats:
         who = f' · {actor}' if actor else ''
         label = 'qo‘lda' if source == 'manual' else 'jadval bo‘yicha'
         moment = timezone.localtime().strftime('%d.%m.%Y %H:%M')
-        for path, what in ((database, 'Baza'), (media, 'Rasmlar')):
-            caption = f'Xonim · {what} · {moment} ({label}{who}) · {human(path.stat().st_size)}'
-            if telegram_send(token, chat_id, path, caption):
-                sent.append(path.name)
+        for chat in chats:
+            try:
+                for path, what in ((database, 'Baza'), (media, 'Rasmlar')):
+                    caption = f'Xonim · {what} · {moment} ({label}{who}) · {human(path.stat().st_size)}'
+                    telegram_send(token, chat, path, caption)
+                delivered += 1
+            except BackupError as failure:
+                # Bitta qabul qiluvchi xato bo'lsa — masalan botga hali
+                # yozmagan bo'lsa — qolganlari nusxani baribir oladi.
+                failed.append(f'{mask(chat)}: {failure}')
     else:
         note = 'Telegram sozlanmagan: nusxa faqat serverda saqlandi.'
+    if failed:
+        note = 'Yuborilmadi — ' + '; '.join(failed)
 
     removed = prune(int(getattr(settings, 'BACKUP_KEEP_DAYS', 14)))
     return {
@@ -185,7 +205,9 @@ def run_backup(actor=None, source='cron'):
             {'name': database.name, 'size': human(database.stat().st_size)},
             {'name': media.name, 'size': human(media.stat().st_size)},
         ],
-        'sent_to_telegram': len(sent) == 2,
+        'sent_to_telegram': bool(chats) and delivered == len(chats),
+        'delivered': delivered,
+        'recipients': len(chats),
         'removed_old': removed,
         'note': note,
     }
@@ -209,12 +231,18 @@ def latest_backups(limit=10):
     return result
 
 
+def mask(chat):
+    """Faqat oxirgi raqamlar: qaysi chat ekanini ajratish uchun yetarli,
+    lekin butun raqam ekranda turmaydi."""
+    return re.sub(r'^.*(\d{4})$', r'…\1', str(chat))
+
+
 def telegram_status():
     """Sozlangan-sozlanmagani. Token ekranga CHIQMAYDI."""
     token = getattr(settings, 'TELEGRAM_BOT_TOKEN', '')
-    chat_id = getattr(settings, 'TELEGRAM_CHAT_ID', '')
+    chats = chat_ids()
     return {
-        'configured': bool(token and chat_id),
-        # Faqat oxirgi raqamlar: qaysi chat ekanini ajratish uchun yetarli.
-        'chat': re.sub(r'^.*(\d{4})$', r'…\1', str(chat_id)) if chat_id else '',
+        'configured': bool(token and chats),
+        'chat': ', '.join(mask(item) for item in chats),
+        'recipients': len(chats),
     }
