@@ -1,0 +1,27 @@
+; Xonim chop etish agenti — sozlama.
+; Nusxa oling: copy agent.ini.example agent.ini
+
+[server]
+; CRM manzili. Oxiridagi chiziqcha shart emas.
+url = https://37-140-216-170.sslip.io
+; Serverdagi .env dagi PRINT_AGENT_TOKEN bilan BIR XIL bolishi shart.
+token = PASTE_PRINT_AGENT_TOKEN
+; Filial manzili (slug). Superadmin sahifasidagi menyu havolasida korinadi.
+branch = xonim
+; Jurnalda kim ishlaganini korish uchun. Bir nechta kassa bolsa har biriga oz nomi.
+name = kassa-1
+; Yangi talonni shuncha soniyada bir sorab turadi.
+poll_seconds = 2
+log = agent.log
+
+[printers]
+; Chapda — tizimdagi bolim nomi, ongda — shu kompyuterdagi printer.
+;
+; Windows printeri: "Qurilmalar va printerlar" dagi NOMI ayni shaklda.
+; Tarmoq printeri: "192.168.0.50:9100" korinishida.
+;
+; Bitta printer bolsa ikkala qatorga bir xil nom yoziladi — talonlar
+; oshxona va kassa bolimlariga ajralgani menyudagi sozlama bilan
+; belgilanadi (Menyu boshqaruvi -> kategoriya -> bolim).
+counter = XP-T80Q
+kitchen = XP-T80Q

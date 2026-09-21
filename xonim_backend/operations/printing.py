@@ -295,14 +295,30 @@ def send_to(target, data):
         send_bytes(data, target)
 
 
+def deliver(station, data, *, order=None, kind=''):
+    """Talonni yetkazadi — printerga yoki navbatga.
+
+    Ikkita o'rnatish bor va ular bir xil kodni ishlatadi:
+      · `direct` — printer shu kompyuterga ulangan (restoran ichidagi nusxa);
+      · `agent`  — server bulutda, printer restoranda. Talon navbatga
+        qo'yiladi, restorandagi agent uni olib chiqaradi.
+    Ikkinchisida bu yerda printer manzili umuman kerak emas.
+    """
+    from .print_queue import enqueue, queue_mode
+    if queue_mode():
+        enqueue(order.branch if order else None, station, data, kind=kind, order=order)
+        return
+    target = station_target(station)
+    if not target:
+        raise PrinterError(f'{STATION_LABELS.get(station, station)} printeri sozlanmagan.')
+    send_to(target, data)
+
+
 def print_receipt(order, *, open_drawer=None):
     """Mijoz chekini kassa printeridan chiqaradi."""
-    target = station_target('counter')
-    if not target:
-        raise PrinterError('Kassa printeri sozlanmagan. RECEIPT_PRINTER ni .env da ko‘rsating.')
     if open_drawer is None:
         open_drawer = getattr(settings, 'RECEIPT_OPEN_DRAWER', False)
-    send_to(target, receipt_bytes(order, open_drawer=open_drawer))
+    deliver('counter', receipt_bytes(order, open_drawer=open_drawer), order=order, kind='receipt')
 
 
 def print_prep_tickets(order, lines=None, *, addition=False):
@@ -315,13 +331,12 @@ def print_prep_tickets(order, lines=None, *, addition=False):
     problems = []
     rows = list(lines) if lines is not None else list(order.lines.select_related('dish__category'))
     for station, station_lines in group_by_station(rows).items():
-        target = station_target(station)
         label = STATION_LABELS.get(station, station)
-        if not target:
-            problems.append(f'{label} printeri sozlanmagan — talon chiqmadi.')
-            continue
         try:
-            send_to(target, prep_ticket_bytes(order, station, station_lines, addition=addition))
+            deliver(
+                station, prep_ticket_bytes(order, station, station_lines, addition=addition),
+                order=order, kind='prep',
+            )
         except PrinterError as error:
             problems.append(f'{label}: {error}')
         except Exception as error:
@@ -346,6 +361,11 @@ def void_ticket_bytes(order, message):
     return ticket.finish()
 
 
+def queue_mode_now():
+    from .print_queue import queue_mode
+    return queue_mode()
+
+
 def print_void_ticket(order, message):
     """Bekor qilinganini har ikkala printerga ham chiqaradi.
 
@@ -356,13 +376,15 @@ def print_void_ticket(order, message):
     problems = []
     seen = set()
     for station in ('kitchen', 'counter'):
+        # `direct` rejimida ikkala bo'lim bitta printerga qaragan bo'lishi
+        # mumkin — u holda talon ikki marta chiqmasin.
         target = station_target(station)
-        if not target or target in seen:
+        if not queue_mode_now() and (not target or target in seen):
             continue
         seen.add(target)
         label = STATION_LABELS.get(station, station)
         try:
-            send_to(target, void_ticket_bytes(order, message))
+            deliver(station, void_ticket_bytes(order, message), order=order, kind='void')
         except Exception as error:
             logger.warning('Bekor taloni chiqmadi: #%s %s', order.id, station, exc_info=True)
             problems.append(f'{label}: bekor taloni chiqmadi ({error}).')
@@ -375,7 +397,10 @@ def print_receipt_quietly(order):
     Savdo allaqachon yozilgan; printer o'chiq bo'lsa ham uni bekor qilib
     bo'lmaydi. Shuning uchun nosozlik faqat jurnalga tushadi.
     """
-    if not getattr(settings, 'RECEIPT_PRINTER', ''):
+    # `agent` rejimida printer manzili serverda YO'Q — u restoranda turadi.
+    # Shu tekshiruv shartsiz qolganda bulutdagi o'rnatishda mijoz cheki
+    # umuman navbatga tushmasdi: oshxona taloni chiqar, chek esa yo'qolardi.
+    if not queue_mode_now() and not getattr(settings, 'RECEIPT_PRINTER', ''):
         return False
     try:
         print_receipt(order)

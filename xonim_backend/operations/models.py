@@ -389,6 +389,52 @@ class ShiftClose(models.Model):
         ]
 
 
+class PrintJob(models.Model):
+    """Chop etishga navbat turgan talon.
+
+    Nega navbat: tizim bulutdagi serverda ishlaydi, printer esa restoran
+    ichida USB'da turadi — serverdan unga to'g'ridan-to'g'ri yo'l yo'q.
+    Shuning uchun server ESC/POS baytlarini shu yerga qo'yadi, restorandagi
+    agent esa ularni olib o'z printeriga yuboradi.
+
+    Shundan kelib chiqadigan foyda: internet uzilsa ham kassa to'xtamaydi.
+    Talon navbatda turadi va aloqa tiklangach chiqadi. Kassir esa printer
+    javobini kutib o'tirmaydi — server javobni darhol qaytaradi.
+    """
+
+    STATUSES = [
+        ('queued', 'Navbatda'),
+        ('printing', 'Agent oldi'),
+        ('done', 'Chiqdi'),
+        ('failed', 'Chiqmadi'),
+    ]
+
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT, related_name='print_jobs')
+    # Qaysi printerga: oshxona yoki kassa. Agent o'z sozlamasida bu nomni
+    # haqiqiy qurilmaga bog'laydi.
+    station = models.CharField(max_length=10)
+    kind = models.CharField(max_length=12)
+    # Tayyor ESC/POS baytlari. Serverda hosil qilinadi: talonning ko'rinishi
+    # bitta joyda qolsin, agent esa faqat yetkazib beruvchi bo'lsin.
+    payload = models.BinaryField()
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, null=True, blank=True, related_name='print_jobs')
+    status = models.CharField(max_length=10, default='queued', choices=STATUSES)
+    attempts = models.PositiveIntegerField(default=0)
+    error = models.CharField(max_length=300, blank=True)
+    # Kim olgani va qachon: ijara muddati o'tsa topshiriq navbatga qaytadi.
+    agent = models.CharField(max_length=60, blank=True)
+    claimed_at = models.DateTimeField(null=True, blank=True)
+    done_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['id']
+        indexes = [
+            # Agent har soniyada shu kesimni so'raydi.
+            models.Index(fields=['branch', 'status', 'station'], name='print_queue_idx'),
+        ]
+
+
 class Ingredient(models.Model):
     branch = models.ForeignKey(Branch, on_delete=models.PROTECT)
     name = models.CharField(max_length=100)

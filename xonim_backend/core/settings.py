@@ -98,6 +98,15 @@ RECEIPT_PRINTER = os.environ.get('RECEIPT_PRINTER', '')
 # Oshxona printeri. Odatda tarmoqda: "192.168.0.202:9100".
 KITCHEN_PRINTER = os.environ.get('KITCHEN_PRINTER', '')
 RECEIPT_AUTO_PRINT = os.environ.get('RECEIPT_AUTO_PRINT', '1') == '1'
+# Talon qanday yetkaziladi:
+#   direct — printer shu kompyuterga ulangan (restoran ichidagi o'rnatish);
+#   agent  — server bulutda, printer restoranda. Talon navbatga qo'yiladi,
+#            restorandagi agent uni olib chiqaradi.
+PRINT_MODE = os.environ.get('PRINT_MODE', 'direct')
+# Agent shu so'z bilan taniladi. Bo'sh bo'lsa navbat endpointlari yopiq.
+PRINT_AGENT_TOKEN = os.environ.get('PRINT_AGENT_TOKEN', '')
+# Agent topshiriqni olib javob bermasa, shuncha soniyadan keyin u navbatga qaytadi.
+PRINT_LEASE_SECONDS = int(os.environ.get('PRINT_LEASE_SECONDS', '120'))
 # Zaxira nusxa. Token va chat sozlanmasa nusxa baribir olinadi, lekin
 # faqat serverda qoladi — yuborishning ishlamasligi zaxirani to'xtatmaydi.
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')

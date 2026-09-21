@@ -1,3 +1,4 @@
+import base64
 import re
 from datetime import datetime, time, timedelta
 from decimal import Decimal
@@ -27,6 +28,7 @@ from .models import (
     Ingredient,
     Order,
     OrderLine,
+    PrintJob,
     Recipe,
     RecipeLine,
     SalaryPayment,
@@ -4327,3 +4329,135 @@ class TelegramCommandTests(TestCase):
                 self.URL, {'message': {'chat': {'id': 111}, 'text': '/backup'}},
                 format='json', headers={'X-Telegram-Bot-Api-Secret-Token': 'test-secret'})
         never.assert_not_called()
+
+
+@override_settings(PRINT_MODE='agent', PRINT_AGENT_TOKEN='agent-token', RECEIPT_AUTO_PRINT=True)
+class PrintQueueTests(TestCase):
+    """Bulutdagi server va restorandagi printer orasidagi navbat.
+
+    Eng muhim shart: bitta talon ikki marta chiqmasligi va yo'qolmasligi
+    kerak. Qog'oz arzon, lekin ikki marta chiqqan oshxona taloni ikkinchi
+    porsiyani pishirtiradi.
+    """
+
+    INIT = b'\x1b\x40'
+    CUT = b'\x1d\x56\x42\x00'
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user(
+            'owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.category = Category.objects.create(branch=self.branch, name='Main')
+        self.dish = Dish.objects.create(
+            branch=self.branch, category=self.category, name='Osh', price=Decimal('40000'))
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+        self.agent = APIClient()
+
+    def sell(self):
+        prepare(self.owner, self.dish)
+        # Mijoz cheki `transaction.on_commit` orqali navbatga qo'yiladi:
+        # savdo yozilmasa chek ham chiqmasligi kerak. `TestCase` esa
+        # tranzaksiyani hech qachon yakunlamaydi, shuning uchun chaqiruvlar
+        # ataylab ishga tushiriladi — aks holda sinov haqiqatdan farq qilardi.
+        with self.captureOnCommitCallbacks(execute=True):
+            return self.client.post('/api/v1/orders/', {
+                'key': str(uuid4()), 'table': '5',
+                'lines': [{'dish': self.dish.id, 'quantity': 1}],
+                'payment_method': 'cash',
+            }, format='json')
+
+    def claim(self, stations=('kitchen', 'counter'), token='agent-token', branch='one'):
+        return self.agent.post('/api/v1/print/claim/', {
+            'agent': 'kassa-1', 'branch': branch, 'stations': list(stations),
+        }, format='json', headers={'X-Print-Agent-Token': token})
+
+    def ack(self, job_id, ok=True, error='', token='agent-token'):
+        return self.agent.post('/api/v1/print/ack/', {
+            'id': job_id, 'ok': ok, 'error': error,
+        }, format='json', headers={'X-Print-Agent-Token': token})
+
+    def test_a_sale_queues_a_ticket_instead_of_printing(self):
+        response = self.sell()
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(PrintJob.objects.filter(status='queued').exists())
+        # Kassir printer javobini kutmaydi: ogohlantirish chiqmaydi.
+        self.assertEqual(response.data['print_problems'], [])
+
+    def test_the_agent_gets_the_bytes_it_needs(self):
+        self.sell()
+        jobs = self.claim().data['jobs']
+        self.assertTrue(jobs)
+        by_kind = {row['kind']: base64.b64decode(row['payload']) for row in jobs}
+        for payload in by_kind.values():
+            # ESC/POS oqimi INIT bilan boshlanadi va kesish bilan tugaydi.
+            self.assertTrue(payload.startswith(self.INIT))
+            self.assertTrue(payload.endswith(self.CUT))
+        # Oshxona taloni narxsiz, mijoz cheki esa restoran nomi va summa
+        # bilan chiqadi — ular bir xil emas.
+        self.assertIn(b'OSHXONA', by_kind['prep'])
+        self.assertNotIn(b'40 000', by_kind['prep'])
+        self.assertIn(b'XONIM', by_kind['receipt'])
+        self.assertIn(b'40 000', by_kind['receipt'])
+
+    def test_a_claimed_ticket_is_not_handed_out_twice(self):
+        self.sell()
+        first = self.claim().data['jobs']
+        second = self.claim().data['jobs']
+        self.assertTrue(first)
+        self.assertEqual(second, [], 'olingan talon ikkinchi marta berilmasligi kerak')
+
+    def test_a_printed_ticket_leaves_the_queue(self):
+        self.sell()
+        job = self.claim().data['jobs'][0]
+        self.ack(job['id'], ok=True)
+        self.assertEqual(PrintJob.objects.get(pk=job['id']).status, 'done')
+
+    def test_a_failed_ticket_comes_back_for_another_try(self):
+        self.sell()
+        job = self.claim().data['jobs'][0]
+        self.ack(job['id'], ok=False, error='qog‘oz tugadi')
+        again = PrintJob.objects.get(pk=job['id'])
+        self.assertEqual(again.status, 'queued')
+        self.assertEqual(again.attempts, 1)
+        self.assertTrue(self.claim().data['jobs'], 'qayta urinish uchun berilishi kerak')
+
+    def test_a_broken_printer_does_not_spin_forever(self):
+        self.sell()
+        job_id = PrintJob.objects.first().id
+        for _attempt in range(6):
+            self.claim()
+            self.ack(job_id, ok=False, error='printer o‘chgan')
+        stuck = PrintJob.objects.get(pk=job_id)
+        self.assertEqual(stuck.status, 'failed')
+        self.assertNotIn(
+            job_id, [row['id'] for row in self.claim().data['jobs']],
+            'navbat tiqilib qolmasligi kerak')
+
+    def test_an_abandoned_ticket_returns_to_the_queue(self):
+        """Agent olib ketdi-yu, kompyuter o'chdi. Talon yo'qolmasligi kerak."""
+        self.sell()
+        job = self.claim().data['jobs'][0]
+        PrintJob.objects.filter(pk=job['id']).update(
+            claimed_at=timezone.now() - timedelta(seconds=600))
+        back = [row['id'] for row in self.claim().data['jobs']]
+        self.assertIn(job['id'], back, 'ijara tugagach navbatga qaytadi')
+
+    def test_the_agent_only_gets_its_own_stations(self):
+        self.sell()
+        rows = self.claim(stations=['kitchen']).data['jobs']
+        self.assertTrue(rows)
+        self.assertTrue(all(row['station'] == 'kitchen' for row in rows))
+
+    def test_another_branch_is_not_served(self):
+        self.sell()
+        self.assertEqual(self.claim(branch='boshqa').data['jobs'], [])
+
+    def test_a_wrong_token_is_refused(self):
+        self.sell()
+        self.assertEqual(self.claim(token='guessed').status_code, 403)
+        self.assertEqual(self.ack(1, token='guessed').status_code, 403)
+
+    @override_settings(PRINT_AGENT_TOKEN='')
+    def test_without_a_token_the_queue_is_closed(self):
+        self.assertEqual(self.claim(token='').status_code, 403)
