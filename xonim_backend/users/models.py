@@ -78,6 +78,8 @@ AUDIT_LABELS = {
     'auth.logout': 'Tizimdan chiqdi',
     'auth.failed': 'Parol noto‘g‘ri kiritildi',
     'auth.password': 'Parol almashtirildi',
+    'backup.create': 'Zaxira nusxa olindi',
+    'backup.failed': 'Zaxira nusxa olinmadi',
 }
 
 # Jurnalda guruhlash uchun: har harakat qaysi bo'limga tegishli.
@@ -99,6 +101,7 @@ AUDIT_GROUPS = {
     'table': 'Stollar',
     'waiter': 'Ofitsiantlar',
     'auth': 'Kirish-chiqish',
+    'backup': 'Zaxira nusxa',
 }
 
 

@@ -62,7 +62,7 @@ else:
     }}
 PASSWORD_HASHERS = ['django.contrib.auth.hashers.Argon2PasswordHasher', 'django.contrib.auth.hashers.PBKDF2PasswordHasher']
 AUTH_PASSWORD_VALIDATORS = [{'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', 'OPTIONS': {'min_length': 12}}, {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'}, {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'}]
-REST_FRAMEWORK = {'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.SessionAuthentication'], 'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'], 'DEFAULT_THROTTLE_CLASSES': ['rest_framework.throttling.UserRateThrottle', 'rest_framework.throttling.AnonRateThrottle'], 'DEFAULT_THROTTLE_RATES': {'user': '600/min', 'anon': '100/min', 'login': '10/min', 'assistant': '20/min'}, 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination', 'PAGE_SIZE': 100, 'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer']}
+REST_FRAMEWORK = {'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.SessionAuthentication'], 'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'], 'DEFAULT_THROTTLE_CLASSES': ['rest_framework.throttling.UserRateThrottle', 'rest_framework.throttling.AnonRateThrottle'], 'DEFAULT_THROTTLE_RATES': {'user': '600/min', 'anon': '100/min', 'login': '10/min', 'assistant': '20/min', 'backup': '6/hour'}, 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination', 'PAGE_SIZE': 100, 'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer']}
 CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', 'http://127.0.0.1:5173,http://localhost:5173').split(',')
 # HTTPS himoyasi DEBUG dan ALOHIDA boshqariladi.
 #
@@ -98,6 +98,12 @@ RECEIPT_PRINTER = os.environ.get('RECEIPT_PRINTER', '')
 # Oshxona printeri. Odatda tarmoqda: "192.168.0.202:9100".
 KITCHEN_PRINTER = os.environ.get('KITCHEN_PRINTER', '')
 RECEIPT_AUTO_PRINT = os.environ.get('RECEIPT_AUTO_PRINT', '1') == '1'
+# Zaxira nusxa. Token va chat sozlanmasa nusxa baribir olinadi, lekin
+# faqat serverda qoladi — yuborishning ishlamasligi zaxirani to'xtatmaydi.
+TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
+BACKUP_DIR = os.environ.get('BACKUP_DIR', BASE_DIR / 'backups')
+BACKUP_KEEP_DAYS = int(os.environ.get('BACKUP_KEEP_DAYS', '14'))
 RECEIPT_OPEN_DRAWER = os.environ.get('RECEIPT_OPEN_DRAWER', '0') == '1'
 # Testlar hech qachon haqiqiy printerga yozmasligi kerak: qog'oz sarflanadi va
 # tarmoq printeri kutib turgani uchun to'plam sekinlashadi.

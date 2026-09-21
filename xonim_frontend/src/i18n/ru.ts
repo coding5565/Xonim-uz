@@ -1233,4 +1233,25 @@ export const ru: Record<string, string> = {
   'Yangi parolni takrorlang': 'Повторите новый пароль',
   'Yangi parollar bir xil emas.': 'Новые пароли не совпадают.',
   'Parol almashtirildi.': 'Пароль изменён.',
+
+  // --- Zaxira nusxa ---
+  'Zaxira nusxa': 'Резервная копия',
+  'Baza va taom rasmlari. Har kuni ikki marta o‘zi olinadi va Telegramga yuboriladi.':
+    'База и фото блюд. Дважды в день создаётся автоматически и отправляется в Telegram.',
+  'Telegram ulangan ({chat}). Nusxalar shu chatga tushadi.':
+    'Telegram подключён ({chat}). Копии приходят в этот чат.',
+  'Telegram ulanmagan — nusxa faqat serverda saqlanadi.':
+    'Telegram не подключён — копия сохраняется только на сервере.',
+  'Hozir nusxa olish va yuborish': 'Создать копию и отправить',
+  'Nusxa olinmoqda…': 'Создаётся копия…',
+  'Nusxa olindi va Telegramga yuborildi.': 'Копия создана и отправлена в Telegram.',
+  'Nusxa olindi, lekin Telegramga yuborilmadi.': 'Копия создана, но в Telegram не отправлена.',
+  'Serverda oxirgi {days} kunlik nusxalar saqlanadi, eskilari o‘chiriladi.':
+    'На сервере хранятся копии за последние {days} дней, старые удаляются.',
+  'FAYL': 'ФАЙЛ',
+  'HAJMI': 'РАЗМЕР',
+  'Baza': 'База',
+  'Rasmlar': 'Фото',
+  'Zaxira nusxa olindi': 'Резервная копия создана',
+  'Zaxira nusxa olinmadi': 'Резервная копия не создана',
 }

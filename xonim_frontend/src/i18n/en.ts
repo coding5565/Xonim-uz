@@ -1233,4 +1233,25 @@ export const en: Record<string, string> = {
   'Yangi parolni takrorlang': 'Repeat the new password',
   'Yangi parollar bir xil emas.': 'The new passwords do not match.',
   'Parol almashtirildi.': 'Password changed.',
+
+  // --- Zaxira nusxa ---
+  'Zaxira nusxa': 'Backup',
+  'Baza va taom rasmlari. Har kuni ikki marta o‘zi olinadi va Telegramga yuboriladi.':
+    'The database and the dish photos. Taken twice a day and sent to Telegram.',
+  'Telegram ulangan ({chat}). Nusxalar shu chatga tushadi.':
+    'Telegram is connected ({chat}). Backups arrive in that chat.',
+  'Telegram ulanmagan — nusxa faqat serverda saqlanadi.':
+    'Telegram is not connected — backups stay on the server only.',
+  'Hozir nusxa olish va yuborish': 'Back up now and send',
+  'Nusxa olinmoqda…': 'Backing up…',
+  'Nusxa olindi va Telegramga yuborildi.': 'Backed up and sent to Telegram.',
+  'Nusxa olindi, lekin Telegramga yuborilmadi.': 'Backed up, but not sent to Telegram.',
+  'Serverda oxirgi {days} kunlik nusxalar saqlanadi, eskilari o‘chiriladi.':
+    'The server keeps the last {days} days of backups and deletes older ones.',
+  'FAYL': 'FILE',
+  'HAJMI': 'SIZE',
+  'Baza': 'Database',
+  'Rasmlar': 'Photos',
+  'Zaxira nusxa olindi': 'Backup created',
+  'Zaxira nusxa olinmadi': 'Backup failed',
 }

@@ -40,6 +40,7 @@ services:
     environment:
       DJANGO_STATIC_ROOT: /var/lib/xonim/static
       DJANGO_MEDIA_ROOT: /var/lib/xonim/media
+      BACKUP_DIR: /var/lib/xonim/backups
       POSTGRES_HOST: db
       POSTGRES_PORT: '5432'
     depends_on:
@@ -48,6 +49,8 @@ services:
     volumes:
       - static_files:/var/lib/xonim/static
       - media_files:/var/lib/xonim/media
+      # Zaxira nusxalar konteyner qayta qurilganda yo'qolmasin.
+      - backup_files:/var/lib/xonim/backups
     networks:
       # Baza va nginx bilan gaplashish uchun.
       - internal
@@ -86,6 +89,7 @@ volumes:
   db_data:
   static_files:
   media_files:
+  backup_files:
 
 networks:
   web:

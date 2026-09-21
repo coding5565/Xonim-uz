@@ -811,6 +811,11 @@ class PayrollTests(TestCase):
         # Yakshanbaga haq yozilmaydi, shuning uchun sinov ish kunida
         # o'tkaziladi: bugun yakshanba bo'lsa shanbaga suriladi.
         self.workday = self.today - timedelta(days=1) if self.today.weekday() == 6 else self.today
+        # Oldingi ish kuni. Shunchaki «bir kun oldin» deb bo'lmaydi:
+        # dushanba kuni u yakshanbaga tushadi va davomat qabul qilinmaydi —
+        # sinov haftaning qaysi kuni yurishiga bog'liq bo'lib qolardi.
+        earlier = self.workday - timedelta(days=1)
+        self.earlier = earlier - timedelta(days=1) if earlier.weekday() == 6 else earlier
         # Eng yaqin yakshanba — dam olish kuni qoidasini sinash uchun.
         self.sunday = self.today - timedelta(days=(self.today.weekday() + 1) % 7)
 
@@ -888,7 +893,7 @@ class PayrollTests(TestCase):
         # O'tgan kun eski kelishuv bilan qoladi, yangi kunlar yangisi bilan.
         self.assertEqual(rows['cashier']['balance'], '150000.00')
         self.assertEqual(rows['cashier']['daily_wage'], '300000.00')
-        self.mark([(self.cashier, True)], day=self.workday - timedelta(days=1))
+        self.mark([(self.cashier, True)], day=self.earlier)
         self.assertEqual(self.rows()[1]['cashier']['balance'], '450000.00')
 
     def test_money_paid_comes_off_the_balance(self):
@@ -4216,7 +4221,10 @@ class BackendTranslationTests(SimpleTestCase):
         for path in root.rglob('*.py'):
             if 'migrations' in path.parts or path.name in ('tests.py', 'translations.py'):
                 continue
-            for node in ast.walk(ast.parse(path.read_text(encoding='utf-8'))):
+            # utf-8-sig: tahrirlovchi qo'ygan BOM belgisi `ast` ni yiqitadi,
+            # lekin Python uchun bu yaroqli fayl — tekshiruv shu sababdan
+            # to'xtab qolmasligi kerak.
+            for node in ast.walk(ast.parse(path.read_text(encoding='utf-8-sig'))):
                 if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
                         and node.func.id == '_' and node.args
                         and isinstance(node.args[0], ast.Constant)

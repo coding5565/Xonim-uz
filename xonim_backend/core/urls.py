@@ -18,6 +18,7 @@ from operations.shift import ShiftHistoryView, ShiftView
 from operations.stock_usage import StockUsageView
 from operations.views import (
     AssistantChatView,
+    BackupView,
     DashboardView,
     ExpenseViewSet,
     IngredientViewSet,
@@ -108,6 +109,7 @@ urlpatterns = [
     path('api/v1/dashboard/', DashboardView.as_view()),
     path('api/v1/finance/', FinanceView.as_view()),
     path('api/v1/channel-fees/', ChannelFeeView.as_view()),
+    path('api/v1/backup/', BackupView.as_view()),
     path('api/v1/assistant/chat/', AssistantChatView.as_view()),
     path('api/v1/assistant/chats/', AssistantChatListView.as_view()),
     path('api/v1/assistant/chats/<int:pk>/', AssistantChatDetailView.as_view()),

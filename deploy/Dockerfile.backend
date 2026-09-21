@@ -13,8 +13,22 @@ WORKDIR /app
 
 # Pillow uchun kerak bo'ladigan kutubxonalar. `--no-install-recommends`
 # ataylab: tasvir kichik qolsin.
+# Pillow uchun libjpeg/zlib, zaxira nusxa uchun `pg_dump`.
+#
+# Debian'ning o'z omborida postgresql-client-15 turadi, server esa 16 —
+# `pg_dump` o'zidan YANGI serverga ishlashdan bosh tortadi. Shuning uchun
+# PostgreSQL'ning rasmiy ombori qo'shiladi va mos versiya o'rnatiladi.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libjpeg62-turbo zlib1g \
+    && apt-get install -y --no-install-recommends \
+        libjpeg62-turbo zlib1g curl ca-certificates gnupg \
+    && install -d /usr/share/postgresql-common/pgdg \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+        -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+    && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client-16 \
+    && apt-get purge -y gnupg curl && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Bog'liqliklar alohida qatlamda: kod o'zgarganda ular qayta o'rnatilmaydi.
@@ -32,7 +46,7 @@ RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh && chmod +x /usr/local/bin/ent
 # Ildiz huquqi bilan ishlamaydi: konteynerdan chiqib ketilsa ham zarar
 # cheklangan bo'ladi. Statik va media papkalari shu foydalanuvchiniki.
 RUN useradd --system --create-home --uid 10001 xonim \
-    && mkdir -p /var/lib/xonim/static /var/lib/xonim/media \
+    && mkdir -p /var/lib/xonim/static /var/lib/xonim/media /var/lib/xonim/backups \
     && chown -R xonim:xonim /app /var/lib/xonim
 USER xonim
 

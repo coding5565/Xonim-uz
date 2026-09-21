@@ -1,6 +1,7 @@
 from datetime import timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Count, F, Prefetch, Sum
 from django.db.models.functions import Coalesce, TruncDate
@@ -18,6 +19,7 @@ from users.permissions import BranchMember, KitchenOnly, OwnerOnly, SalesOnly
 
 from .ai_assistant import AssistantQuestion, ask_openai, business_snapshot, local_answer
 from .assistant_chats import remember
+from .backups import BackupError, latest_backups, run_backup, telegram_status
 from .models import (
     DELIVERY_CHANNELS,
     ORDER_STATUSES,
@@ -569,6 +571,52 @@ class SalesReportExportView(APIView):
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         response['X-Content-Type-Options'] = 'nosniff'
         return response
+
+
+class BackupThrottle(ScopedRateThrottle):
+    """Nusxa olish bazani va diskni bosadi — tugmani ketma-ket bosib
+    serverni cho'ktirib bo'lmasin."""
+
+    scope = 'backup'
+
+
+class BackupView(APIView):
+    """Egasi istalgan paytda nusxa olib, uni Telegramga yuboradi.
+
+    Jadval bo‘yicha nusxa kuniga ikki marta cron orqali olinadi; bu tugma
+    esa «hozir kerak» degan holat uchun — masalan menyuni katta
+    o‘zgartirishdan oldin.
+    """
+
+    permission_classes = [OwnerOnly]
+    throttle_classes = [BackupThrottle]
+    throttle_scope = 'backup'
+
+    def get(self, request):
+        return Response({
+            'telegram': telegram_status(),
+            'backups': latest_backups(),
+            'keep_days': settings.BACKUP_KEEP_DAYS,
+        })
+
+    def post(self, request):
+        who = request.user.first_name or request.user.username
+        try:
+            result = run_backup(actor=who, source='manual')
+        except BackupError as failure:
+            audit(request.user, 'backup.failed', str(failure)[:200])
+            raise Conflict(str(failure)) from None
+        audit(
+            request.user, 'backup.create',
+            f'{", ".join(item["name"] for item in result["files"])} · '
+            f'{"Telegramga yuborildi" if result["sent_to_telegram"] else "faqat serverda"}',
+        )
+        return Response({
+            **result,
+            'telegram': telegram_status(),
+            'backups': latest_backups(),
+            'keep_days': settings.BACKUP_KEEP_DAYS,
+        })
 
 
 class AssistantThrottle(ScopedRateThrottle):

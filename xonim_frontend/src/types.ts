@@ -1,6 +1,13 @@
 export interface PaymentMethod { method: string; label: string }
 export interface MethodRevenue { method: string; label: string; revenue: string }
 export interface User { id: number; username: string; name: string; role: 'owner' | 'cashier' | 'kitchen'; branch: string; branch_slug: string | null; payment_methods: PaymentMethod[] }
+/** Zaxira nusxa holati: Telegram ulanganmi va serverda nima saqlangan. */
+export interface BackupFile { name: string; size: string; created_at: string; kind: 'db' | 'media' }
+export interface BackupState {
+  telegram: { configured: boolean; chat: string }
+  backups: BackupFile[]
+  keep_days: number
+}
 export type Station = 'kitchen' | 'counter'
 export type TableZone = 'hall_left' | 'hall_right' | 'outside'
 /** Stol ustidagi ochiq hisob. `payable` — mijoz to'laydigan summa. */

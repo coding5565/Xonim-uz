@@ -1,10 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import QRCode from 'qrcode'
-import { ArrowRight, Bike, CheckCircle2, Clock3, ExternalLink, KeyRound, QrCode, Server, ShieldCheck } from 'lucide-react'
+import { ArrowRight, Bike, CheckCircle2, Clock3, DatabaseBackup, ExternalLink, KeyRound, QrCode, Server, ShieldCheck } from 'lucide-react'
 import { api, dateLabel } from '../api'
 import { useI18n } from '../i18n'
-import type { ActivityLog, ChannelFees } from '../types'
+import type { ActivityLog, BackupState, ChannelFees } from '../types'
 import { useSession } from '../session'
 
 const ready = [
@@ -36,6 +36,12 @@ export default function SettingsPage() {
   const [passwordBusy, setPasswordBusy] = useState(false)
   const [passwordError, setPasswordError] = useState('')
   const [passwordDone, setPasswordDone] = useState('')
+  // Zaxira nusxa: jadval bo'yicha kuniga ikki marta olinadi, bu tugma esa
+  // «hozir kerak» degan holat uchun.
+  const [backup, setBackup] = useState<BackupState>()
+  const [backupBusy, setBackupBusy] = useState(false)
+  const [backupError, setBackupError] = useState('')
+  const [backupDone, setBackupDone] = useState('')
   // Menyu manzili filialga bog'liq.
   const menuPath = user?.branch_slug ? `/menu/${user.branch_slug}` : '/menu'
   const url = `${window.location.origin}${menuPath}`
@@ -45,12 +51,14 @@ export default function SettingsPage() {
       try {
         setQr(await QRCode.toDataURL(url, { width: 260, margin: 2, color: { dark: '#153d32', light: '#ffffff' } }))
         if (user?.role !== 'owner') return
-        const [log, platform] = await Promise.all([
+        const [log, platform, saved] = await Promise.all([
           api<ActivityLog>('audit/'),
           api<ChannelFees>('channel-fees/'),
+          api<BackupState>('backup/'),
         ])
         setAudit(log)
         setFees(platform)
+        setBackup(saved)
         setRates(Object.fromEntries(platform.rows.map(row => [row.channel, row.commission])))
       } catch (exception) {
         setError((exception as Error).message)
@@ -75,6 +83,24 @@ export default function SettingsPage() {
       setError((exception as Error).message)
     } finally {
       setSaving('')
+    }
+  }
+
+  async function makeBackup() {
+    setBackupBusy(true)
+    setBackupError('')
+    setBackupDone('')
+    try {
+      const result = await api<BackupState & { sent_to_telegram: boolean; note: string }>(
+        'backup/', { method: 'POST' })
+      setBackup(result)
+      setBackupDone(result.sent_to_telegram
+        ? t('Nusxa olindi va Telegramga yuborildi.')
+        : result.note || t('Nusxa olindi, lekin Telegramga yuborilmadi.'))
+    } catch (exception) {
+      setBackupError((exception as Error).message)
+    } finally {
+      setBackupBusy(false)
     }
   }
 
@@ -134,6 +160,56 @@ export default function SettingsPage() {
           <div className="inline-tip"><ShieldCheck size={20} />{t('Faqat localhost uchun ishga tushirilgan')}</div>
         </section>
       </div>
+
+      {user?.role === 'owner' && (
+        <section className="panel spaced">
+          <header className="panel-heading">
+            <div>
+              <h2>{t('Zaxira nusxa')}</h2>
+              <p>{t('Baza va taom rasmlari. Har kuni ikki marta o‘zi olinadi va Telegramga yuboriladi.')}</p>
+            </div>
+            <DatabaseBackup size={19} />
+          </header>
+          <div className="backup-panel">
+            <p className={`alert ${backup?.telegram.configured ? '' : 'error'}`}>
+              {backup?.telegram.configured
+                ? t('Telegram ulangan ({chat}). Nusxalar shu chatga tushadi.', { chat: backup.telegram.chat })
+                : t('Telegram ulanmagan — nusxa faqat serverda saqlanadi.')}
+            </p>
+            {backupError && <p className="alert error">{backupError}</p>}
+            {backupDone && <p className="alert success">{backupDone}</p>}
+            <button className="button primary" disabled={backupBusy} onClick={makeBackup}>
+              <DatabaseBackup size={17} />
+              {t(backupBusy ? 'Nusxa olinmoqda…' : 'Hozir nusxa olish va yuborish')}
+            </button>
+            {!!backup?.backups.length && (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr><th>{t('FAYL')}</th><th>{t('HAJMI')}</th><th>{t('VAQT')}</th></tr>
+                  </thead>
+                  <tbody>
+                    {backup.backups.map(row => (
+                      <tr key={row.name}>
+                        <td>
+                          <strong>{t(row.kind === 'db' ? 'Baza' : 'Rasmlar')}</strong>
+                          <small>{row.name}</small>
+                        </td>
+                        <td className="number">{row.size}</td>
+                        <td>{dateLabel(row.created_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="data-note">
+              {t('Serverda oxirgi {days} kunlik nusxalar saqlanadi, eskilari o‘chiriladi.',
+                { days: backup?.keep_days ?? 14 })}
+            </p>
+          </div>
+        </section>
+      )}
 
       {/* Parolni almashtirish har bir xodimga ochiq: unutilgan parol
           yangi hisob ochishni talab qilmasligi kerak. */}
