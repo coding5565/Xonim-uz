@@ -16,6 +16,7 @@ from operations.dish_prep import (
 from operations.finance import FinanceView
 from operations.shift import ShiftHistoryView, ShiftView
 from operations.stock_usage import StockUsageView
+from operations.telegram_bot import TelegramWebhookView
 from operations.views import (
     AssistantChatView,
     BackupView,
@@ -110,6 +111,7 @@ urlpatterns = [
     path('api/v1/finance/', FinanceView.as_view()),
     path('api/v1/channel-fees/', ChannelFeeView.as_view()),
     path('api/v1/backup/', BackupView.as_view()),
+    path('api/v1/telegram/webhook/', TelegramWebhookView.as_view()),
     path('api/v1/assistant/chat/', AssistantChatView.as_view()),
     path('api/v1/assistant/chats/', AssistantChatListView.as_view()),
     path('api/v1/assistant/chats/<int:pk>/', AssistantChatDetailView.as_view()),

@@ -104,6 +104,10 @@ TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
 TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 BACKUP_DIR = os.environ.get('BACKUP_DIR', BASE_DIR / 'backups')
 BACKUP_KEEP_DAYS = int(os.environ.get('BACKUP_KEEP_DAYS', '14'))
+# Telegram webhook'ining maxfiy so'zi. Telegram uni har so'rovda
+# `X-Telegram-Bot-Api-Secret-Token` sarlavhasida qaytaradi, shuning uchun
+# u manzilda emas — server jurnallariga tushmaydi.
+TELEGRAM_WEBHOOK_SECRET = os.environ.get('TELEGRAM_WEBHOOK_SECRET', '')
 RECEIPT_OPEN_DRAWER = os.environ.get('RECEIPT_OPEN_DRAWER', '0') == '1'
 # Testlar hech qachon haqiqiy printerga yozmasligi kerak: qog'oz sarflanadi va
 # tarmoq printeri kutib turgani uchun to'plam sekinlashadi.

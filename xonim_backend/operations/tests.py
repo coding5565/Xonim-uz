@@ -4233,3 +4233,97 @@ class BackendTranslationTests(SimpleTestCase):
 
         self.assertEqual(sorted(key for key in used if key not in RU), [], 'ruscha tarjimasi yo‘q')
         self.assertEqual(sorted(key for key in used if key not in EN), [], 'inglizcha tarjimasi yo‘q')
+
+
+@override_settings(
+    TELEGRAM_BOT_TOKEN='test-token',
+    TELEGRAM_CHAT_ID='111,222',
+    TELEGRAM_WEBHOOK_SECRET='test-secret',
+)
+class TelegramCommandTests(TestCase):
+    """Botdagi /backup buyrug'i.
+
+    Eng muhimi kim chaqira olishi: webhook manzili internetda ochiq
+    turadi, shuning uchun har bir qavat alohida tekshiriladi.
+    """
+
+    URL = '/api/v1/telegram/webhook/'
+
+    def setUp(self):
+        self.client = APIClient()
+        self.sent = []
+        self.backups = []
+
+    def send(self, text, chat='111', secret='test-secret'):
+        def remember(_token, target, message):
+            self.sent.append((str(target), message))
+            return True
+
+        def fake_backup(**kwargs):
+            self.backups.append(kwargs)
+            return {'files': [], 'sent_to_telegram': True, 'note': '', 'delivered': 2,
+                    'recipients': 2, 'removed_old': 0, 'created_at': timezone.now()}
+
+        with patch('operations.telegram_bot.telegram_message', side_effect=remember), \
+             patch('operations.telegram_bot.run_backup', side_effect=fake_backup), \
+             patch('operations.telegram_bot.recent_backup', return_value=None):
+            return self.client.post(
+                self.URL,
+                {'message': {'chat': {'id': int(chat)}, 'text': text}},
+                format='json',
+                headers={'X-Telegram-Bot-Api-Secret-Token': secret},
+            )
+
+    def test_the_backup_command_makes_a_backup(self):
+        self.assertEqual(self.send('/backup').status_code, 200)
+        self.assertEqual(len(self.backups), 1)
+
+    def test_a_wrong_secret_is_ignored(self):
+        self.assertEqual(self.send('/backup', secret='guessed').status_code, 200)
+        self.assertEqual(self.backups, [], 'maxfiy so‘zsiz nusxa olinmasligi kerak')
+        self.assertEqual(self.sent, [], 'begonaga javob ham yozilmaydi')
+
+    def test_a_missing_secret_is_ignored(self):
+        self.assertEqual(self.send('/backup', secret='').status_code, 200)
+        self.assertEqual(self.backups, [])
+
+    def test_a_stranger_cannot_start_a_backup(self):
+        self.send('/backup', chat='999')
+        self.assertEqual(self.backups, [], 'ro‘yxatda yo‘q chat nusxa ololmaydi')
+        # Lekin o'z raqamini biladi — uni qo'shish uchun shu kerak.
+        self.assertIn('999', self.sent[0][1])
+
+    def test_the_second_allowed_chat_also_works(self):
+        self.send('/backup', chat='222')
+        self.assertEqual(len(self.backups), 1)
+
+    def test_help_does_not_touch_the_database(self):
+        self.send('/help')
+        self.assertEqual(self.backups, [])
+        self.assertIn('/backup', self.sent[0][1])
+
+    def test_an_unknown_command_is_answered_not_run(self):
+        self.send('/nimadir')
+        self.assertEqual(self.backups, [])
+        self.assertIn('Noma', self.sent[0][1])
+
+    def test_a_repeat_within_the_cooldown_is_refused(self):
+        """Telegram javobni kutmay so'rovni takrorlashi mumkin — har
+        takror yangi nusxa yasamasligi kerak."""
+        class Fresh:
+            def stat(self):
+                class Info:
+                    st_size = 1024
+                return Info()
+
+        def remember(_token, target, message):
+            self.sent.append((str(target), message))
+            return True
+
+        with patch('operations.telegram_bot.telegram_message', side_effect=remember), \
+             patch('operations.telegram_bot.run_backup') as never, \
+             patch('operations.telegram_bot.recent_backup', return_value=Fresh()):
+            self.client.post(
+                self.URL, {'message': {'chat': {'id': 111}, 'text': '/backup'}},
+                format='json', headers={'X-Telegram-Bot-Api-Secret-Token': 'test-secret'})
+        never.assert_not_called()
