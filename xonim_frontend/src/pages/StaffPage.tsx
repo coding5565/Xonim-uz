@@ -10,8 +10,11 @@ import { useI18n } from '../i18n'
 interface Staff {
   id: number
   name: string
+  /** Erkin matn: «Oshpaz», «Farrosh» — ro'yxat emas. */
+  position: string
+  /** Tizimga kirmaydigan xodimda bo'sh. */
   username: string
-  role: 'owner' | 'cashier' | 'kitchen'
+  role: 'owner' | 'cashier' | 'kitchen' | ''
   active: boolean
   phone: string
   daily_wage: string
@@ -40,17 +43,20 @@ interface SalaryPayment {
 
 interface CreateForm {
   name: string
-  username: string
-  role: string
-  password: string
+  position: string
   phone: string
   daily_wage: string
   hired_at: string
   notes: string
+  /** Tizimga kirish kerak bo'lsagina to'ldiriladi. */
+  username: string
+  role: string
+  password: string
 }
 
 interface EditForm {
   name: string
+  position: string
   role: string
   phone: string
   daily_wage: string
@@ -68,7 +74,7 @@ interface PayForm {
 }
 
 const roleName = (role: string) =>
-  role === 'owner' ? 'Superadmin' : role === 'kitchen' ? 'Oshxona' : 'Kassir'
+  role === 'owner' ? 'Superadmin' : role === 'kitchen' ? 'Oshxona' : role ? 'Kassir' : ''
 
 export default function StaffPage() {
   const { t, tn } = useI18n()
@@ -81,13 +87,16 @@ export default function StaffPage() {
   const [payOpen, setPayOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [busy, setBusy] = useState(false)
+  // Login bo'limi ataylab ochiladi: ko'pchilik xodim tizimga kirmaydi.
+  const [wantsLogin, setWantsLogin] = useState(false)
   const [error, setError] = useState('')
   const [formError, setFormError] = useState('')
   const [createForm, setCreateForm] = useState<CreateForm>({
-    name: '', username: '', role: 'cashier', password: '', phone: '', daily_wage: '', hired_at: today(), notes: '',
+    name: '', position: '', phone: '', daily_wage: '', hired_at: today(), notes: '',
+    username: '', role: 'cashier', password: '',
   })
   const [editForm, setEditForm] = useState<EditForm>({
-    name: '', role: 'cashier', phone: '', daily_wage: '', hired_at: '', notes: '', active: true,
+    name: '', position: '', role: 'cashier', phone: '', daily_wage: '', hired_at: '', notes: '', active: true,
   })
   const [payForm, setPayForm] = useState<PayForm>({
     key: '', amount: '', payment_method: 'cash', paid_on: today(), note: '',
@@ -110,7 +119,7 @@ export default function StaffPage() {
   }, [load])
 
   const filtered = staff.filter(item =>
-    `${item.name} ${item.username} ${item.phone} ${item.role}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
+    `${item.name} ${item.position} ${item.username} ${item.phone}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
   )
   const employees = staff.filter(item => item.role !== 'owner')
   const activeCount = employees.filter(item => item.active).length
@@ -120,8 +129,10 @@ export default function StaffPage() {
 
   function startCreate() {
     setCreateForm({
-      name: '', username: '', role: 'cashier', password: '', phone: '', daily_wage: '', hired_at: today(), notes: '',
+      name: '', position: '', phone: '', daily_wage: '', hired_at: today(), notes: '',
+      username: '', role: 'cashier', password: '',
     })
+    setWantsLogin(false)
     setFormError('')
     setCreateOpen(true)
   }
@@ -137,6 +148,11 @@ export default function StaffPage() {
           ...createForm,
           daily_wage: createForm.daily_wage || '0',
           hired_at: createForm.hired_at || null,
+          // Login bo'sh bo'lsa hisob ochilmaydi — maydonlar ham
+          // yuborilmaydi, aks holda server ularni to'ldirilgan deb o'qiydi.
+          username: createForm.username || undefined,
+          role: createForm.username ? createForm.role : undefined,
+          password: createForm.username ? createForm.password : undefined,
         }),
       })
       setCreateOpen(false)
@@ -152,7 +168,8 @@ export default function StaffPage() {
     setSelected(item)
     setEditForm({
       name: item.name,
-      role: item.role,
+      position: item.position,
+      role: item.role || 'cashier',
       phone: item.phone,
       daily_wage: item.daily_wage,
       hired_at: item.hired_at || '',
@@ -171,7 +188,13 @@ export default function StaffPage() {
     try {
       await api(`staff/${selected.id}/`, {
         method: 'PATCH',
-        body: JSON.stringify({ ...editForm, hired_at: editForm.hired_at || null }),
+        body: JSON.stringify({
+          ...editForm,
+          hired_at: editForm.hired_at || null,
+          // Rol hisobga tegishli: logini yo'q xodimga yuborilsa server
+          // uni xato deb qaytaradi.
+          role: selected.username ? editForm.role : undefined,
+        }),
       })
       setEditOpen(false)
       await load()
@@ -289,7 +312,7 @@ export default function StaffPage() {
           <table>
             <thead>
               <tr>
-                <th>{t('XODIM')}</th><th>{t('ROL')}</th><th>{t('KUNLIK HAQ')}</th>
+                <th>{t('XODIM')}</th><th>{t('LAVOZIM')}</th><th>{t('KUNLIK HAQ')}</th>
                 <th>{t('BALANS')}</th><th>{t('SO‘NGGI TO‘LOV')}</th><th>{t('HOLAT')}</th><th>{t('AMALLAR')}</th>
               </tr>
             </thead>
@@ -298,9 +321,15 @@ export default function StaffPage() {
                 <tr key={item.id}>
                   <td>
                     <strong>{item.name}</strong>
-                    <small>@{item.username}{item.phone ? ` · ${item.phone}` : ''}</small>
+                    <small>
+                      {item.username ? `@${item.username}` : t('tizimga kirmaydi')}
+                      {item.phone ? ` · ${item.phone}` : ''}
+                    </small>
                   </td>
-                  <td><span className="pill subtle">{t(roleName(item.role))}</span></td>
+                  <td>
+                    <span className="pill subtle">{item.position || t('Lavozimsiz')}</span>
+                    {!!item.role && <small>{t(roleName(item.role))}</small>}
+                  </td>
                   <td className="number">
                     {item.role === 'owner' ? '—' : (
                       <>
@@ -390,24 +419,14 @@ export default function StaffPage() {
           </div>
           <div className="form-row">
             <label>
-              {t('Login')}
+              {t('Lavozim')}
+              <small className="field-hint">{t('O‘zingiz yozasiz: oshpaz, farrosh, ofitsiant…')}</small>
               <input
-                value={createForm.username}
-                onChange={event => updateCreate({ username: event.target.value })}
-                required
-                minLength={3}
-                maxLength={150}
-                pattern="[A-Za-z0-9_@.+-]+"
-                autoComplete="off"
-                placeholder="aziz_admin"
+                value={createForm.position}
+                onChange={event => updateCreate({ position: event.target.value })}
+                maxLength={60}
+                placeholder={t('Masalan, Oshpaz')}
               />
-            </label>
-            <label>
-              {t('Rol')}
-              <select value={createForm.role} onChange={event => updateCreate({ role: event.target.value })}>
-                <option value="cashier">{t('Kassir')}</option>
-                <option value="kitchen">{t('Oshxona')}</option>
-              </select>
             </label>
           </div>
           <div className="form-row">
@@ -433,19 +452,58 @@ export default function StaffPage() {
               />
             </label>
           </div>
-          <label>
-            {t('Vaqtinchalik parol')}
+          {/* Ko'pchilik xodim tizimga umuman kirmaydi, shuning uchun login
+              bo'limi yopiq turadi va ataylab ochiladi. */}
+          <label className="checkbox">
             <input
-              value={createForm.password}
-              onChange={event => updateCreate({ password: event.target.value })}
-              type="password"
-              required
-              minLength={12}
-              maxLength={128}
-              autoComplete="new-password"
-              placeholder={t('Kamida 12 belgi')}
+              type="checkbox"
+              checked={!!createForm.username || wantsLogin}
+              onChange={event => {
+                setWantsLogin(event.target.checked)
+                if (!event.target.checked) updateCreate({ username: '', password: '' })
+              }}
             />
+            {t('Bu xodim tizimga kiradi')}
           </label>
+          {(wantsLogin || !!createForm.username) && (
+            <>
+              <div className="form-row">
+                <label>
+                  {t('Login')}
+                  <input
+                    value={createForm.username}
+                    onChange={event => updateCreate({ username: event.target.value })}
+                    required
+                    minLength={3}
+                    maxLength={150}
+                    pattern="[A-Za-z0-9_@.+-]+"
+                    autoComplete="off"
+                    placeholder="aziz_admin"
+                  />
+                </label>
+                <label>
+                  {t('Rol')}
+                  <select value={createForm.role} onChange={event => updateCreate({ role: event.target.value })}>
+                    <option value="cashier">{t('Kassir')}</option>
+                    <option value="kitchen">{t('Oshxona')}</option>
+                  </select>
+                </label>
+              </div>
+              <label>
+                {t('Vaqtinchalik parol')}
+                <input
+                  value={createForm.password}
+                  onChange={event => updateCreate({ password: event.target.value })}
+                  type="password"
+                  required
+                  minLength={12}
+                  maxLength={128}
+                  autoComplete="new-password"
+                  placeholder={t('Kamida 12 belgi')}
+                />
+              </label>
+            </>
+          )}
           <label>
             {t('Izoh')}
             <textarea
@@ -478,12 +536,23 @@ export default function StaffPage() {
           </div>
           <div className="form-row">
             <label>
-              {t('Rol')}
-              <select value={editForm.role} onChange={event => updateEdit({ role: event.target.value })}>
-                <option value="cashier">{t('Kassir')}</option>
-                <option value="kitchen">{t('Oshxona')}</option>
-              </select>
+              {t('Lavozim')}
+              <input
+                value={editForm.position}
+                onChange={event => updateEdit({ position: event.target.value })}
+                maxLength={60}
+                placeholder={t('Masalan, Oshpaz')}
+              />
             </label>
+            {!!selected?.username && (
+              <label>
+                {t('Rol')}
+                <select value={editForm.role} onChange={event => updateEdit({ role: event.target.value })}>
+                  <option value="cashier">{t('Kassir')}</option>
+                  <option value="kitchen">{t('Oshxona')}</option>
+                </select>
+              </label>
+            )}
             <label>
               {t('Kunlik haq, so‘m')}
               <small className="field-hint">{t('O‘zgarish faqat keyingi kunlarga ta’sir qiladi')}</small>

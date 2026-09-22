@@ -1,5 +1,6 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.db.models import Q
 
 
 class Branch(models.Model):
@@ -19,11 +20,49 @@ class User(AbstractUser):
     role = models.CharField(max_length=12, choices=Role.choices, default=Role.CASHIER)
     branch = models.ForeignKey(Branch, on_delete=models.PROTECT, null=True)
     phone = models.CharField(max_length=30, blank=True)
+
+
+class Employee(models.Model):
+    """Restoranda ishlaydigan odam. Tizimga kirishi SHART EMAS.
+
+    Oshpaz, farrosh, yordamchi — ularning ko'pchiligi hech qachon tizimga
+    kirmaydi, lekin ularga ham haq yoziladi va pul beriladi. Ilgari xodim
+    faqat login bilan birga yaratilardi: har bir farroshga parol o'ylab
+    topishga to'g'ri kelardi va ishlatilmagan hisoblar tizimda qolib
+    ketardi.
+
+    Lavozim erkin matn: restoran o'z odamlarini o'zi ataydi va ro'yxatga
+    sig'maydigan lavozim doim topiladi.
+
+    Tizimga kiradiganlar uchun `account` orqali login biriktiriladi —
+    kassir ham xodim, ham foydalanuvchi bo'ladi, lekin bu ikki narsa
+    alohida qolаdi.
+    """
+
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT, related_name='employees')
+    name = models.CharField(max_length=120)
+    # Erkin matn: «Oshpaz», «Farrosh», «Ofitsiant» — ro'yxat emas.
+    position = models.CharField(max_length=60, blank=True)
     # Kunlik haq. Oylik emas: hafta olti kun ishlanadi va haq har kuni
     # davomatga qarab yig'iladi, shuning uchun kelishuvning birligi ham kun.
     daily_wage = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    phone = models.CharField(max_length=30, blank=True)
     hired_at = models.DateField(null=True, blank=True)
     notes = models.CharField(max_length=300, blank=True)
+    active = models.BooleanField(default=True)
+    # Tizimga kiradigan xodimning hisobi. Bo'sh bo'lsa — u faqat ishlaydi.
+    account = models.OneToOneField(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='employee')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-active', 'name']
+        constraints = [
+            # Bir filialda bir xil ism ikki marta bo'lsa, davomatda kimni
+            # belgilaganini ajratib bo'lmaydi.
+            models.UniqueConstraint(fields=['branch', 'name'], name='employee_branch_name'),
+            models.CheckConstraint(condition=Q(daily_wage__gte=0), name='employee_wage_not_negative'),
+        ]
 
 
 # Harakat turlarining o'zbekcha nomlari. Ro'yxatda yo'q kalit xom holida

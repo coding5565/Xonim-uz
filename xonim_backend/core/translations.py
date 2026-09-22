@@ -29,6 +29,14 @@ RU = {
     'Buyurtma topilmadi.': 'Заказ не найден.',
     'Mahsulot topilmadi.': 'Продукт не найден.',
     'Stol topilmadi.': 'Стол не найден.',
+    'Bu ismli xodim allaqachon bor.':
+        'Сотрудник с таким именем уже есть.',
+    'Bu xodimda tizim hisobi yo‘q.':
+        'У этого сотрудника нет учётной записи.',
+    'Login berilsa parol ham kerak.':
+        'Если указан логин, нужен и пароль.',
+    'Login berilsa rol ham tanlanadi.':
+        'Если указан логин, нужно выбрать и роль.',
     'Xodim topilmadi.': 'Сотрудник не найден.',
     'Kategoriya topilmadi.': 'Категория не найдена.',
     'Bu qator hisobda yo‘q.': 'Этой строки нет в счёте.',
@@ -245,6 +253,14 @@ EN = {
     'Buyurtma topilmadi.': 'Order not found.',
     'Mahsulot topilmadi.': 'Item not found.',
     'Stol topilmadi.': 'Table not found.',
+    'Bu ismli xodim allaqachon bor.':
+        'An employee with this name already exists.',
+    'Bu xodimda tizim hisobi yo‘q.':
+        'This employee has no system account.',
+    'Login berilsa parol ham kerak.':
+        'A login needs a password too.',
+    'Login berilsa rol ham tanlanadi.':
+        'A login needs a role as well.',
     'Xodim topilmadi.': 'Employee not found.',
     'Kategoriya topilmadi.': 'Category not found.',
     'Bu qator hisobda yo‘q.': 'That line is not on this bill.',

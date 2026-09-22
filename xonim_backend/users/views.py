@@ -35,16 +35,18 @@ from operations.models import (
 )
 from operations.services import Conflict, audit, create_expense, safely
 
-from .models import AuditEvent, User, audit_group, audit_label
+from .models import AuditEvent, Employee, User, audit_group, audit_label
 from .permissions import BranchMember, OwnerOnly, SalesOnly
 
 logger = logging.getLogger(__name__)
 
 
 def salary_register_xlsx(payments):
-    rows = [['Xodim', 'Login', 'Rol', 'Kunlik haq', 'To‘langan sana', 'Summa', 'To‘lov turi', 'Kiritgan', 'Izoh']]
+    rows = [['Xodim', 'Login', 'Lavozim', 'Kunlik haq', 'To‘langan sana', 'Summa', 'To‘lov turi', 'Kiritgan', 'Izoh']]
     rows += [[
-        item.employee.first_name or item.employee.username, item.employee.username, item.employee.get_role_display(),
+        item.employee.name,
+        item.employee.account.username if item.employee.account_id else '',
+        item.employee.position,
         item.employee.daily_wage, item.paid_on.isoformat(), item.amount,
         'Naqd' if item.payment_method == 'cash' else 'Karta', item.actor.first_name or item.actor.username, item.note,
     ] for item in payments]
@@ -250,27 +252,46 @@ class AuditView(APIView):
 
 
 class StaffCreateInput(serializers.Serializer):
-    name = serializers.CharField(max_length=150)
-    username = serializers.RegexField(r'^[\w.@+-]+$', min_length=3, max_length=150)
-    role = serializers.ChoiceField(choices=[User.Role.CASHIER, User.Role.KITCHEN])
-    password = serializers.CharField(min_length=12, max_length=128, trim_whitespace=False, write_only=True)
+    """Yangi xodim. Login ixtiyoriy: ko'pchilik tizimga umuman kirmaydi.
+
+    `username` yuborilsa unga hisob ochiladi va parol majburiy bo'ladi;
+    yuborilmasa xodim faqat ro'yxatda va davomatda bo'ladi.
+    """
+
+    name = serializers.CharField(max_length=120)
+    # Lavozim erkin matn: ro'yxatga sig'maydigan lavozim doim topiladi.
+    position = serializers.CharField(max_length=60, allow_blank=True, default='')
     phone = serializers.CharField(max_length=30, allow_blank=True, default='')
     daily_wage = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0'), default=0)
     hired_at = serializers.DateField(allow_null=True, required=False)
     notes = serializers.CharField(max_length=300, allow_blank=True, default='')
+    # Tizimga kirish kerak bo'lsa shu uchtasi to'ldiriladi.
+    username = serializers.RegexField(r'^[\w.@+-]+$', min_length=3, max_length=150, required=False, allow_blank=True)
+    role = serializers.ChoiceField(choices=[User.Role.CASHIER, User.Role.KITCHEN], required=False)
+    password = serializers.CharField(min_length=12, max_length=128, trim_whitespace=False,
+                                     required=False, write_only=True, allow_blank=True)
 
     def validate_username(self, value):
-        if User.objects.filter(username__iexact=value).exists():
+        if value and User.objects.filter(username__iexact=value).exists():
             raise serializers.ValidationError(_('Bu login band.'))
         return value
 
     def validate_password(self, value):
-        password_validation.validate_password(value)
+        if value:
+            password_validation.validate_password(value)
         return value
+
+    def validate(self, attrs):
+        if attrs.get('username') and not attrs.get('password'):
+            raise serializers.ValidationError({'password': _('Login berilsa parol ham kerak.')})
+        if attrs.get('username') and not attrs.get('role'):
+            raise serializers.ValidationError({'role': _('Login berilsa rol ham tanlanadi.')})
+        return attrs
 
 
 class StaffUpdateInput(serializers.Serializer):
-    name = serializers.CharField(max_length=150, required=False)
+    name = serializers.CharField(max_length=120, required=False)
+    position = serializers.CharField(max_length=60, allow_blank=True, required=False)
     role = serializers.ChoiceField(choices=[User.Role.CASHIER, User.Role.KITCHEN], required=False)
     phone = serializers.CharField(max_length=30, allow_blank=True, required=False)
     daily_wage = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0'), required=False)
@@ -372,24 +393,27 @@ def staff_totals(branch):
     return worked, given
 
 
-def staff_payload(user, totals=None):
-    worked, given = totals if totals is not None else staff_totals(user.branch)
-    work_row, pay_row = worked.get(user.id, {}), given.get(user.id, {})
+def staff_payload(employee, totals=None):
+    worked, given = totals if totals is not None else staff_totals(employee.branch)
+    work_row, pay_row = worked.get(employee.id, {}), given.get(employee.id, {})
     # Balans hamma vaqt bo'yicha: yig'ilgan haq − berilgan pul.
     earned = work_row.get('total') or Decimal('0')
     paid = pay_row.get('total') or Decimal('0')
+    account = employee.account
     return {
-        'id': user.id,
-        'name': user.first_name or user.username,
-        'username': user.username,
-        'role': user.role,
-        'active': user.is_active,
-        'phone': user.phone,
-        'daily_wage': str(user.daily_wage),
-        'week_wage': str(user.daily_wage * WORK_DAYS_PER_WEEK),
-        'hired_at': user.hired_at,
-        'notes': user.notes,
-        'last_login': user.last_login,
+        'id': employee.id,
+        'name': employee.name,
+        'position': employee.position,
+        'active': employee.active,
+        'phone': employee.phone,
+        'daily_wage': str(employee.daily_wage),
+        'week_wage': str(employee.daily_wage * WORK_DAYS_PER_WEEK),
+        'hired_at': employee.hired_at,
+        'notes': employee.notes,
+        # Tizimga kirmaydigan xodimda bularning hammasi bo'sh bo'ladi.
+        'username': account.username if account else '',
+        'role': account.role if account else '',
+        'last_login': account.last_login if account else None,
         'days_worked': work_row.get('days', 0),
         'earned': str(earned),
         'paid': str(paid),
@@ -400,44 +424,57 @@ def staff_payload(user, totals=None):
 
 
 def branch_employee(request, pk):
-    user = User.objects.filter(branch=request.user.branch, pk=pk).first()
-    if not user:
+    employee = Employee.objects.filter(
+        branch=request.user.branch, pk=pk).select_related('account').first()
+    if not employee:
         raise serializers.ValidationError(_('Xodim topilmadi.'))
-    return user
+    return employee
 
 
 class StaffView(APIView):
     permission_classes = [OwnerOnly]
 
     def get(self, request):
-        staff = User.objects.filter(branch=request.user.branch).order_by('role', 'first_name', 'username')
+        staff = Employee.objects.filter(branch=request.user.branch).select_related('account')
         # Yig'indilar bir marta olinadi va hamma qatorga tarqatiladi.
         totals = staff_totals(request.user.branch)
-        return Response([staff_payload(user, totals) for user in staff])
+        return Response([staff_payload(employee, totals) for employee in staff])
 
     @transaction.atomic
     def post(self, request):
         serializer = StaffCreateInput(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        user = User.objects.create_user(
-            username=data['username'],
-            password=data['password'],
-            first_name=data['name'],
-            role=data['role'],
+        if Employee.objects.filter(branch=request.user.branch, name__iexact=data['name']).exists():
+            raise serializers.ValidationError({'name': _('Bu ismli xodim allaqachon bor.')})
+        account = None
+        if data.get('username'):
+            account = User.objects.create_user(
+                username=data['username'],
+                password=data['password'],
+                first_name=data['name'],
+                role=data['role'],
+                branch=request.user.branch,
+                phone=data['phone'],
+            )
+        employee = Employee.objects.create(
             branch=request.user.branch,
+            name=data['name'],
+            position=data['position'],
             phone=data['phone'],
             daily_wage=data['daily_wage'],
             hired_at=data.get('hired_at'),
             notes=data['notes'],
+            account=account,
         )
         AuditEvent.objects.create(
             branch=request.user.branch,
             actor=request.user,
             action='staff.create',
-            description=f'{user.first_name} · {user.get_role_display()}',
+            description=f'{employee.name} · {employee.position or "lavozimsiz"}'
+                        + (' · login bor' if account else ''),
         )
-        return Response(staff_payload(user), status=201)
+        return Response(staff_payload(employee), status=201)
 
 
 class StaffDetailView(APIView):
@@ -445,29 +482,51 @@ class StaffDetailView(APIView):
 
     @transaction.atomic
     def patch(self, request, pk):
-        user = branch_employee(request, pk)
-        if user.role == User.Role.OWNER:
+        employee = branch_employee(request, pk)
+        account = employee.account
+        if account and account.role == User.Role.OWNER:
             raise serializers.ValidationError(_('Superadmin hisobini bu yerdan o‘zgartirib bo‘lmaydi.'))
         serializer = StaffUpdateInput(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         data = dict(serializer.validated_data)
-        # Parol alohida yo'l bilan yoziladi: uni boshqa maydonlar kabi
-        # o'rnatib qo'ysak, bazaga ochiq matn tushib qolardi.
+        # Parol va rol xodimda emas, hisobda turadi.
         password = data.pop('password', None)
-        field_map = {'name': 'first_name', 'active': 'is_active'}
+        role = data.pop('role', None)
         changed = []
         for field, value in data.items():
-            model_field = field_map.get(field, field)
-            if getattr(user, model_field) != value:
-                setattr(user, model_field, value)
-                changed.append(model_field)
-        if password:
-            user.set_password(password)
-            changed.append('password')
+            if getattr(employee, field) != value:
+                setattr(employee, field, value)
+                changed.append(field)
         if changed:
-            user.save(update_fields=changed)
-            AuditEvent.objects.create(branch=request.user.branch, actor=request.user, action='staff.update', description=f'{user.first_name} · {", ".join(changed)}')
-        return Response(staff_payload(user))
+            employee.save(update_fields=changed)
+
+        account_changed = []
+        if account:
+            if role and account.role != role:
+                account.role = role
+                account_changed.append('role')
+            # Ism ikki joyda ko'rinadi — hisobda ham yangilanadi, aks holda
+            # jurnalda eski ism qolib ketardi.
+            if 'name' in changed and account.first_name != employee.name:
+                account.first_name = employee.name
+                account_changed.append('first_name')
+            # Bloklangan xodim tizimga ham kira olmaydi.
+            if 'active' in changed and account.is_active != employee.active:
+                account.is_active = employee.active
+                account_changed.append('is_active')
+            if password:
+                account.set_password(password)
+                account_changed.append('password')
+            if account_changed:
+                account.save(update_fields=account_changed)
+        elif password or role:
+            raise serializers.ValidationError(_('Bu xodimda tizim hisobi yo‘q.'))
+
+        if changed or account_changed:
+            AuditEvent.objects.create(
+                branch=request.user.branch, actor=request.user, action='staff.update',
+                description=f'{employee.name} · {", ".join(changed + account_changed)}')
+        return Response(staff_payload(employee))
 
 
 def payment_payload(payment, actor_name):
@@ -509,10 +568,14 @@ class SalaryPaymentView(APIView):
 
     @transaction.atomic
     def _record(self, request, pk, data):
-        employee = User.objects.select_for_update().filter(branch=request.user.branch, pk=pk).first()
+        # `select_related('account')` bu yerda YO'Q: hisob bo'sh bo'lishi
+        # mumkin va PostgreSQL tashqi bog'lanishning nol tomoniga
+        # FOR UPDATE qo'ya olmaydi.
+        employee = Employee.objects.select_for_update().filter(
+            branch=request.user.branch, pk=pk).first()
         if not employee:
             raise serializers.ValidationError(_('Xodim topilmadi.'))
-        if employee.role == User.Role.OWNER:
+        if employee.account and employee.account.role == User.Role.OWNER:
             raise serializers.ValidationError(_('Superadmin ish haqi bu bo‘limda yuritilmaydi.'))
 
         # Takroriy yuborish: bir xil kalit bilan kelgan so'rov yangi pul
@@ -526,8 +589,8 @@ class SalaryPaymentView(APIView):
         expense = create_expense(request.user, {
             'key': uuid4(),
             'category': 'Ish haqi',
-            'purpose': f'{employee.first_name or employee.username} · ish haqi',
-            'recipient': employee.first_name or employee.username,
+            'purpose': f'{employee.name} · ish haqi',
+            'recipient': employee.name,
             'amount': data['amount'],
             'payment_method': data['payment_method'],
             'date': data['paid_on'],
@@ -547,7 +610,7 @@ class SalaryPaymentView(APIView):
         )
         AuditEvent.objects.create(
             branch=request.user.branch, actor=request.user, action='salary.pay',
-            description=f'{employee.first_name or employee.username} · {payment.amount} so‘m · {payment.paid_on:%d.%m.%Y}',
+            description=f'{employee.name} · {payment.amount} so‘m · {payment.paid_on:%d.%m.%Y}',
         )
         return payment, True
 

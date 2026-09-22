@@ -113,9 +113,10 @@ export interface PayrollDay {
 export interface PayrollEmployee {
   id: number
   name: string
+  /** Erkin matn: «Oshpaz», «Farrosh». Tizimga kirish bilan bog'liq emas. */
+  position: string
+  /** Tizimga kirmaydigan xodimda bo'sh. */
   username: string
-  role: string
-  role_label: string
   active: boolean
   daily_wage: string
   week_wage: string

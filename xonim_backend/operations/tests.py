@@ -42,6 +42,19 @@ from .money import money, percent, quantity, share
 from .services import Conflict, append_order_lines, create_order, move_stock
 
 
+def hire(branch, name, wage='0', account=None, position='Xodim', active=True):
+    """Testda xodim yozuvini yaratadi.
+
+    Xodim endi logindan alohida: haq ham, davomat ham shu yozuvga
+    bog'lanadi. Hisobi bor xodim uchun `account` beriladi.
+    """
+    from users.models import Employee
+    return Employee.objects.create(
+        branch=branch, name=name, position=position, daily_wage=Decimal(wage),
+        account=account, active=active,
+    )
+
+
 def prepare(user, *dishes, quantity=999):
     """Testda sotuvdan oldin oshxona nima pishirganini yozadi.
 
@@ -135,10 +148,11 @@ class WorkflowTests(TestCase):
         }, format='json').status_code, 403)
 
     def test_owner_updates_employee_and_the_wage_payment_hits_finance_once(self):
-        employee = User.objects.create_user(
+        account = User.objects.create_user(
             'manager', password='Safe-test-password-51!', first_name='Menejer',
-            role='cashier', branch=self.branch, daily_wage=Decimal('130000')
+            role='cashier', branch=self.branch,
         )
+        employee = hire(self.branch, 'Menejer', '130000', account=account)
         detail = f'/api/v1/staff/{employee.id}/'
         response = self.client.patch(detail, {
             'phone': '+998901234567', 'daily_wage': '150000', 'active': True,
@@ -801,12 +815,16 @@ class PayrollTests(TestCase):
         self.branch = Branch.objects.create(name='One', slug='one')
         self.other = Branch.objects.create(name='Two', slug='two')
         self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
-        self.cashier = User.objects.create_user(
+        self.cashier_account = User.objects.create_user(
             'cashier', password='test-only-long-password', role='cashier', branch=self.branch,
-            first_name='Kassir', daily_wage=Decimal('150000'))
-        self.cook = User.objects.create_user(
+            first_name='Kassir')
+        self.cook_account = User.objects.create_user(
             'oshpaz', password='test-only-long-password', role='kitchen', branch=self.branch,
-            first_name='Oshpaz', daily_wage=Decimal('200000'))
+            first_name='Oshpaz')
+        self.cashier = hire(self.branch, 'Kassir', '150000', account=self.cashier_account, position='Kassir')
+        self.cook = hire(self.branch, 'Oshpaz', '200000', account=self.cook_account, position='Oshpaz')
+        # Logini yo'q xodim: farrosh hech qachon tizimga kirmaydi.
+        self.cleaner = hire(self.branch, 'Farrosh', '90000', position='Farrosh')
         self.client = APIClient()
         self.client.force_authenticate(self.owner)
         self.today = timezone.localdate()
@@ -837,55 +855,59 @@ class PayrollTests(TestCase):
         }, format='json')
 
     def rows(self, client=None):
+        # Kalit — ism: logini yo'q xodimda username bo'sh bo'ladi.
         data = (client or self.client).get('/api/v1/payroll/').data
-        return data, {row['username']: row for row in data['employees']}
+        return data, {row['name']: row for row in data['employees']}
 
     def test_nothing_is_owed_before_anyone_is_marked(self):
         data, rows = self.rows()
         self.assertEqual(data['summary']['balance'], '0.00')
-        self.assertEqual(data['summary']['staff_count'], 2)
-        self.assertEqual(data['summary']['unmarked_today'], 2 if not data['rest_day'] else 2)
-        self.assertEqual(rows['cashier']['balance'], '0.00')
-        self.assertEqual(rows['cashier']['daily_wage'], '150000.00')
+        # Uchinchisi — logini yo'q farrosh: u ham ro'yxatda turadi.
+        self.assertEqual(data['summary']['staff_count'], 3)
+        self.assertEqual(data['summary']['unmarked_today'], 3)
+        self.assertEqual(rows['Farrosh']['username'], '')
+        self.assertEqual(rows['Farrosh']['position'], 'Farrosh')
+        self.assertEqual(rows['Kassir']['balance'], '0.00')
+        self.assertEqual(rows['Kassir']['daily_wage'], '150000.00')
         # Olti kunlik hafta: kunlik haq olti barobar.
-        self.assertEqual(rows['cashier']['week_wage'], '900000.00')
+        self.assertEqual(rows['Kassir']['week_wage'], '900000.00')
         # Superadmin o'z haqini bu bo'limda yuritmaydi.
-        self.assertNotIn('owner', rows)
+        self.assertNotIn('Restoran egasi', rows)
 
     def test_a_marked_day_adds_that_days_wage_to_the_balance(self):
         self.assertEqual(self.mark([(self.cashier, True), (self.cook, True)]).status_code, 201)
         data, rows = self.rows()
-        self.assertEqual(rows['cashier']['balance'], '150000.00')
-        self.assertEqual(rows['oshpaz']['balance'], '200000.00')
-        self.assertEqual(rows['cashier']['days_worked'], 1)
+        self.assertEqual(rows['Kassir']['balance'], '150000.00')
+        self.assertEqual(rows['Oshpaz']['balance'], '200000.00')
+        self.assertEqual(rows['Kassir']['days_worked'], 1)
         self.assertEqual(data['summary']['balance'], '350000.00')
         self.assertEqual(data['summary']['earned'], '350000.00')
 
     def test_a_day_off_adds_nothing(self):
         self.mark([(self.cashier, False), (self.cook, True)])
         _data, rows = self.rows()
-        self.assertEqual(rows['cashier']['balance'], '0.00')
-        self.assertEqual(rows['cashier']['days_worked'], 0)
+        self.assertEqual(rows['Kassir']['balance'], '0.00')
+        self.assertEqual(rows['Kassir']['days_worked'], 0)
         # Belgilangan, lekin kelmagan: «so'ralmagan» emas, «kelmadi».
-        self.assertEqual(rows['cashier']['today'] or 'absent', 'absent')
-        self.assertEqual(rows['oshpaz']['balance'], '200000.00')
+        self.assertEqual(rows['Kassir']['today'] or 'absent', 'absent')
+        self.assertEqual(rows['Oshpaz']['balance'], '200000.00')
 
     def test_marking_the_same_day_twice_corrects_it_instead_of_doubling(self):
         self.mark([(self.cashier, True)])
         self.mark([(self.cashier, True)])
         _data, rows = self.rows()
-        self.assertEqual(rows['cashier']['balance'], '150000.00')
+        self.assertEqual(rows['Kassir']['balance'], '150000.00')
         # Xato tuzatiladi: kelgan deb belgilangan kun kelmaganga o'tkazilsa
         # o'sha kunning haqi balansdan ham chiqib ketadi.
         self.mark([(self.cashier, False)])
         _data, rows = self.rows()
-        self.assertEqual(rows['cashier']['balance'], '0.00')
+        self.assertEqual(rows['Kassir']['balance'], '0.00')
 
     def test_sunday_is_a_rest_day_and_earns_nothing(self):
         response = self.mark([(self.cashier, True)], day=self.sunday)
         self.assertEqual(response.status_code, 400)
         self.assertIn('akshanba', str(response.data))
-        self.assertEqual(self.rows()[1]['cashier']['balance'], '0.00')
+        self.assertEqual(self.rows()[1]['Kassir']['balance'], '0.00')
 
     def test_a_raise_never_rewrites_the_days_already_worked(self):
         self.mark([(self.cashier, True)])
@@ -893,29 +915,29 @@ class PayrollTests(TestCase):
             f'/api/v1/staff/{self.cashier.id}/', {'daily_wage': '300000'}, format='json').status_code, 200)
         _data, rows = self.rows()
         # O'tgan kun eski kelishuv bilan qoladi, yangi kunlar yangisi bilan.
-        self.assertEqual(rows['cashier']['balance'], '150000.00')
-        self.assertEqual(rows['cashier']['daily_wage'], '300000.00')
+        self.assertEqual(rows['Kassir']['balance'], '150000.00')
+        self.assertEqual(rows['Kassir']['daily_wage'], '300000.00')
         self.mark([(self.cashier, True)], day=self.earlier)
-        self.assertEqual(self.rows()[1]['cashier']['balance'], '450000.00')
+        self.assertEqual(self.rows()[1]['Kassir']['balance'], '450000.00')
 
     def test_money_paid_comes_off_the_balance(self):
         self.mark([(self.cashier, True)])
         self.assertEqual(self.pay(self.cashier, Decimal('100000')).status_code, 201)
         _data, rows = self.rows()
-        self.assertEqual(rows['cashier']['earned'], '150000.00')
-        self.assertEqual(rows['cashier']['paid'], '100000.00')
-        self.assertEqual(rows['cashier']['balance'], '50000.00')
-        self.assertFalse(rows['cashier']['advance'])
+        self.assertEqual(rows['Kassir']['earned'], '150000.00')
+        self.assertEqual(rows['Kassir']['paid'], '100000.00')
+        self.assertEqual(rows['Kassir']['balance'], '50000.00')
+        self.assertFalse(rows['Kassir']['advance'])
 
     def test_paying_before_the_work_is_an_advance(self):
         # Pul zarur bo'lsa oldinroq beriladi: balans manfiyga tushadi va
         # keyingi ish kunlari bilan o'zi yopiladi.
         self.pay(self.cashier, Decimal('150000'))
         _data, rows = self.rows()
-        self.assertEqual(rows['cashier']['balance'], '-150000.00')
-        self.assertTrue(rows['cashier']['advance'])
+        self.assertEqual(rows['Kassir']['balance'], '-150000.00')
+        self.assertTrue(rows['Kassir']['advance'])
         self.mark([(self.cashier, True)])
-        self.assertEqual(self.rows()[1]['cashier']['balance'], '0.00')
+        self.assertEqual(self.rows()[1]['Kassir']['balance'], '0.00')
 
     def test_the_same_key_never_pays_twice(self):
         key = uuid4()
@@ -923,7 +945,7 @@ class PayrollTests(TestCase):
         # Ikkinchi marta bosilgan tugma yangi pul bermaydi.
         self.assertEqual(self.pay(self.cashier, Decimal('100000'), key=key).status_code, 200)
         self.assertEqual(SalaryPayment.objects.filter(employee=self.cashier).count(), 1)
-        self.assertEqual(self.rows()[1]['cashier']['paid'], '100000.00')
+        self.assertEqual(self.rows()[1]['Kassir']['paid'], '100000.00')
         # Bir xil kalit boshqa summa bilan kelsa — bu xato, qabul qilinmaydi.
         self.assertEqual(self.pay(self.cashier, Decimal('200000'), key=key).status_code, 409)
 
@@ -944,31 +966,29 @@ class PayrollTests(TestCase):
         self.pay(self.cashier, Decimal('100000'))
         self.pay(self.cashier, Decimal('50000'))
         data, rows = self.rows()
-        self.assertEqual(rows['cashier']['paid'], '150000.00')
-        self.assertEqual(rows['cashier']['payments'], 2)
+        self.assertEqual(rows['Kassir']['paid'], '150000.00')
+        self.assertEqual(rows['Kassir']['payments'], 2)
         self.assertEqual(data['summary']['month_count'], 2)
         self.assertEqual(data['all_time'], {'total': '150000.00', 'payments': 2})
 
     def test_the_cashier_marks_attendance_and_pays_too(self):
         cashier = APIClient()
-        cashier.force_authenticate(self.cashier)
+        cashier.force_authenticate(self.cashier_account)
         self.assertEqual(self.mark([(self.cook, True)], client=cashier).status_code, 201)
         self.assertEqual(self.pay(self.cook, Decimal('50000'), client=cashier).status_code, 201)
         _data, rows = self.rows(client=cashier)
-        self.assertEqual(rows['oshpaz']['balance'], '150000.00')
+        self.assertEqual(rows['Oshpaz']['balance'], '150000.00')
 
     def test_the_kitchen_reaches_none_of_it(self):
         kitchen = APIClient()
-        kitchen.force_authenticate(self.cook)
+        kitchen.force_authenticate(self.cook_account)
         self.assertEqual(kitchen.get('/api/v1/payroll/').status_code, 403)
         self.assertEqual(self.mark([(self.cashier, True)], client=kitchen).status_code, 403)
         self.assertEqual(self.pay(self.cashier, Decimal('10000'), client=kitchen).status_code, 403)
 
     def test_other_branches_stay_out(self):
-        stranger = User.objects.create_user(
-            'stranger', password='test-only-long-password', role='cashier',
-            branch=self.other, daily_wage=Decimal('700000'))
-        self.assertNotIn('stranger', self.rows()[1])
+        stranger = hire(self.other, 'Begona', '700000')
+        self.assertNotIn('Begona', self.rows()[1])
         # Begona xodimni belgilab ham bo'lmaydi.
         self.assertEqual(self.mark([(stranger, True)]).status_code, 400)
 
@@ -989,11 +1009,11 @@ class PayrollTests(TestCase):
     def test_the_week_total_follows_the_days_actually_marked(self):
         self.mark([(self.cashier, True), (self.cook, True)])
         data, rows = self.rows()
-        self.assertEqual(rows['cashier']['week_days'], 1)
-        self.assertEqual(rows['cashier']['week_earned'], '150000.00')
+        self.assertEqual(rows['Kassir']['week_days'], 1)
+        self.assertEqual(rows['Kassir']['week_earned'], '150000.00')
         self.assertEqual(data['summary']['week_earned'], '350000.00')
-        # To'liq hafta olti kun bo'lardi.
-        self.assertEqual(data['summary']['week_wage'], '2100000.00')
+        # To'liq hafta olti kun bo'lardi: (150 000 + 200 000 + 90 000) × 6.
+        self.assertEqual(data['summary']['week_wage'], '2640000.00')
 
     def test_the_marking_is_written_into_the_audit_log(self):
         self.mark([(self.cashier, True), (self.cook, False)])
@@ -1162,7 +1182,8 @@ class FinanceTests(TestCase):
     def setUp(self):
         self.branch = Branch.objects.create(name='One', slug='one')
         self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
-        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch, daily_wage=Decimal('120000'), first_name='Kassir')
+        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch, first_name='Kassir')
+        self.employee = hire(self.branch, 'Kassir', '120000', account=self.cashier, position='Kassir')
         self.category = Category.objects.create(branch=self.branch, name='Taom')
         self.osh = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('50000'))
         self.choy = Dish.objects.create(branch=self.branch, category=self.category, name='Choy', price=Decimal('10000'))
@@ -1228,7 +1249,7 @@ class FinanceTests(TestCase):
 
     def test_salary_sits_inside_expenses_and_is_never_added_twice(self):
         self.sell(self.osh, 10)
-        self.assertEqual(self.client.post(f'/api/v1/staff/{self.cashier.id}/salary-payments/', {
+        self.assertEqual(self.client.post(f'/api/v1/staff/{self.employee.id}/salary-payments/', {
             'key': str(uuid4()), 'amount': '3000000',
             'payment_method': 'cash', 'paid_on': str(timezone.localdate()), 'note': '',
         }, format='json').status_code, 201)
@@ -1294,7 +1315,7 @@ class FinanceTests(TestCase):
     def test_manual_salary_row_never_counts_as_a_real_salary_payment(self):
         self.sell(self.osh, 10)
         # Haqiqiy oylik to'lovi: bog'langan Expense yaratadi.
-        self.assertEqual(self.client.post(f'/api/v1/staff/{self.cashier.id}/salary-payments/', {
+        self.assertEqual(self.client.post(f'/api/v1/staff/{self.employee.id}/salary-payments/', {
             'key': str(uuid4()), 'amount': '3000000',
             'payment_method': 'cash', 'paid_on': str(timezone.localdate()), 'note': '',
         }, format='json').status_code, 201)
@@ -3852,6 +3873,7 @@ class LostRaceTests(TestCase):
         self.branch = Branch.objects.create(name='One', slug='one')
         self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
         self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.employee = hire(self.branch, 'Kassir', '100000', account=self.cashier)
         self.client = APIClient()
         self.client.force_authenticate(self.owner)
         self.day = timezone.localdate()
@@ -3883,25 +3905,25 @@ class LostRaceTests(TestCase):
     def test_attendance_that_loses_the_race(self):
         from .models import Attendance
         Attendance.objects.create(
-            branch=self.branch, employee=self.cashier, actor=self.owner,
+            branch=self.branch, employee=self.employee, actor=self.owner,
             date=self.day, present=True, daily_wage=Decimal('0'),
         )
         with patch('users.payroll.Attendance.objects.select_for_update') as blind:
             blind.return_value.filter.return_value = Attendance.objects.none()
             response = self.client.post('/api/v1/attendance/', {
                 'date': self.day.isoformat(),
-                'rows': [{'employee': self.cashier.id, 'present': True}],
+                'rows': [{'employee': self.employee.id, 'present': True}],
             }, format='json')
         self.assertEqual(response.status_code, 409)
 
     def test_salary_payment_that_loses_the_race(self):
         payload = {'key': str(uuid4()), 'amount': '50000', 'payment_method': 'cash',
                    'paid_on': self.day.isoformat()}
-        self.client.post(f'/api/v1/staff/{self.cashier.id}/salary-payments/', payload, format='json')
+        self.client.post(f'/api/v1/staff/{self.employee.id}/salary-payments/', payload, format='json')
         with patch('users.views.SalaryPayment.objects.filter') as blind:
             blind.return_value.first.return_value = None
             response = self.client.post(
-                f'/api/v1/staff/{self.cashier.id}/salary-payments/', payload, format='json')
+                f'/api/v1/staff/{self.employee.id}/salary-payments/', payload, format='json')
         self.assertEqual(response.status_code, 409)
 
     def test_waiter_payment_that_loses_the_race(self):
@@ -3953,6 +3975,7 @@ class CorrectingMistakesTests(TestCase):
         self.branch = Branch.objects.create(name='One', slug='one')
         self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
         self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.employee = hire(self.branch, 'Kassir', '100000', account=self.cashier)
         self.category = Category.objects.create(branch=self.branch, name='Main')
         self.dish = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('40000'))
         self.client = APIClient()
@@ -3985,7 +4008,7 @@ class CorrectingMistakesTests(TestCase):
         self.assertEqual(till.delete(f'/api/v1/expenses/{expense}/').status_code, 403)
 
     def test_a_salary_expense_stays_locked(self):
-        self.client.post(f'/api/v1/staff/{self.cashier.id}/salary-payments/', {
+        self.client.post(f'/api/v1/staff/{self.employee.id}/salary-payments/', {
             'key': str(uuid4()), 'amount': '50000', 'payment_method': 'cash',
             'paid_on': timezone.localdate().isoformat(),
         }, format='json')
@@ -4027,11 +4050,13 @@ class PasswordTests(TestCase):
         self.branch = Branch.objects.create(name='One', slug='one')
         self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
         self.cook = User.objects.create_user('cook', password='test-only-long-password', role='kitchen', branch=self.branch)
+        # Parol hisobda turadi, lekin uni xodim kartasidan o'zgartiriladi.
+        self.cook_employee = hire(self.branch, 'Oshpaz', '100000', account=self.cook)
         self.client = APIClient()
         self.client.force_authenticate(self.owner)
 
     def test_the_owner_resets_a_staff_password(self):
-        response = self.client.patch(f'/api/v1/staff/{self.cook.id}/', {
+        response = self.client.patch(f'/api/v1/staff/{self.cook_employee.id}/', {
             'password': 'another-long-password',
         }, format='json')
         self.assertEqual(response.status_code, 200)
@@ -4039,7 +4064,7 @@ class PasswordTests(TestCase):
         self.assertTrue(self.cook.check_password('another-long-password'))
 
     def test_a_short_password_is_refused(self):
-        response = self.client.patch(f'/api/v1/staff/{self.cook.id}/', {'password': 'qisqa'}, format='json')
+        response = self.client.patch(f'/api/v1/staff/{self.cook_employee.id}/', {'password': 'qisqa'}, format='json')
         self.assertEqual(response.status_code, 400)
         self.cook.refresh_from_db()
         self.assertTrue(self.cook.check_password('test-only-long-password'))
@@ -4083,9 +4108,9 @@ class FrozenNumbersTests(TestCase):
     def setUp(self):
         self.branch = Branch.objects.create(name='One', slug='one')
         self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
-        self.cashier = User.objects.create_user(
-            'cashier', password='test-only-long-password', role='cashier',
-            branch=self.branch, daily_wage=Decimal('100000'))
+        self.cashier_account = User.objects.create_user(
+            'cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.cashier = hire(self.branch, 'Kassir', '100000', account=self.cashier_account)
         self.day = timezone.localdate()
         while self.day.weekday() == 6:
             self.day -= timedelta(days=1)
@@ -4687,3 +4712,103 @@ class StockCarriesOverTests(TestCase):
         self.assertEqual(row['remaining'], 14)
         # Bugungi partiya bilan izohlab bo'lmaydigan qismi — eskisi.
         self.assertEqual(row['aged'], 10)
+
+
+class EmployeeWithoutLoginTests(TestCase):
+    """Xodim tizimga kirmasdan ham ishlaydi va haq oladi.
+
+    Oshpaz, farrosh, yordamchi — ularning ko'pchiligi hech qachon tizimga
+    kirmaydi. Ilgari har biriga login va parol o'ylab topishga to'g'ri
+    kelardi, ishlatilmagan hisoblar esa tizimda qolib ketardi.
+    """
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+        self.today = timezone.localdate()
+        self.workday = self.today - timedelta(days=1) if self.today.weekday() == 6 else self.today
+
+    def add(self, **fields):
+        body = {'name': 'Farrosh Oygul', 'position': 'Farrosh', 'daily_wage': '90000'}
+        body.update(fields)
+        return self.client.post('/api/v1/staff/', body, format='json')
+
+    def test_an_employee_is_created_without_a_login(self):
+        response = self.add()
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['username'], '')
+        self.assertEqual(response.data['position'], 'Farrosh')
+        self.assertEqual(response.data['daily_wage'], '90000.00')
+        # Hech qanday hisob ochilmaydi: parol ham, login ham yo'q.
+        self.assertEqual(User.objects.filter(branch=self.branch).count(), 1)
+
+    def test_the_position_is_free_text(self):
+        # Ro'yxatga sig'maydigan lavozim doim topiladi.
+        self.assertEqual(self.add(name='Anvar', position='Tandirchi').status_code, 201)
+        self.assertEqual(self.add(name='Dilnoza', position='Idish yuvuvchi').status_code, 201)
+        positions = {row['position'] for row in self.client.get('/api/v1/staff/').data}
+        self.assertEqual(positions, {'Tandirchi', 'Idish yuvuvchi'})
+
+    def test_a_login_less_employee_earns_and_gets_paid(self):
+        employee = self.add().data
+        marked = self.client.post('/api/v1/attendance/', {
+            'date': str(self.workday),
+            'rows': [{'employee': employee['id'], 'present': True}],
+        }, format='json')
+        self.assertEqual(marked.status_code, 201)
+        rows = {row['name']: row for row in marked.data['employees']}
+        self.assertEqual(rows['Farrosh Oygul']['balance'], '90000.00')
+
+        paid = self.client.post(f'/api/v1/staff/{employee["id"]}/salary-payments/', {
+            'key': str(uuid4()), 'amount': '50000', 'payment_method': 'cash',
+            'paid_on': str(self.today), 'note': '',
+        }, format='json')
+        self.assertEqual(paid.status_code, 201)
+        after = {row['name']: row for row in self.client.get('/api/v1/payroll/').data['employees']}
+        self.assertEqual(after['Farrosh Oygul']['balance'], '40000.00')
+
+    def test_a_login_is_optional_but_complete_when_asked_for(self):
+        response = self.add(name='Kassir Aziz', username='aziz', role='cashier',
+                            password='Safe-test-password-77!')
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['username'], 'aziz')
+        account = User.objects.get(username='aziz')
+        self.assertEqual(account.role, 'cashier')
+        self.assertTrue(account.check_password('Safe-test-password-77!'))
+        # Xodim yozuvi bilan hisob bog'langan.
+        self.assertEqual(account.employee.name, 'Kassir Aziz')
+
+    def test_a_login_without_a_password_is_refused(self):
+        response = self.add(name='Yarim', username='yarim')
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(User.objects.filter(username='yarim').exists())
+
+    def test_two_employees_cannot_share_a_name(self):
+        self.assertEqual(self.add(name='Aziz').status_code, 201)
+        self.assertEqual(self.add(name='aziz').status_code, 400)
+
+    def test_a_password_cannot_be_set_on_someone_without_an_account(self):
+        employee = self.add().data
+        response = self.client.patch(f'/api/v1/staff/{employee["id"]}/', {
+            'password': 'another-long-password',
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+
+    def test_blocking_an_employee_also_blocks_the_login(self):
+        employee = self.add(name='Kassir Aziz', username='aziz2', role='cashier',
+                            password='Safe-test-password-77!').data
+        self.client.patch(f'/api/v1/staff/{employee["id"]}/', {'active': False}, format='json')
+        account = User.objects.get(username='aziz2')
+        self.assertFalse(account.is_active)
+
+    def test_the_wage_lives_on_the_employee_not_the_account(self):
+        employee = self.add(name='Kassir Aziz', username='aziz3', role='cashier',
+                            password='Safe-test-password-77!').data
+        self.client.patch(f'/api/v1/staff/{employee["id"]}/', {'daily_wage': '200000'}, format='json')
+        from users.models import Employee
+        self.assertEqual(Employee.objects.get(pk=employee['id']).daily_wage, Decimal('200000'))
+        # Hisobda bunday maydon umuman yo'q — ikki joyda ikki xil raqam
+        # turib qolishi mumkin emas.
+        self.assertFalse(hasattr(User.objects.get(username='aziz3'), 'daily_wage'))

@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.db import models
 from django.db.models import F, Q
 
-from users.models import Branch, User
+from users.models import Branch, Employee, User
 
 # Single source of truth for how a sale was settled. Adding a provider here is
 # enough for the till, the summary, the dashboard and the reports to pick it up.
@@ -275,7 +275,7 @@ class Attendance(models.Model):
     """
 
     branch = models.ForeignKey(Branch, on_delete=models.PROTECT)
-    employee = models.ForeignKey(User, on_delete=models.PROTECT, related_name='attendances')
+    employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name='attendances')
     actor = models.ForeignKey(User, on_delete=models.PROTECT, related_name='marked_attendances')
     date = models.DateField()
     present = models.BooleanField(default=True)
@@ -305,7 +305,7 @@ class SalaryPayment(models.Model):
     """
 
     branch = models.ForeignKey(Branch, on_delete=models.PROTECT)
-    employee = models.ForeignKey(User, on_delete=models.PROTECT, related_name='salary_payments')
+    employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name='salary_payments')
     actor = models.ForeignKey(User, on_delete=models.PROTECT, related_name='processed_salary_payments')
     expense = models.OneToOneField(Expense, on_delete=models.PROTECT, related_name='salary_payment')
     # Ikki marta bosilgan tugma ikki marta pul bermasligi uchun.

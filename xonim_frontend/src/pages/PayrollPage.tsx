@@ -217,7 +217,9 @@ export default function PayrollPage() {
                   <div key={row.id} className={`attendance-row ${row.today || 'pending'}`}>
                     <div className="attendance-name">
                       <strong>{row.name}</strong>
-                      <small>{t(row.role_label)} · {money(row.daily_wage)} {t('so‘m / kun')}</small>
+                      <small>
+                        {row.position ? `${row.position} · ` : ''}{money(row.daily_wage)} {t('so‘m / kun')}
+                      </small>
                     </div>
                     <div className="attendance-buttons">
                       <button

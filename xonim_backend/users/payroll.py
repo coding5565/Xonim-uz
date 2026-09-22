@@ -40,7 +40,7 @@ from operations.money import (
 )
 from operations.services import audit, safely
 
-from .models import User
+from .models import Employee, User
 from .permissions import OwnerOnly, SalesOnly
 
 METHOD_LABELS = {'cash': 'Naqd', 'card': 'Karta'}
@@ -67,18 +67,23 @@ def is_rest(day):
 
 
 def staff_of(branch):
-    """Ish haqi yuritiladigan xodimlar. Superadmin bu ro'yxatda yo'q."""
+    """Ish haqi yuritiladigan xodimlar. Superadmin bu ro'yxatda yo'q.
+
+    Xodimning logini bo'lishi shart emas: oshpaz ham, farrosh ham shu
+    ro'yxatda turadi va ularga ham haq yig'iladi.
+    """
     return list(
-        User.objects.filter(branch=branch)
-        .exclude(role=User.Role.OWNER)
-        .order_by('-is_active', 'first_name', 'username')
+        Employee.objects.filter(branch=branch)
+        .exclude(account__role=User.Role.OWNER)
+        .select_related('account')
+        .order_by('-active', 'name')
     )
 
 
 def known_months(branch, today):
     """Birinchi to'lov yoki birinchi ishga olishdan bugungacha — yangisi birinchi."""
     first_payment = SalaryPayment.objects.filter(branch=branch).order_by('paid_on').values_list('paid_on', flat=True).first()
-    first_hire = User.objects.filter(branch=branch, hired_at__isnull=False).order_by('hired_at').values_list('hired_at', flat=True).first()
+    first_hire = Employee.objects.filter(branch=branch, hired_at__isnull=False).order_by('hired_at').values_list('hired_at', flat=True).first()
     known = [item for item in (first_payment, first_hire) if item]
     cursor = min(known).replace(day=1) if known else today.replace(day=1)
     months = []
@@ -147,11 +152,11 @@ def build_payroll(branch, today, period, week_of=None):
             })
 
         today_mark = marks.get((person.id, today))
-        if person.is_active and today_mark:
+        if person.active and today_mark:
             marked_today += 1
             if today_mark.present:
                 present_today += 1
-        if person.is_active:
+        if person.active:
             daily_total += person.daily_wage
         week_earned_total += week_earned
         earned_total += accrued
@@ -160,11 +165,11 @@ def build_payroll(branch, today, period, week_of=None):
 
         rows.append({
             'id': person.id,
-            'name': person.first_name or person.username,
-            'username': person.username,
-            'role': person.role,
-            'role_label': person.get_role_display(),
-            'active': person.is_active,
+            'name': person.name,
+            # Lavozim erkin matn: restoran o'z odamini o'zi ataydi.
+            'position': person.position,
+            'username': person.account.username if person.account_id else '',
+            'active': person.active,
             'daily_wage': money(person.daily_wage),
             # Olti kun to'liq ishlansa haftada shuncha bo'ladi.
             'week_wage': money(person.daily_wage * WORK_DAYS_PER_WEEK),
@@ -182,7 +187,7 @@ def build_payroll(branch, today, period, week_of=None):
             'last_paid_on': person_paid.get('last'),
         })
 
-    active = [person for person in staff if person.is_active]
+    active = [person for person in staff if person.active]
     month_payments = SalaryPayment.objects.filter(
         branch=branch, paid_on__gte=period, paid_on__lt=next_month(period),
     ).select_related('employee', 'actor')
@@ -256,7 +261,7 @@ def build_payroll(branch, today, period, week_of=None):
         'payments': [{
             'id': item.id,
             'employee': item.employee_id,
-            'employee_name': item.employee.first_name or item.employee.username,
+            'employee_name': item.employee.name,
             'amount': money(item.amount),
             'payment_method': item.payment_method,
             'payment_label': METHOD_LABELS.get(item.payment_method, item.payment_method),
@@ -335,8 +340,8 @@ def mark_attendance(user, data):
     wanted = {row['employee']: row for row in data['rows']}
     people = {
         person.id: person
-        for person in User.objects.filter(branch=user.branch, pk__in=wanted, is_active=True)
-        .exclude(role=User.Role.OWNER)
+        for person in Employee.objects.filter(branch=user.branch, pk__in=wanted, active=True)
+        .exclude(account__role=User.Role.OWNER)
     }
     missing = sorted(set(wanted) - set(people))
     if missing:
