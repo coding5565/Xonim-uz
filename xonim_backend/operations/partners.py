@@ -126,6 +126,10 @@ def delivery_payload(delivery, warnings=None):
         'cancel_reason': delivery.cancel_reason,
         'actor_name': delivery.actor.first_name or delivery.actor.username,
         'lines': [line_payload(line) for line in delivery.lines.all()],
+        # Bekor qilingan to'lov ham ro'yxatda qoladi: pul kelgani va keyin
+        # qaytarilgani egasi uchun ikkita alohida voqea. `settled_total`
+        # jo'natmaning o'z maydoni, shuning uchun bu ro'yxat jamiga
+        # ta'sir qilmaydi.
         'settlements': [{
             'id': item.id,
             'amount': money(item.amount),
@@ -134,7 +138,7 @@ def delivery_payload(delivery, warnings=None):
             'note': item.note,
             'voided_at': item.voided_at,
             'void_reason': item.void_reason,
-        } for item in delivery.settlements.all() if item.voided_at is None],
+        } for item in delivery.settlements.all()],
         'warnings': warnings or [],
     }
 

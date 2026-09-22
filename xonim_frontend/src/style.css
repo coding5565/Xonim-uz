@@ -1275,3 +1275,69 @@ button.mark.tap:disabled{opacity:.5;cursor:default}
 .prep-group-head svg{color:#7f9e8c}
 .theme-dark .prep-group-head strong{color:#d7e9de}
 .theme-dark .prep-group-head span{color:#8fa79a}
+
+/* Hamkorlar: maktab va universitetga jo'natilgan taom.
+
+   Har bir jo'natma bitta karta bo'lib turadi, chunki uning uch bosqichi
+   bor — jo'natildi, hisobot berildi, yopildi — va jadval qatori bu uch
+   holatni ham, ichidagi taomlarni ham birga ko'rsata olmasdi. */
+.partner-deliveries{display:flex;flex-direction:column;gap:13px;padding:0 21px 21px}
+.partner-delivery{border:1px solid var(--line);border-radius:11px;padding:16px 17px;background:#fff}
+.partner-delivery.sent{border-left:3px solid #c79a4e}
+.partner-delivery.reported{border-left:3px solid #4e7fc7}
+.partner-delivery.settled{border-left:3px solid var(--green)}
+.partner-delivery.cancelled{opacity:.6;border-left:3px solid #b0b8b3}
+.partner-delivery>header{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.partner-delivery>header strong{font:700 15px 'Manrope',sans-serif;color:#2b4a3d}
+.partner-delivery>header small{display:block;color:#93a09a;font-size:12px;margin-top:4px}
+.partner-delivery-money{display:flex;gap:20px;text-align:right}
+.partner-delivery-money small{display:block;color:#98a49d;font-size:11px;margin-bottom:3px}
+.partner-delivery-money strong{font:700 16px 'Manrope',sans-serif;font-variant-numeric:tabular-nums}
+.partner-lines{list-style:none;margin:13px 0 0;padding:0;display:flex;flex-direction:column;gap:7px}
+.partner-lines li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 14px;align-items:baseline;
+  padding:8px 0;border-top:1px solid var(--line)}
+.partner-lines li span{font-size:13.5px;font-weight:550;color:#2f4a3f;overflow-wrap:anywhere}
+.partner-lines li small{grid-column:1;color:#97a39c;font-size:11.5px}
+.partner-lines li strong{grid-column:2;grid-row:1/3;align-self:center;font-variant-numeric:tabular-nums;font-size:14px}
+.partner-payments{display:flex;flex-wrap:wrap;gap:9px;margin-top:12px}
+.partner-payments span{display:flex;align-items:center;gap:8px;background:#f2f7f3;border-radius:9px;padding:8px 11px}
+.partner-payments strong{font-size:13px;font-variant-numeric:tabular-nums}
+.partner-payments small{color:#8a978f;font-size:11.5px}
+.partner-payments .voided{background:#fbf1ee;text-decoration:line-through;color:#a2695a}
+.partner-delivery>footer{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}
+.partner-unpriced{margin-bottom:16px;font-size:12.5px;color:#8d9a92}
+.partner-unpriced summary{cursor:pointer;font-weight:550}
+.partner-unpriced p{margin-top:7px;line-height:1.7}
+
+/* Kechqurungi hisobot: nechtasi sotilgani. Sotilmagani yoziladigan emas,
+   hisoblanadigan son — shuning uchun o'ng tomonda matn bo'lib turadi. */
+.report-lines{display:flex;flex-direction:column;gap:9px;margin-bottom:17px}
+.report-line{display:grid;grid-template-columns:minmax(0,1fr) 96px minmax(94px,auto);gap:12px;align-items:center}
+.report-line strong{font-size:13.5px;overflow-wrap:anywhere}
+.report-line small{display:block;color:#97a39c;font-size:11.5px;margin-top:3px}
+.report-line input{text-align:center;font-variant-numeric:tabular-nums}
+.report-line>span:last-child{font-size:12px;color:#8fa096;text-align:right}
+.report-line>span:last-child.unsold{color:#a75640;font-weight:600}
+
+/* Shartnoma narxlari: bitta taom — bitta qator, menyu narxi yonida. */
+.price-rows{display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow:auto;margin-bottom:17px;
+  padding-right:4px}
+.price-row{display:grid;grid-template-columns:minmax(0,1fr) 124px;gap:12px;align-items:center;margin:0}
+.price-row strong{font-size:13.5px;font-weight:550;overflow-wrap:anywhere}
+.price-row small{display:block;color:#97a39c;font-size:11.5px;margin-top:3px}
+.price-row input{text-align:right;font-variant-numeric:tabular-nums}
+
+.theme-dark .partner-delivery{background:#17241f;border-color:#27382f}
+.theme-dark .partner-delivery>header strong{color:#d7e9de}
+.theme-dark .partner-lines li span{color:#c8dcd0}
+.theme-dark .partner-lines li{border-color:#27382f}
+.theme-dark .partner-payments span{background:#1d2c26}
+.theme-dark .partner-payments .voided{background:#2a1d19;color:#d19c8a}
+
+@media(max-width:700px){
+  .partner-deliveries{padding:0 15px 16px}
+  .partner-delivery-money{width:100%;justify-content:space-between;text-align:left}
+  .report-line{grid-template-columns:minmax(0,1fr) 82px}
+  .report-line>span:last-child{grid-column:1/3;text-align:left}
+  .price-row{grid-template-columns:minmax(0,1fr) 104px}
+}

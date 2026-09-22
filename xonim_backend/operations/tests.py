@@ -5038,6 +5038,41 @@ class PartnerDeliveryTests(TestCase):
         self.assertEqual(response.data['status'], 'reported')
         self.assertEqual(response.data['remaining'], '258000.00')
 
+    def test_a_voided_payment_stays_visible_in_the_history(self):
+        # Pul kelgani va keyin qaytarilgani — ikkita alohida voqea. Ro'yxatdan
+        # butunlay yo'qolsa, egasi kechqurun nima bo'lganini tiklay olmasdi.
+        delivery = self.send().data
+        self.report(delivery, {'Somsa': 43})
+        self.settle(delivery, '100000')
+        settlement = PartnerSettlement.objects.get()
+        response = self.client.post(f'/api/v1/partner-settlements/{settlement.id}/void/', {
+            'reason': 'Xato summa kiritildi',
+        }, format='json')
+        self.assertEqual(response.status_code, 200)
+        rows = response.data['settlements']
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['amount'], '100000.00')
+        self.assertIsNotNone(rows[0]['voided_at'])
+        self.assertEqual(rows[0]['void_reason'], 'Xato summa kiritildi')
+        # Ko'rinib tursa ham, jamiga qaytmaydi: qarz to'liq tiklangan.
+        self.assertEqual(response.data['settled_total'], '0.00')
+        self.assertEqual(response.data['remaining'], '258000.00')
+
+    def test_the_end_of_day_names_the_partners_that_did_not_report(self):
+        # Kunni yopish qarzni yo'qotmaydi, lekin kassir buni bilib yopsin.
+        self.send()
+        response = self.client.get('/api/v1/shift/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['partners_unreported'], 1)
+        self.assertEqual(response.data['partners_unreported_value'], '300000.00')
+
+    def test_a_reported_delivery_no_longer_waits_for_a_report(self):
+        delivery = self.send().data
+        self.report(delivery, {'Somsa': 43})
+        response = self.client.get('/api/v1/shift/')
+        self.assertEqual(response.data['partners_unreported'], 0)
+        self.assertEqual(response.data['partners_unreported_value'], '0.00')
+
     # --- Pul qayerda ko'rinadi ---
 
     def test_the_money_shows_up_in_finance_only_when_it_is_reported(self):

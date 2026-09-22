@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
-  ArrowUpRight, BarChart3, Banknote, Bot, ChefHat, ChevronRight, Command, ConciergeBell, CookingPot, History, LayoutDashboard, LogOut, Menu, PiggyBank,
+  ArrowUpRight, BarChart3, Banknote, Bot, ChefHat, ChevronRight, Command, ConciergeBell, CookingPot, Handshake, History, LayoutDashboard, LogOut, Menu, PiggyBank,
   LayoutGrid, Moon, Package, PanelLeftClose, ReceiptText, Settings2, ShoppingBag, Store, Sun, Users, UtensilsCrossed, Wallet,
 } from 'lucide-react'
 import { api } from './api'
@@ -27,6 +27,9 @@ const navItems: NavItem[] = [
   { path: '/pos', name: 'Kassa', icon: ShoppingBag, roles: ['owner', 'cashier'], badge: 'POS' },
   { path: '/orders', name: 'Buyurtmalar', icon: ReceiptText, roles: ['owner', 'cashier'] },
   { path: '/tayyor', name: 'Tayyor taomlar', icon: CookingPot, roles: ['owner', 'cashier'] },
+  // Maktab va universitetga jo'natish ham ertalabki ish: «Tayyor taomlar»dan
+  // keyin turadi, chunki kunning tartibi shunday.
+  { path: '/hamkorlar', name: 'Hamkorlar', icon: Handshake, roles: ['owner', 'cashier'] },
   { path: '/reports', name: 'Savdo hisobotlari', icon: BarChart3, roles: ['owner'] },
   { path: '/assistant', name: 'AI yordamchi', icon: Bot, roles: ['owner'] },
   { path: '/kitchen', name: 'Oshxona', icon: ChefHat, roles: ['owner', 'kitchen'], badge: 'KDS' },

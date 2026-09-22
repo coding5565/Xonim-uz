@@ -237,6 +237,13 @@ export interface Finance {
     waste: string
     platform_fee: string
     platform_share: string
+    /** Hamkor savdosi alohida juftlik: `revenue` ga qo'shilmaydi. */
+    partner_revenue: string
+    partner_cogs: string
+    partner_profit: string
+    partner_margin: string
+    /** Kassa va hamkor tushumi birga — `net_margin` ning maxraji. */
+    total_revenue: string
     net_profit: string
     net_margin: string
     orders: number
@@ -263,6 +270,8 @@ export interface Finance {
     /** Ofitsiantlar uchun yig'ilgan va ularga berilgan pul. */
     service_collected: string
     service_paid: string
+    /** Hamkorlardan olingan pul — naqdi kassaga tushadi. */
+    partner_in: string
     unpaid: string
     bridge: string
   }
@@ -279,6 +288,21 @@ export interface Finance {
   }
   /** Ofitsiant xizmat haqi: yig'ilgan, berilgan va qolgan. */
   service: { collected: string; paid: string; payments: number; owed: string; share: string }
+  /** Hamkorlar: jo'natilgani, tushgani va qolgan qarz. */
+  partners: {
+    revenue: string
+    cogs: string
+    profit: string
+    received: string
+    settlements: number
+    /** Hali hisobot berilmagani: tannarxi bor, tushumi yo'q. */
+    pending_value: string
+    pending_cost: string
+    pending_count: number
+    /** Butun vaqt bo'yicha qarz — davr bilan cheklanmaydi. */
+    debt: string
+    share: string
+  }
   stock: {
     value: string
     purchases: string
@@ -377,6 +401,13 @@ export interface ShiftDay {
   breakdown: ShiftMethodRow[]
   backdate_days: number
   alert_som: string
+  /** Hamkorlardan olingan pul; naqdi kutilgan naqdga kiradi. */
+  partners?: string
+  partners_cash?: string
+  partner_payments?: number
+  /** Bugun jo‘natilgan, lekin hisoboti kelmagan taom. */
+  partners_unreported?: number
+  partners_unreported_value?: string
   /** Yopilmagan kunda bo‘ladi. */
   cash_in?: string
   cash_out?: string
@@ -512,3 +543,103 @@ export interface ChannelFeeRow {
   configured: boolean
 }
 export interface ChannelFees { rows: ChannelFeeRow[]; default: string; detail?: string }
+
+/* ── Hamkorlar: maktab va universitetga taom jo'natish ───────────────── */
+
+/** Shartnoma narxi. Menyu narxi yonida turadi — chegirma ko'rinib tursin. */
+export interface PartnerPrice {
+  dish: number
+  dish_name: string
+  price: string
+  menu_price: string
+  archived: boolean
+}
+export interface Partner {
+  id: number
+  name: string
+  kind: 'school' | 'university' | 'office' | 'other'
+  kind_label: string
+  contact: string
+  phone: string
+  address: string
+  note: string
+  active: boolean
+  /** Umrlik qarz: butun vaqt bo'yicha, tanlangan davr bilan cheklanmaydi. */
+  debt: string
+  prices: PartnerPrice[]
+}
+export interface PartnerDeliveryLine {
+  id: number
+  dish: number
+  name: string
+  /** Jo'natilgan kundagi shartnoma narxi — qatorga muzlatilgan. */
+  price: string
+  menu_price: string
+  quantity: number
+  sold: number
+  unsold: number
+  cost_total: string
+  /** Hammasi sotilsa tushadigan pul. */
+  value: string
+  /** Sotilgani uchun tushadigan pul. */
+  earned: string
+}
+export interface PartnerSettlementRow {
+  id: number
+  amount: string
+  payment_method: string
+  paid_on: string
+  note: string
+  /** Bekor qilingan to'lov tarixda qoladi, lekin qarzni yopmaydi. */
+  voided_at: string | null
+  void_reason: string
+}
+export interface PartnerDelivery {
+  id: number
+  partner: number
+  partner_name: string
+  date: string
+  status: 'sent' | 'reported' | 'settled' | 'cancelled'
+  status_label: string
+  /** Hammasi sotilgandagi qiymat. */
+  total: string
+  cost_total: string
+  /** Hisobotdan keyin: aynan qancha qarz. Hisobotgacha nol. */
+  due_total: string
+  settled_total: string
+  remaining: string
+  note: string
+  created_at: string
+  reported_at: string | null
+  closed_at: string | null
+  cancel_reason: string
+  actor_name: string
+  lines: PartnerDeliveryLine[]
+  settlements: PartnerSettlementRow[]
+  warnings: string[]
+}
+export interface PartnerBoardRow extends Partner {
+  sent_value: string
+  sent_portions: number
+  pending_value: string
+  pending_count: number
+  /** Eng eski yopilmagan jo'natma necha kundan beri turibdi. */
+  oldest_days: number
+}
+export interface PartnerBoard {
+  filters: { start: string; end: string }
+  summary: {
+    partners: number
+    sent_value: string
+    sent_portions: number
+    pending_value: string
+    pending_count: number
+    due: string
+    received: string
+    settlements: number
+    debt: string
+  }
+  partners: PartnerBoardRow[]
+  deliveries: PartnerDelivery[]
+  payment_methods: { method: string; label: string }[]
+}

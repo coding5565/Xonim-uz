@@ -85,6 +85,10 @@ export default function ShiftClosePanel() {
                   income: money(day.cash_in || 0),
                   outcome: money(day.cash_out || 0),
                 })}
+              {/* Maktab kechqurun naqd olib kelgan bo'lsa, u pul ham shu
+                  yerda yotadi — aks holda kassir sababsiz ortiqcha ko'rardi. */}
+              {Number(day.partners_cash || 0) > 0
+                && ` · ${t('hamkorlardan naqd {amount}', { amount: money(day.partners_cash || 0) })}`}
             </em>
           </div>
           <div>
@@ -164,6 +168,17 @@ export default function ShiftClosePanel() {
           </>
         ) : (
           <form onSubmit={close} className="shift-form">
+            {/* Kunni yopish hamkorning qarzini yo'qotmaydi, lekin kechqurun
+                maktabga qo'ng'iroq qilish aynan shu yerda eslanadi. */}
+            {!!day.partners_unreported && (
+              <p className="alert">
+                {tn(
+                  '{count} ta hamkor bugungi ovqat uchun hisob bermadi — {amount} so‘m. Kunni yopsangiz ham bu pul qarz bo‘lib qoladi.',
+                  day.partners_unreported,
+                  { amount: money(day.partners_unreported_value || 0) },
+                )}
+              </p>
+            )}
             <label>
               {t('Kassadagi naqd pul, so‘m')}
               <small className="field-hint">{t('Faqat qutidagi naqd — karta puli hisobga kirmaydi')}</small>

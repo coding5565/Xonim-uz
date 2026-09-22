@@ -24,6 +24,7 @@ from .models import (
     SALE_PAYMENT_METHODS,
     Expense,
     Order,
+    PartnerDelivery,
     PartnerSettlement,
     ShiftClose,
     WaiterPayment,
@@ -70,6 +71,12 @@ def day_figures(branch, day):
         count=Count('id'),
     )
     cash_in += partner_rows['cash']
+    # Bugun jo'natilgan, lekin hisoboti kelmagan taom. Kunni yopish uni
+    # yo'qotmaydi — qarz bo'lib qolaveradi — lekin kassir buni bilib
+    # yopsin: kechqurun maktabga qo'ng'iroq qilish shu yerda eslanadi.
+    unreported = PartnerDelivery.objects.filter(
+        branch=branch, date=day, status='sent',
+    ).aggregate(value=Coalesce(Sum('total'), Decimal('0')), count=Count('id'))
     # Kassadan naqd chiqqan xarajatlar va ofitsiantlarga naqd berilgan ulush.
     cash_out = Expense.objects.filter(
         branch=branch, date=day, payment_method='cash',
@@ -112,6 +119,8 @@ def day_figures(branch, day):
         'partners': partner_rows['total'],
         'partners_cash': partner_rows['cash'],
         'partner_payments': partner_rows['count'],
+        'partners_unreported': unreported['count'],
+        'partners_unreported_value': unreported['value'],
         'orders': totals['orders'],
         'cash_in': cash_in,
         'cash_out': cash_out,
@@ -207,6 +216,8 @@ class ShiftView(APIView):
             'partners': money(figures['partners']),
             'partners_cash': money(figures['partners_cash']),
             'partner_payments': figures['partner_payments'],
+            'partners_unreported': figures['partners_unreported'],
+            'partners_unreported_value': money(figures['partners_unreported_value']),
             'orders': figures['orders'],
             'breakdown': figures['breakdown'],
             'open_orders': still_open,

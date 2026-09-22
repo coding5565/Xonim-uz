@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
-  AlertTriangle, ArrowRight, Banknote, Bike, ChefHat, Coins, Package, PiggyBank, Receipt, RefreshCw, Wallet,
+  AlertTriangle, ArrowRight, Banknote, Bike, ChefHat, Coins, Handshake, Package, PiggyBank, Receipt,
+  RefreshCw, Wallet,
 } from 'lucide-react'
 import { api, money } from '../api'
 import { useI18n } from '../i18n'
@@ -79,7 +80,7 @@ export default function FinancePage() {
     )
   }
 
-  const { profit, coverage, cash, stock, filters } = data
+  const { profit, coverage, cash, stock, partners, filters } = data
   const range = `start=${filters.start}&end=${filters.end}`
   const negative = Number(profit.net_profit) < 0
   const lowCoverage = Number(coverage.share) < 80
@@ -148,6 +149,33 @@ export default function FinancePage() {
             </div>
             <b>{money(profit.gross_profit)}</b>
           </div>
+
+          {/* Hamkor savdosi kassa savdosiga qo'shilmaydi: u yerda tushum
+              ham, tannarx ham o'ziniki. Shuning uchun zanjirda ikkita qator
+              bo'lib turadi va o'rtacha chek kabi nisbatlarga tegmaydi. */}
+          {!!Number(partners.revenue) && (
+            <Link to="/hamkorlar" className="chain-row">
+              <span className="chain-icon green"><Handshake size={18} /></span>
+              <div>
+                <strong>{t('Hamkorlar tushumi')}</strong>
+                <small>{t('Maktab va universitetlar sotgan porsiyalar uchun')}</small>
+              </div>
+              <b>+{money(partners.revenue)}</b>
+              <ArrowRight size={15} />
+            </Link>
+          )}
+
+          {!!Number(partners.cogs) && (
+            <Link to="/hamkorlar" className="chain-row minus">
+              <span className="chain-icon orange"><Handshake size={18} /></span>
+              <div>
+                <strong>{t('Hamkorlar tannarxi')}</strong>
+                <small>{t('Jo‘natilgan taomlarning xomashyosi — sotilmagani ham shu yerda')}</small>
+              </div>
+              <b>−{money(partners.cogs)}</b>
+              <ArrowRight size={15} />
+            </Link>
+          )}
 
           <Link to={`/expenses?${range}`} className="chain-row minus">
             <span className="chain-icon violet"><Receipt size={18} /></span>
@@ -291,6 +319,13 @@ export default function FinancePage() {
                 <ArrowRight size={14} />
               </Link>
             )}
+            {!!Number(cash.partner_in) && (
+              <Link to="/hamkorlar" className="cash-row">
+                <span>{t('Hamkorlardan tushdi')}</span>
+                <b>+{money(cash.partner_in)}</b>
+                <ArrowRight size={14} />
+              </Link>
+            )}
             <div className="cash-row total">
               <span>{t('Sof pul oqimi')}</span><b>{money(cash.net)} {t('so‘m')}</b>
             </div>
@@ -304,6 +339,48 @@ export default function FinancePage() {
             {t('Ombor xaridi foydadan ayirilmaydi — u tovarga aylanadi va sotilganda tannarx bo‘lib hisobga olinadi.')}
           </p>
         </section>
+
+        {/* Hamkorlar: to'rt raqam yonma-yon turadi, chunki jo'natilgan pul,
+            hisoblangan qarz va qo'lga tekkan pul uch xil narsa. Ular
+            alohida-alohida ko'rsatilmasa, farq xato bo'lib ko'rinardi. */}
+        {(!!Number(partners.revenue) || !!Number(partners.debt) || !!Number(partners.pending_value)) && (
+          <section className="panel">
+            <header className="panel-heading">
+              <div>
+                <h2>{t('Hamkorlar')}</h2>
+                <p>{t('Maktab va universitetlarga jo‘natilgan taom va uning puli')}</p>
+              </div>
+              <Handshake size={18} />
+            </header>
+            <div className="cash-rows">
+              <div className="cash-row">
+                <span>{t('Hisobot kutilmoqda')}</span>
+                <b>{money(partners.pending_value)}</b>
+              </div>
+              <div className="cash-row">
+                <span>{t('Hisoblangan qarz')}</span><b>{money(partners.revenue)}</b>
+              </div>
+              <Link to="/hamkorlar" className="cash-row">
+                <span>{t('Tushgan pul')}</span>
+                <b>{money(partners.received)}</b>
+                <ArrowRight size={14} />
+              </Link>
+              <div className="cash-row total">
+                <span>{t('Qolgan qarz')}</span>
+                <b className={Number(partners.debt) > 0 ? 'owed' : undefined}>
+                  {money(partners.debt)} {t('so‘m')}
+                </b>
+              </div>
+              <div className="cash-row hint">
+                <span>{t('Hamkorlar foydasi')}</span>
+                <b>{money(partners.profit)}</b>
+              </div>
+            </div>
+            <p className="data-note">
+              {t('«Hisoblangan qarz» hisobot berilgan porsiyalardan tug‘iladi, «Tushgan pul» esa haqiqatda qo‘lga tekkanidan — ikkalasi bir kunda teng bo‘lmasligi normal.')}
+            </p>
+          </section>
+        )}
 
         <section className="panel">
           <header className="panel-heading">

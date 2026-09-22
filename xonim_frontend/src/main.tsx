@@ -35,6 +35,8 @@ const PayrollPage = lazy(() => import('./pages/PayrollPage'))
 const FinancePage = lazy(() => import('./pages/FinancePage'))
 const WaitersPage = lazy(() => import('./pages/WaitersPage'))
 const PrepPage = lazy(() => import('./pages/PrepPage'))
+const PartnersPage = lazy(() => import('./pages/PartnersPage'))
+const PartnerPage = lazy(() => import('./pages/PartnerPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 
 /** Resolves the session before any protected page renders. */
@@ -113,6 +115,10 @@ createRoot(document.getElementById('app')!).render(
               <Route path="/finance" element={<Allow roles={['owner']}><FinancePage /></Allow>} />
               <Route path="/waiters" element={<Allow roles={['owner']}><WaitersPage /></Allow>} />
               <Route path="/tayyor" element={<Allow roles={sales}><PrepPage /></Allow>} />
+              {/* Hamkorlar: ro'yxat va har birining o'z sahifasi — jo'natish,
+                  hisobot va pul o'sha yerda individual qilinadi. */}
+              <Route path="/hamkorlar" element={<Allow roles={sales}><PartnersPage /></Allow>} />
+              <Route path="/hamkorlar/:partnerId" element={<Allow roles={sales}><PartnerPage /></Allow>} />
               <Route path="/settings" element={<Allow roles={staffed}><SettingsPage /></Allow>} />
             </Route>
           </Route>
