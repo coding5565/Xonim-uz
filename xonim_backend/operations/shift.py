@@ -10,7 +10,7 @@ o'zgarsa ham yopilgan kun hisoboti o'zgarmaydi.
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework import serializers
@@ -20,7 +20,14 @@ from rest_framework.views import APIView
 from core.i18n import _
 from users.permissions import OwnerOnly, SalesOnly
 
-from .models import SALE_PAYMENT_METHODS, Expense, Order, ShiftClose, WaiterPayment
+from .models import (
+    SALE_PAYMENT_METHODS,
+    Expense,
+    Order,
+    PartnerSettlement,
+    ShiftClose,
+    WaiterPayment,
+)
 from .money import day_window, money, platform_fee, takings
 from .services import audit, safely
 
@@ -53,6 +60,16 @@ def day_figures(branch, day):
         .order_by('-amount')
     }
     cash_in = by_method.get('cash', {}).get('amount') or Decimal('0')
+    # Maktab kechqurun naqd olib kelsa, u pul kassada yotadi. Hisobga
+    # qo'shilmasa kassir har kuni sababsiz «ortiqcha» farq ko'rib yurardi.
+    partner_rows = PartnerSettlement.objects.filter(
+        branch=branch, paid_on=day, voided_at__isnull=True,
+    ).aggregate(
+        total=Coalesce(Sum('amount'), Decimal('0')),
+        cash=Coalesce(Sum('amount', filter=Q(payment_method='cash')), Decimal('0')),
+        count=Count('id'),
+    )
+    cash_in += partner_rows['cash']
     # Kassadan naqd chiqqan xarajatlar va ofitsiantlarga naqd berilgan ulush.
     cash_out = Expense.objects.filter(
         branch=branch, date=day, payment_method='cash',
@@ -91,6 +108,10 @@ def day_figures(branch, day):
     return {
         'revenue': totals['revenue'],
         'service': totals['service'],
+        # Hamkorlardan tushgan pul: savdo emas, lekin kassada yotadi.
+        'partners': partner_rows['total'],
+        'partners_cash': partner_rows['cash'],
+        'partner_payments': partner_rows['count'],
         'orders': totals['orders'],
         'cash_in': cash_in,
         'cash_out': cash_out,
@@ -183,6 +204,9 @@ class ShiftView(APIView):
             'cash_out': money(figures['cash_out']),
             'revenue': money(figures['revenue']),
             'service': money(figures['service']),
+            'partners': money(figures['partners']),
+            'partners_cash': money(figures['partners_cash']),
+            'partner_payments': figures['partner_payments'],
             'orders': figures['orders'],
             'breakdown': figures['breakdown'],
             'open_orders': still_open,

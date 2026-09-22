@@ -121,13 +121,18 @@ def _recipes_for_dishes(branch, dish_ids):
     }
 
 
-def consume_order_stock(user, order):
-    """Deduct exact recipe quantities once an order is paid.
+def consume_recipe_stock(user, lines, *, kind, tag, source, key_prefix):
+    """Retsept bo'yicha masalliqni ombordan ayiradi.
 
-    All affected ingredients are locked first. A shortage rejects payment instead
-    of silently making the warehouse balance incorrect.
+    Bitta joyda turadi, chunki uni ikki yo'l ishlatadi: zal sotuvi va
+    hamkorga jo'natish. Ikki nusxa bo'lsa ular sekin-asta ajralib ketardi
+    va ajralgani aynan pulda ko'rinardi.
+
+    `tag`        — jurnal va izohdagi prefiks: «#12 buyurtma» yoki «H#5 hamkor».
+    `kind`       — StockMovement turi: 'sale_consumption' yoki 'partner_sale'.
+    `source`     — idempotentlik barmoq izidagi hujjat nomi va raqami.
+    `key_prefix` — uuid5 uchun: bir xil qator ikki marta ayirmasligi uchun.
     """
-    lines = list(order.lines.select_related('dish'))
     recipes = _recipes_for_dishes(user.branch, [line.dish_id for line in lines])
     required = {}
     usage_rows = []
@@ -142,6 +147,8 @@ def consume_order_stock(user, order):
 
     if not required:
         return
+    # `order_by('id')` shart: jo'natish va to'lov bir vaqtda masalliqlarni
+    # boshqa-boshqa tartibda qulflasa, ikkalasi bir-birini kutib qolardi.
     ingredients = {
         item.id: item for item in Ingredient.objects.select_for_update().filter(branch=user.branch, id__in=required).order_by('id')
     }
@@ -156,7 +163,7 @@ def consume_order_stock(user, order):
         if ingredient and ingredient.quantity < quantity:
             shortages.append((
                 'stock.shortage',
-                f'#{order.id} buyurtma · {ingredient.name} · retsept {quantity_text(quantity)} '
+                f'{tag} · {ingredient.name} · retsept {quantity_text(quantity)} '
                 f'{ingredient.unit} so‘radi, qoldiq {quantity_text(ingredient.quantity)} edi',
             ))
     audit_many(user, shortages)
@@ -171,22 +178,22 @@ def consume_order_stock(user, order):
         ingredient = ingredients.get(recipe_line.ingredient_id)
         if not ingredient:
             continue
-        key = uuid5(NAMESPACE_URL, f'xonim-sale-stock:{order.id}:{line.id}:{recipe_line.ingredient_id}')
+        key = uuid5(NAMESPACE_URL, f'{key_prefix}:{line.id}:{recipe_line.ingredient_id}')
         # Sotuv paytidagi ombor tannarxi muzlatiladi: keyin narx o'zgarsa ham
         # eski hisobotlar o'zgarmaydi.
         StockMovement.objects.create(
             branch=user.branch, ingredient=ingredient, actor=user,
-            key=key, request_hash=fingerprint({'order': order.id, 'line': line.id, 'ingredient': recipe_line.ingredient_id, 'quantity': str(quantity)}),
-            kind='sale_consumption', quantity=quantity, date=timezone.localdate(),
+            key=key, request_hash=fingerprint({**source, 'line': line.id, 'ingredient': recipe_line.ingredient_id, 'quantity': str(quantity)}),
+            kind=kind, quantity=quantity, date=timezone.localdate(),
             unit_cost=ingredient.unit_cost, cost_total=(ingredient.unit_cost * quantity).quantize(Decimal('0.01')),
-            note=f'#{order.id} buyurtma · {line.name}',
+            note=f'{tag} · {line.name}',
         )
     # Har bir masalliq alohida yoziladi: qaysi mahsulot, qancha va qachon
     # ayrilgani jurnaldan ko'rinib tursin.
     audit_many(user, [
         (
             'stock.sale_consumption',
-            f'#{order.id} buyurtma · {ingredients[ingredient_id].name} · -{quantity_text(quantity)} {ingredients[ingredient_id].unit}',
+            f'{tag} · {ingredients[ingredient_id].name} · -{quantity_text(quantity)} {ingredients[ingredient_id].unit}',
         )
         for ingredient_id, quantity in sorted(
             ((key, value) for key, value in required.items() if key in ingredients),
@@ -194,6 +201,80 @@ def consume_order_stock(user, order):
         )
     ])
 
+
+def consume_order_stock(user, order):
+    """Deduct exact recipe quantities once an order is paid.
+
+    All affected ingredients are locked first. A shortage never blocks the
+    sale: the recipe is an estimate, and a cashier with a guest in front of
+    him must not be stopped by an estimate.
+    """
+    consume_recipe_stock(
+        user, list(order.lines.select_related('dish')),
+        kind='sale_consumption',
+        tag=f'#{order.id} buyurtma',
+        source={'order': order.id},
+        key_prefix=f'xonim-sale-stock:{order.id}',
+    )
+
+
+
+def consume_delivery_stock(user, delivery):
+    """Hamkorga jo'natilgan taomlar masallig'ini ombordan ayiradi.
+
+    Ayirish JO'NATISH paytida bo'ladi, sotilganda emas: go'sht oshxonadan
+    chiqib ketgan va uni keyingi mijozga sarflab bo'lmaydi. Maktab sotdimi
+    yoki yo'qmi — bu masalliqqa aloqasi yo'q.
+
+    Prefiks «H#» ataylab: buyurtma qatorlarining «#12 buyurtma» qidiruvi
+    hamkor qatorlarini tutib olmasligi kerak.
+    """
+    consume_recipe_stock(
+        user, list(delivery.lines.select_related('dish')),
+        kind='partner_sale',
+        tag=f'H#{delivery.id} hamkor',
+        source={'delivery': delivery.id},
+        key_prefix=f'xonim-partner-stock:{delivery.id}',
+    )
+
+
+def restore_delivery_stock(user, delivery):
+    """Bekor qilingan jo'natma masalliqlarini omborga qaytaradi.
+
+    Faqat hisobot berilmagan jo'natma bekor qilinadi, ya'ni ovqat hali
+    sotilmagan. Shu sababli masalliqni qaytarish halol: u chiqmagan edi.
+    """
+    moves = list(StockMovement.objects.filter(
+        branch=user.branch, kind='partner_sale', note__startswith=f'H#{delivery.id} hamkor · ',
+    ).select_related('ingredient'))
+    if not moves:
+        return 0
+    back = {}
+    for move in moves:
+        back[move.ingredient_id] = back.get(move.ingredient_id, Decimal('0')) + move.quantity
+    locked = {
+        item.id: item
+        for item in Ingredient.objects.select_for_update().filter(branch=user.branch, id__in=back).order_by('id')
+    }
+    rows = []
+    for ingredient_id, amount in back.items():
+        ingredient = locked[ingredient_id]
+        Ingredient.objects.filter(pk=ingredient_id).update(quantity=F('quantity') + amount)
+        key = uuid5(NAMESPACE_URL, f'xonim-partner-refund:{delivery.id}:{ingredient_id}')
+        StockMovement.objects.create(
+            branch=user.branch, ingredient=ingredient, actor=user, key=key,
+            request_hash=fingerprint({'partner_refund': delivery.id, 'ingredient': ingredient_id, 'quantity': str(amount)}),
+            kind='refund', quantity=amount, date=timezone.localdate(),
+            unit_cost=ingredient.unit_cost,
+            cost_total=(ingredient.unit_cost * amount).quantize(Decimal('0.01')),
+            note=f'H#{delivery.id} hamkor jo‘natmasi bekor qilindi',
+        )
+        rows.append((
+            'stock.refund',
+            f'H#{delivery.id} bekor qilindi · {ingredient.name} · +{quantity_text(amount)} {ingredient.unit}',
+        ))
+    audit_many(user, rows)
+    return len(rows)
 
 
 def _autoprint(order):

@@ -28,6 +28,10 @@ from .models import (
     Ingredient,
     Order,
     OrderLine,
+    Partner,
+    PartnerDelivery,
+    PartnerPrice,
+    PartnerSettlement,
     PrintJob,
     Recipe,
     RecipeLine,
@@ -4812,3 +4816,339 @@ class EmployeeWithoutLoginTests(TestCase):
         # Hisobda bunday maydon umuman yo'q — ikki joyda ikki xil raqam
         # turib qolishi mumkin emas.
         self.assertFalse(hasattr(User.objects.get(username='aziz3'), 'daily_wage'))
+
+
+class PartnerDeliveryTests(TestCase):
+    """Hamkorlar: maktabga arzon narxda jo'natish va kechqurun hisob-kitob.
+
+    Uchta qoida shu yerda qo'riqlanadi: ombor jo'natishda ayriladi, tushum
+    hisobot bilan tug'iladi, tayyor taomlar qoldig'iga esa umuman tegilmaydi.
+    """
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.category = Category.objects.create(branch=self.branch, name='Taom')
+        self.somsa = Dish.objects.create(branch=self.branch, category=self.category, name='Somsa', price=Decimal('9000'))
+        self.manti = Dish.objects.create(branch=self.branch, category=self.category, name='Manti', price=Decimal('12000'))
+        # Somsaning retsepti bor: jo'natishda ombordan shu ayriladi.
+        self.flour = Ingredient.objects.create(
+            branch=self.branch, name='Un', unit='kg', quantity=Decimal('100'), unit_cost=Decimal('10000'))
+        recipe = Recipe.objects.create(branch=self.branch, dish=self.somsa, name='Somsa', yield_quantity=10)
+        RecipeLine.objects.create(
+            recipe=recipe, ingredient=self.flour, quantity=Decimal('1'), batch_cost=Decimal('10000'))
+
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+        self.partner = Partner.objects.create(branch=self.branch, name='12-maktab', kind='school')
+        PartnerPrice.objects.create(
+            branch=self.branch, partner=self.partner, dish=self.somsa, price=Decimal('6000'))
+        PartnerPrice.objects.create(
+            branch=self.branch, partner=self.partner, dish=self.manti, price=Decimal('8000'))
+        self.today = timezone.localdate()
+
+    def send(self, lines=None, client=None, partner=None):
+        return (client or self.client).post('/api/v1/partner-deliveries/', {
+            'key': str(uuid4()),
+            'partner': (partner or self.partner).id,
+            'note': 'Ertalabki mashina',
+            'lines': lines or [{'dish': self.somsa.id, 'quantity': 50}],
+        }, format='json')
+
+    def report(self, delivery, sold):
+        lines = delivery['lines']
+        return self.client.post(f'/api/v1/partner-deliveries/{delivery["id"]}/report/', {
+            'lines': [{'line': line['id'], 'sold': sold.get(line['name'], 0)} for line in lines],
+        }, format='json')
+
+    def settle(self, delivery, amount, method='cash', day=None):
+        return self.client.post(f'/api/v1/partner-deliveries/{delivery["id"]}/settle/', {
+            'key': str(uuid4()), 'amount': str(amount), 'payment_method': method,
+            'paid_on': str(day or self.today), 'note': '',
+        }, format='json')
+
+    def finance(self):
+        return self.client.get('/api/v1/finance/').data
+
+    # --- Jo'natish ---
+
+    def test_a_delivery_is_priced_from_the_contract_not_the_menu(self):
+        response = self.send()
+        self.assertEqual(response.status_code, 201)
+        body = response.data
+        self.assertEqual(body['status'], 'sent')
+        # 50 × 6 000 — menyudagi 9 000 emas.
+        self.assertEqual(body['total'], '300000.00')
+        self.assertEqual(body['lines'][0]['price'], '6000.00')
+        self.assertEqual(body['lines'][0]['menu_price'], '9000.00')
+        # Hali hech narsa sotilmagan: qarz ham, tushum ham yo'q.
+        self.assertEqual(body['due_total'], '0.00')
+
+    def test_a_dish_without_a_contract_price_cannot_be_sent(self):
+        choy = Dish.objects.create(branch=self.branch, category=self.category, name='Choy', price=Decimal('5000'))
+        response = self.send([{'dish': choy.id, 'quantity': 10}])
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('narxi belgilanmagan', str(response.data))
+        self.assertFalse(PartnerDelivery.objects.exists())
+
+    def test_sending_takes_the_ingredients_out_of_the_warehouse(self):
+        # 50 porsiya, retsept 10 porsiyaga 1 kg → 5 kg un.
+        self.send()
+        self.flour.refresh_from_db()
+        self.assertEqual(self.flour.quantity, Decimal('95.000000'))
+        move = StockMovement.objects.get(kind='partner_sale')
+        self.assertEqual(move.quantity, Decimal('5'))
+        self.assertEqual(move.cost_total, Decimal('50000'))
+
+    def test_sending_never_touches_the_prepared_dish_balance(self):
+        # Bu ovqat alohida pishiriladi: tayyor taomlar qoldig'i o'zgarmaydi
+        # va tayyori yo'qligi jo'natishni to'xtatmaydi.
+        self.assertEqual(self.send().status_code, 201)
+        row = next(item for item in self.client.get('/api/v1/dish-prep/').data['dishes']
+                   if item['dish'] == self.somsa.id)
+        self.assertEqual(row['sold'], 0)
+        self.assertEqual(row['remaining'], 0)
+        self.assertFalse(DishPrep.objects.exists())
+
+    def test_the_same_key_never_sends_twice(self):
+        key = str(uuid4())
+        body = {'key': key, 'partner': self.partner.id, 'note': '',
+                'lines': [{'dish': self.somsa.id, 'quantity': 50}]}
+        first = self.client.post('/api/v1/partner-deliveries/', body, format='json')
+        second = self.client.post('/api/v1/partner-deliveries/', body, format='json')
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(PartnerDelivery.objects.count(), 1)
+        # Ombor ham bir marta ayriladi.
+        self.flour.refresh_from_db()
+        self.assertEqual(self.flour.quantity, Decimal('95.000000'))
+
+    def test_the_cashier_sends_but_only_the_owner_writes_the_prices(self):
+        cashier = APIClient()
+        cashier.force_authenticate(self.cashier)
+        self.assertEqual(self.send(client=cashier).status_code, 201)
+        # Narxlarni ko'ra oladi — jo'natish oynasi shulardan chiziladi.
+        self.assertEqual(cashier.get(f'/api/v1/partners/{self.partner.id}/prices/').status_code, 200)
+        # Lekin yoza olmaydi.
+        self.assertEqual(cashier.put(f'/api/v1/partners/{self.partner.id}/prices/', {
+            'rows': [{'dish': self.somsa.id, 'price': '1000'}],
+        }, format='json').status_code, 403)
+
+    # --- Hisobot ---
+
+    def test_the_report_fixes_what_is_owed(self):
+        delivery = self.send([{'dish': self.somsa.id, 'quantity': 50},
+                              {'dish': self.manti.id, 'quantity': 30}]).data
+        response = self.report(delivery, {'Somsa': 43, 'Manti': 30})
+        self.assertEqual(response.status_code, 200)
+        body = response.data
+        # 43×6 000 + 30×8 000 = 498 000.
+        self.assertEqual(body['due_total'], '498000.00')
+        self.assertEqual(body['status'], 'reported')
+        somsa = next(row for row in body['lines'] if row['name'] == 'Somsa')
+        self.assertEqual(somsa['sold'], 43)
+        self.assertEqual(somsa['unsold'], 7)
+
+    def test_the_report_replaces_and_never_accumulates(self):
+        delivery = self.send().data
+        self.report(delivery, {'Somsa': 40})
+        again = self.report(delivery, {'Somsa': 43}).data
+        self.assertEqual(again['due_total'], '258000.00')
+        self.assertEqual(again['lines'][0]['sold'], 43)
+
+    def test_more_cannot_be_sold_than_was_sent(self):
+        delivery = self.send().data
+        response = self.report(delivery, {'Somsa': 51})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('51', str(response.data))
+
+    def test_nothing_sold_closes_the_delivery_with_no_money(self):
+        delivery = self.send().data
+        body = self.report(delivery, {'Somsa': 0}).data
+        # Kutadigan narsa yo'q: qarz nol, demak yopilgan.
+        self.assertEqual(body['due_total'], '0.00')
+        self.assertEqual(body['status'], 'settled')
+
+    # --- Pul ---
+
+    def test_money_closes_the_delivery_and_a_short_payment_leaves_a_debt(self):
+        delivery = self.send().data
+        reported = self.report(delivery, {'Somsa': 43}).data
+        self.assertEqual(reported['due_total'], '258000.00')
+
+        part = self.settle(delivery, '200000').data
+        self.assertEqual(part['status'], 'reported')
+        self.assertEqual(part['remaining'], '58000.00')
+
+        rest = self.settle(delivery, '58000').data
+        self.assertEqual(rest['status'], 'settled')
+        self.assertEqual(rest['remaining'], '0.00')
+
+    def test_more_than_the_debt_is_refused(self):
+        delivery = self.send().data
+        self.report(delivery, {'Somsa': 43})
+        response = self.settle(delivery, '300000')
+        self.assertEqual(response.status_code, 400)
+
+    def test_money_before_the_report_is_refused(self):
+        delivery = self.send().data
+        self.assertEqual(self.settle(delivery, '10000').status_code, 409)
+
+    def test_a_payment_into_a_closed_day_is_refused(self):
+        delivery = self.send().data
+        self.report(delivery, {'Somsa': 43})
+        ShiftClose.objects.create(
+            branch=self.branch, actor=self.owner, date=self.today,
+            expected_cash=Decimal('0'), counted_cash=Decimal('0'), difference=Decimal('0'),
+            revenue=Decimal('0'), orders=0, breakdown=[], note='')
+        response = self.settle(delivery, '100000')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('yopilgan', str(response.data))
+
+    # --- Bekor qilish ---
+
+    def test_cancelling_an_unreported_delivery_gives_the_ingredients_back(self):
+        delivery = self.send().data
+        response = self.client.post(f'/api/v1/partner-deliveries/{delivery["id"]}/cancel/', {
+            'reason': 'Noto‘g‘ri kiritildi',
+        }, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['status'], 'cancelled')
+        self.flour.refresh_from_db()
+        self.assertEqual(self.flour.quantity, Decimal('100.000000'))
+
+    def test_a_reported_delivery_cannot_be_cancelled(self):
+        delivery = self.send().data
+        self.report(delivery, {'Somsa': 43})
+        response = self.client.post(f'/api/v1/partner-deliveries/{delivery["id"]}/cancel/', {
+            'reason': 'Kech qoldik',
+        }, format='json')
+        self.assertEqual(response.status_code, 409)
+
+    def test_voiding_a_payment_reopens_the_debt(self):
+        delivery = self.send().data
+        self.report(delivery, {'Somsa': 43})
+        self.settle(delivery, '258000')
+        settlement = PartnerSettlement.objects.get()
+        response = self.client.post(f'/api/v1/partner-settlements/{settlement.id}/void/', {
+            'reason': 'Xato summa kiritildi',
+        }, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['status'], 'reported')
+        self.assertEqual(response.data['remaining'], '258000.00')
+
+    # --- Pul qayerda ko'rinadi ---
+
+    def test_the_money_shows_up_in_finance_only_when_it_is_reported(self):
+        delivery = self.send().data
+        pending = self.finance()
+        # Jo'natildi, lekin hisobot yo'q: tushum nol, tannarx esa bor.
+        self.assertEqual(pending['partners']['revenue'], '0.00')
+        self.assertEqual(pending['partners']['pending_value'], '300000.00')
+        self.assertEqual(pending['partners']['cogs'], '50000.00')
+        self.assertEqual(pending['profit']['partner_revenue'], '0.00')
+
+        self.report(delivery, {'Somsa': 43})
+        after = self.finance()
+        self.assertEqual(after['partners']['revenue'], '258000.00')
+        self.assertEqual(after['partners']['profit'], '208000.00')
+        self.assertEqual(after['profit']['partner_revenue'], '258000.00')
+        # Kassa savdosi tegilmaydi: hamkor puli unga qo'shilmaydi.
+        self.assertEqual(after['profit']['revenue'], '0.00')
+        self.assertEqual(after['profit']['total_revenue'], '258000.00')
+
+    def test_the_cash_box_shows_what_the_school_handed_over(self):
+        delivery = self.send().data
+        self.report(delivery, {'Somsa': 43})
+        self.settle(delivery, '258000')
+        data = self.finance()
+        self.assertEqual(data['partners']['received'], '258000.00')
+        self.assertEqual(data['partners']['debt'], '0.00')
+        self.assertEqual(data['cash']['partner_in'], '258000.00')
+
+    def test_cash_from_a_school_lands_in_the_drawer(self):
+        delivery = self.send().data
+        self.report(delivery, {'Somsa': 43})
+        cashier = APIClient()
+        cashier.force_authenticate(self.cashier)
+        before = Decimal(cashier.get('/api/v1/shift/').data['expected_cash'])
+        self.settle(delivery, '258000', method='cash')
+        day = cashier.get('/api/v1/shift/').data
+        self.assertEqual(Decimal(day['expected_cash']) - before, Decimal('258000'))
+        self.assertEqual(day['partners'], '258000.00')
+        # Karta bilan berilgani kassaga tushmaydi.
+        self.assertEqual(day['partners_cash'], '258000.00')
+
+    def test_the_cash_bridge_still_closes(self):
+        delivery = self.send([{'dish': self.somsa.id, 'quantity': 50},
+                              {'dish': self.manti.id, 'quantity': 30}]).data
+        self.report(delivery, {'Somsa': 43, 'Manti': 20})
+        self.settle(delivery, '100000')
+        data = self.finance()
+        # Foydadan pulga o'tish zanjiri tiyingacha yopilishi kerak.
+        self.assertEqual(Decimal(data['cash']['bridge']), Decimal(data['cash']['net']))
+
+    def test_the_warehouse_gap_does_not_open_by_itself(self):
+        # Hamkor tannarxi ikkala tomonda ham turadi: retsept tomonida va
+        # ombor tomonida. Aks holda egasi yo'q muammoni qidirib yurardi.
+        self.send()
+        stock = self.finance()['stock']
+        self.assertEqual(stock['gap'], '0.00')
+
+    def test_the_debt_survives_into_the_next_month(self):
+        delivery = self.send().data
+        self.report(delivery, {'Somsa': 43})
+        board = self.client.get('/api/v1/partner-board/').data
+        self.assertEqual(board['summary']['debt'], '258000.00')
+        row = next(item for item in board['partners'] if item['id'] == self.partner.id)
+        self.assertEqual(row['debt'], '258000.00')
+
+    def test_a_partner_with_an_open_delivery_cannot_be_deactivated(self):
+        self.send()
+        response = self.client.patch(f'/api/v1/partners/{self.partner.id}/', {
+            'active': False,
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('yopilmagan', str(response.data))
+
+    def test_two_partners_cannot_share_a_name(self):
+        response = self.client.post('/api/v1/partners/', {'name': '12-maktab'}, format='json')
+        self.assertEqual(response.status_code, 400)
+
+    def test_raising_the_price_tomorrow_never_rewrites_a_sent_delivery(self):
+        delivery = self.send().data
+        self.client.put(f'/api/v1/partners/{self.partner.id}/prices/', {
+            'rows': [{'dish': self.somsa.id, 'price': '7000'}],
+        }, format='json')
+        self.report(delivery, {'Somsa': 50})
+        again = self.client.get('/api/v1/partner-deliveries/').data[0]
+        # Eski jo'natma o'z narxida qoladi: 50 × 6 000.
+        self.assertEqual(again['due_total'], '300000.00')
+        # Yangi jo'natma esa yangi narxda ketadi.
+        fresh = self.send().data
+        self.assertEqual(fresh['lines'][0]['price'], '7000.00')
+
+    def test_nothing_is_counted_twice_across_the_reports(self):
+        # Bir kun: zal savdosi ham, hamkor jo'natmasi ham bor.
+        prepare(self.cashier, self.somsa)
+        create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': 'cash',
+            'lines': [{'dish': self.somsa.id, 'quantity': 2, 'note': ''}],
+        })
+        delivery = self.send().data
+        self.report(delivery, {'Somsa': 43})
+        self.settle(delivery, '258000')
+
+        data = self.finance()
+        today = timezone.localdate()
+        board = self.client.get(f'/api/v1/sales/board/?start={today}&end={today}').data
+        # Kassa savdosi ikkala joyda ham bir xil va hamkor puli unga
+        # qo'shilmagan.
+        self.assertEqual(data['profit']['revenue'], '18000.00')
+        self.assertEqual(board['summary']['revenue'], '18000.00')
+        # Hamkor tushumi esa faqat o'z qatorida.
+        self.assertEqual(data['profit']['partner_revenue'], '258000.00')
+        self.assertEqual(data['profit']['total_revenue'], '276000.00')
+        # Ko'prik yopiladi.
+        self.assertEqual(Decimal(data['cash']['bridge']), Decimal(data['cash']['net']))

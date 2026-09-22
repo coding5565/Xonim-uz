@@ -37,6 +37,8 @@ from .models import (
     Ingredient,
     Order,
     OrderLine,
+    PartnerDelivery,
+    PartnerSettlement,
     SalaryPayment,
     StockMovement,
     WaiterPayment,
@@ -239,8 +241,44 @@ def build_finance(branch, start, end, today):
         # Qaytarilgan buyurtma masallig'i omborga qaytdi, ya'ni u sotilgan
         # tannarx bo'lib qolmaydi va «sarflangan»dan ayirilishi kerak.
         returned=Coalesce(Sum('cost_total', filter=Q(kind='refund')), Decimal('0')),
+        # Hamkorga ketgan masalliq: ombordan jo'natish kuni chiqadi.
+        partner=Coalesce(Sum('cost_total', filter=Q(kind='partner_sale')), Decimal('0')),
     )
     purchases, waste = moves['purchases'], moves['waste']
+
+    # --- Hamkorlar: maktab va universitetga jo'natilgan taomlar ---
+    #
+    # Tannarx JO'NATISH kuniga yoziladi, chunki masalliq o'sha kuni ombordan
+    # chiqqan va StockMovement ham o'sha kunga yozilgan. Ikkalasi bir kunda
+    # turmasa ombor farqi har kuni sababsiz ochilib ketardi.
+    #
+    # Tushum esa HISOBOT bilan tug'iladi, lekin u ham jo'natma kuniga
+    # yoziladi: ovqat dushanba chiqqan bo'lsa foyda ham dushanbaniki. Aks
+    # holda dushanba sof xarajat, payshanba sof foyda bo'lib ko'rinardi.
+    deliveries = PartnerDelivery.objects.filter(branch=branch, date__gte=start, date__lte=end)
+    live = deliveries.exclude(status='cancelled')
+    partner_cogs = live.aggregate(total=Coalesce(Sum('cost_total'), Decimal('0')))['total']
+    partner_revenue = live.filter(status__in=['reported', 'settled']).aggregate(
+        total=Coalesce(Sum('due_total'), Decimal('0')))['total']
+    # Hali hisobot berilmagani: tannarxi bor, tushumi yo'q. Hech qanday
+    # jamiga kirmaydi — faqat ekranda farqni tushuntirib turadi.
+    partner_pending = live.filter(status='sent').aggregate(
+        value=Coalesce(Sum('total'), Decimal('0')),
+        cost=Coalesce(Sum('cost_total'), Decimal('0')),
+        count=Count('id'),
+    )
+    partner_cash = PartnerSettlement.objects.filter(
+        branch=branch, voided_at__isnull=True, paid_on__gte=start, paid_on__lte=end,
+    ).aggregate(total=Coalesce(Sum('amount'), Decimal('0')), count=Count('id'))
+    # Umumiy qarz butun vaqt bo'yicha: o'tgan oyning qarzi bu oy ko'rinmay
+    # qolmasligi kerak.
+    partner_debt = (
+        PartnerDelivery.objects.filter(branch=branch).exclude(status='cancelled').aggregate(
+            total=Coalesce(Sum('due_total'), Decimal('0')))['total']
+        - PartnerSettlement.objects.filter(branch=branch, voided_at__isnull=True).aggregate(
+            total=Coalesce(Sum('amount'), Decimal('0')))['total']
+    )
+    partner_profit = partner_revenue - partner_cogs
 
     # Ofitsiant xizmat haqi: mijozdan yig'iladi, lekin restoranning puli
     # emas. Shuning uchun tushumga ham, foydaga ham kirmaydi — faqat pul
@@ -315,7 +353,11 @@ def build_finance(branch, start, end, today):
     # Platforma ushlagan ulush hech qachon hisobga tushmaydi, shuning uchun u
     # ham xuddi xarajat kabi foydadan ayiriladi. Tushum esa to'liq qoladi:
     # mijoz to'lagan summa o'zgarmaydi, faqat bizga yetib kelgani kamayadi.
-    net_profit = gross_profit - expense_total - waste - platform_total
+    # Hamkor savdosi alohida juftlik bo'lib kiradi: tushumi ham, tannarxi
+    # ham o'ziniki. `revenue` ga qo'shilmaydi, chunki u yettita nisbatning
+    # maxraji — o'rtacha chek ham, kanal ulushi ham undan hisoblanadi.
+    net_profit = gross_profit + partner_profit - expense_total - waste - platform_total
+    total_revenue = revenue + partner_revenue
 
     salary_spend = spend.filter(salary_payment__isnull=False).aggregate(
         total=Coalesce(Sum('amount'), Decimal('0')), count=Count('id'),
@@ -332,7 +374,7 @@ def build_finance(branch, start, end, today):
         total=Coalesce(Sum('amount'), Decimal('0')), count=Count('id'),
     )
     stock_value = sum((item.stock_value for item in Ingredient.objects.filter(branch=branch)), Decimal('0'))
-    consumed = moves['sold'] + waste - moves['returned']
+    consumed = moves['sold'] + waste + moves['partner'] - moves['returned']
 
     return {
         'filters': {
@@ -353,8 +395,16 @@ def build_finance(branch, start, end, today):
             'waste': money(waste),
             'platform_fee': money(platform_total),
             'platform_share': percent(platform_total, revenue),
+            # Hamkor savdosi: kassa savdosidan alohida turadi.
+            'partner_revenue': money(partner_revenue),
+            'partner_cogs': money(partner_cogs),
+            'partner_profit': money(partner_profit),
+            'partner_margin': percent(partner_profit, partner_revenue),
+            'total_revenue': money(total_revenue),
             'net_profit': money(net_profit),
-            'net_margin': percent(net_profit, revenue),
+            # Maxraj — ikkala tushum: numerator hamkor foydasini oldi,
+            # maxraj esa o'zgarmasa marja soxta ko'tarilib ketardi.
+            'net_margin': percent(net_profit, total_revenue),
             'orders': sales['orders'],
             'items': items,
             'average_check': money(revenue / sales['orders'] if sales['orders'] else Decimal('0')),
@@ -364,11 +414,12 @@ def build_finance(branch, start, end, today):
         'coverage': cost_coverage(lines, revenue, branch),
         # Pul oqimi foydadan farq qiladi: tannarx pul emas, ombor xaridi esa foyda emas.
         'cash': {
-            'in': money(revenue + service_collected),
+            'in': money(revenue + service_collected + partner_cash['total']),
             'out': money(cash_out),
             # Platforma ushlagani hech qachon qo'lga tegmaydi — kirimdan ayriladi.
             'platform_fee': money(platform_total),
-            'net': money(revenue + service_collected - platform_total - cash_out),
+            'partner_in': money(partner_cash['total']),
+            'net': money(revenue + service_collected + partner_cash['total'] - platform_total - cash_out),
             'settled_expenses': money(settled),
             'stock_purchases': money(purchases),
             'service_collected': money(service_collected),
@@ -376,8 +427,14 @@ def build_finance(branch, start, end, today):
             'unpaid': money(unpaid),
             # Ko'prik: foydadan pulga o'tish. Ofitsiant ulushi foydada yo'q,
             # lekin kassada bor — shuning uchun farqi shu yerda qo'shiladi.
+            # Ko'prik foydadan pulga olib boradi. Hamkor ikkita had qo'shdi va
+            # ikkalasi ham mavjud naqshning aynan o'zi: tannarx pul emas
+            # (xuddi `cogs` kabi), qarz harakati esa `unpaid` ning teskarisi —
+            # u yerda biz qarzdor edik, bu yerda bizga qarzdor.
             'bridge': money(
-                net_profit + cogs + waste + unpaid - purchases + service_collected - handed['total']),
+                net_profit + cogs + partner_cogs + waste + unpaid - purchases
+                + service_collected - handed['total']
+                + (partner_cash['total'] - partner_revenue)),
         },
         'expenses': categories,
         'methods': methods,
@@ -395,6 +452,19 @@ def build_finance(branch, start, end, today):
         # Ikki mustaqil tannarx signali: retsept (OrderLine.cost_total) va ombor
         # (StockMovement.cost_total). Ular bir-biriga yaqin turishi kerak; katta
         # farq retseptdagi batch_cost eskirganini bildiradi.
+        # Hamkorlar: maktab va universitetdan tushgan pul va qolgan qarz.
+        'partners': {
+            'revenue': money(partner_revenue),
+            'cogs': money(partner_cogs),
+            'profit': money(partner_profit),
+            'received': money(partner_cash['total']),
+            'settlements': partner_cash['count'],
+            'pending_value': money(partner_pending['value']),
+            'pending_cost': money(partner_pending['cost']),
+            'pending_count': partner_pending['count'],
+            'debt': money(partner_debt),
+            'share': percent(partner_revenue, total_revenue),
+        },
         # Ofitsiantlar hisobi: yig'ilgan, berilgan va qolgan.
         'service': {
             'collected': money(service_collected),
@@ -407,8 +477,10 @@ def build_finance(branch, start, end, today):
             'value': money(stock_value),
             'purchases': money(purchases),
             'consumed': money(consumed),
-            'gap': money(cogs - consumed),
-            'gap_share': percent(abs(cogs - consumed), consumed) if consumed else '',
+            # Farq ikkala tomondan bir xil hodisada o'lchanadi: hamkor tannarxi
+            # ham retsept tomonida, ham ombor tomonida turadi.
+            'gap': money(cogs + partner_cogs - consumed),
+            'gap_share': percent(abs(cogs + partner_cogs - consumed), consumed) if consumed else '',
             # «Masalliq» xarajati ombor kirimi bilan yonma-yon turadi: ikkalasi
             # ham nolga teng bo'lmasa, bitta xarid ikki marta yozilgan bo'lishi
             # mumkin va buni faqat egasi bilib ayta oladi.

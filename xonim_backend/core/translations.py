@@ -37,6 +37,58 @@ RU = {
         'Если указан логин, нужен и пароль.',
     'Login berilsa rol ham tanlanadi.':
         'Если указан логин, нужно выбрать и роль.',
+    'Avval nechtasi sotilganini kiriting — shundan keyin pul yoziladi.':
+        'Сначала внесите, сколько продано — только после этого записывается оплата.',
+    'Bekor qilingan jo‘natma bo‘yicha hisobot qabul qilinmaydi.':
+        'По отменённой отправке отчёт не принимается.',
+    'Bekor qilingan jo‘natma bo‘yicha pul qabul qilinmaydi.':
+        'По отменённой отправке деньги не принимаются.',
+    'Bir qatorni faqat bir marta kiriting.':
+        'Вносите каждую строку только один раз.',
+    'Bu amal faqat superadminga ochiq.':
+        'Это действие доступно только суперадмину.',
+    'Bu hamkor faolsizlantirilgan — unga taom jo‘natilmaydi.':
+        'Этот партнёр деактивирован — отправлять ему еду нельзя.',
+    'Bu hamkorda yopilmagan jo‘natma bor. Avval hisobni yoping.':
+        'У этого партнёра есть незакрытая отправка. Сначала закройте счёт.',
+    'Bu jo‘natma allaqachon bekor qilingan.':
+        'Эта отправка уже отменена.',
+    'Bu jo‘natma uchun allaqachon {paid} so‘m olingan — hisobotni undan pastga tushirib bo‘lmaydi. Avval to‘lovni bekor qiling.':
+        'По этой отправке уже получено {paid} сум — отчёт ниже этой суммы не опустить. Сначала отмените оплату.',
+    'Bu narx tannarxdan past: «{name}» har porsiyada {amount} so‘m zarar.':
+        'Эта цена ниже себестоимости: «{name}» — {amount} сум убытка на порцию.',
+    'Bu nomli hamkor allaqachon bor.':
+        'Партнёр с таким названием уже есть.',
+    'Bu qator boshqa jo‘natmaga tegishli.':
+        'Эта строка относится к другой отправке.',
+    'Bu to‘lov allaqachon bekor qilingan.':
+        'Эта оплата уже отменена.',
+    'Bugun bu hamkorga allaqachon jo‘natilgan. Ikkinchi mashina bo‘lsa davom eting.':
+        'Сегодня этому партнёру уже отправляли. Если это вторая машина — продолжайте.',
+    'Hamkor ro‘yxatdan olindi.':
+        'Партнёр снят с учёта.',
+    'Hamkor topilmadi.':
+        'Партнёр не найден.',
+    'Har bir qator uchun nechta sotilgani kiritilsin.':
+        'Укажите, сколько продано, по каждой строке.',
+    'Hisobot berilgan jo‘natmani bekor qilib bo‘lmaydi. Hisobotni qaytadan kiriting.':
+        'Отправку с отчётом отменить нельзя. Внесите отчёт заново.',
+    'Jo‘natma topilmadi.':
+        'Отправка не найдена.',
+    'Qolgan qarz {amount} so‘m — undan ko‘pini qabul qilib bo‘lmaydi.':
+        'Остаток долга {amount} сум — больше принять нельзя.',
+    'To‘lov topilmadi.':
+        'Оплата не найдена.',
+    '{date} kuni allaqachon yopilgan — o‘sha kundagi to‘lovni bekor qilib bo‘lmaydi.':
+        'День {date} уже закрыт — оплату за тот день отменить нельзя.',
+    '{date} kuni allaqachon yopilgan — o‘sha kunga pul kiritib bo‘lmaydi.':
+        'День {date} уже закрыт — вносить деньги за тот день нельзя.',
+    '«{name}» narxi menyu narxidan yuqori — tekshiring.':
+        'Цена «{name}» выше меню — проверьте.',
+    '«{name}» uchun hamkor narxi belgilanmagan — shu sababli jo‘natib bo‘lmaydi. Narxni shartnoma bo‘yicha superadmin kiritadi.':
+        'Для «{name}» не задана цена партнёра — отправить нельзя. Цену по договору вносит суперадмин.',
+    '«{name}» — {sent} ta jo‘natilgan, {sold} ta sotilgan deb bo‘lmaydi.':
+        '«{name}» — отправлено {sent}, продано {sold} быть не может.',
     'Xodim topilmadi.': 'Сотрудник не найден.',
     'Kategoriya topilmadi.': 'Категория не найдена.',
     'Bu qator hisobda yo‘q.': 'Этой строки нет в счёте.',
@@ -261,6 +313,58 @@ EN = {
         'A login needs a password too.',
     'Login berilsa rol ham tanlanadi.':
         'A login needs a role as well.',
+    'Avval nechtasi sotilganini kiriting — shundan keyin pul yoziladi.':
+        'Enter how many were sold first — the payment is recorded after that.',
+    'Bekor qilingan jo‘natma bo‘yicha hisobot qabul qilinmaydi.':
+        'A cancelled delivery takes no report.',
+    'Bekor qilingan jo‘natma bo‘yicha pul qabul qilinmaydi.':
+        'A cancelled delivery takes no money.',
+    'Bir qatorni faqat bir marta kiriting.':
+        'Enter each line only once.',
+    'Bu amal faqat superadminga ochiq.':
+        'Only the superadmin may do this.',
+    'Bu hamkor faolsizlantirilgan — unga taom jo‘natilmaydi.':
+        'This partner is deactivated — food cannot be sent to them.',
+    'Bu hamkorda yopilmagan jo‘natma bor. Avval hisobni yoping.':
+        'This partner has an open delivery. Close the book first.',
+    'Bu jo‘natma allaqachon bekor qilingan.':
+        'This delivery is already cancelled.',
+    'Bu jo‘natma uchun allaqachon {paid} so‘m olingan — hisobotni undan pastga tushirib bo‘lmaydi. Avval to‘lovni bekor qiling.':
+        '{paid} so‘m has already been taken for this delivery — the report cannot go below that. Void the payment first.',
+    'Bu narx tannarxdan past: «{name}» har porsiyada {amount} so‘m zarar.':
+        'This price is below cost: “{name}” loses {amount} so‘m per portion.',
+    'Bu nomli hamkor allaqachon bor.':
+        'A partner with this name already exists.',
+    'Bu qator boshqa jo‘natmaga tegishli.':
+        'That line belongs to another delivery.',
+    'Bu to‘lov allaqachon bekor qilingan.':
+        'This payment is already voided.',
+    'Bugun bu hamkorga allaqachon jo‘natilgan. Ikkinchi mashina bo‘lsa davom eting.':
+        'Something was already sent to this partner today. If this is a second run, carry on.',
+    'Hamkor ro‘yxatdan olindi.':
+        'The partner was taken off the list.',
+    'Hamkor topilmadi.':
+        'Partner not found.',
+    'Har bir qator uchun nechta sotilgani kiritilsin.':
+        'Say how many were sold for every line.',
+    'Hisobot berilgan jo‘natmani bekor qilib bo‘lmaydi. Hisobotni qaytadan kiriting.':
+        'A delivery with a report cannot be cancelled. Enter the report again instead.',
+    'Jo‘natma topilmadi.':
+        'Delivery not found.',
+    'Qolgan qarz {amount} so‘m — undan ko‘pini qabul qilib bo‘lmaydi.':
+        'The remaining debt is {amount} so‘m — you cannot take more than that.',
+    'To‘lov topilmadi.':
+        'Payment not found.',
+    '{date} kuni allaqachon yopilgan — o‘sha kundagi to‘lovni bekor qilib bo‘lmaydi.':
+        '{date} is already closed — a payment from that day cannot be voided.',
+    '{date} kuni allaqachon yopilgan — o‘sha kunga pul kiritib bo‘lmaydi.':
+        '{date} is already closed — money cannot be entered for that day.',
+    '«{name}» narxi menyu narxidan yuqori — tekshiring.':
+        'The price for “{name}” is above the menu price — check it.',
+    '«{name}» uchun hamkor narxi belgilanmagan — shu sababli jo‘natib bo‘lmaydi. Narxni shartnoma bo‘yicha superadmin kiritadi.':
+        'There is no partner price for “{name}”, so it cannot be sent. The superadmin enters the contract price.',
+    '«{name}» — {sent} ta jo‘natilgan, {sold} ta sotilgan deb bo‘lmaydi.':
+        '“{name}” — {sent} were sent, {sold} sold is impossible.',
     'Xodim topilmadi.': 'Employee not found.',
     'Kategoriya topilmadi.': 'Category not found.',
     'Bu qator hisobda yo‘q.': 'That line is not on this bill.',

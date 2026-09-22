@@ -174,7 +174,11 @@ def build_comparison(branch, start, end):
     system = {
         row['ingredient_id']: row
         for row in StockMovement.objects.filter(
-            branch=branch, kind='sale_consumption', date__gte=start, date__lte=end,
+            # Hamkorga ketgan masalliq ham tizim hisoblagan sarf: uni
+            # qo'shmasak, admin kiritgan haqiqiy sarf har kuni «ortiqcha»
+            # bo'lib ko'rinardi.
+            branch=branch, kind__in=['sale_consumption', 'partner_sale'],
+            date__gte=start, date__lte=end,
         ).values('ingredient_id').annotate(
             quantity=Sum('quantity'), value=Sum('cost_total'), moves=Count('id'),
         ).order_by()

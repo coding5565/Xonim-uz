@@ -15,6 +15,18 @@ from operations.dish_prep import (
     DishPrepWriteOffView,
 )
 from operations.finance import FinanceView
+from operations.partners import (
+    PartnerBoardView,
+    PartnerDeliveryCancelView,
+    PartnerDeliveryReportView,
+    PartnerDeliverySettleView,
+    PartnerDeliveryView,
+    PartnerDetailView,
+    PartnerListView,
+    PartnerPricesView,
+    PartnerReportView,
+    PartnerSettlementVoidView,
+)
 from operations.print_queue import PrintAckView, PrintClaimView
 from operations.shift import ShiftHistoryView, ShiftView
 from operations.stock_usage import StockUsageView
@@ -112,6 +124,17 @@ urlpatterns = [
     path('api/v1/daily-usage/compare/', UsageComparisonView.as_view()),
     path('api/v1/dashboard/', DashboardView.as_view()),
     path('api/v1/finance/', FinanceView.as_view()),
+    # Hamkorlar: maktab va universitetga taom jo'natish va hisob-kitob.
+    path('api/v1/partners/', PartnerListView.as_view()),
+    path('api/v1/partners/<int:pk>/', PartnerDetailView.as_view()),
+    path('api/v1/partners/<int:pk>/prices/', PartnerPricesView.as_view()),
+    path('api/v1/partner-deliveries/', PartnerDeliveryView.as_view()),
+    path('api/v1/partner-deliveries/<int:pk>/report/', PartnerDeliveryReportView.as_view()),
+    path('api/v1/partner-deliveries/<int:pk>/settle/', PartnerDeliverySettleView.as_view()),
+    path('api/v1/partner-deliveries/<int:pk>/cancel/', PartnerDeliveryCancelView.as_view()),
+    path('api/v1/partner-settlements/<int:pk>/void/', PartnerSettlementVoidView.as_view()),
+    path('api/v1/partner-board/', PartnerBoardView.as_view()),
+    path('api/v1/reports/partners/', PartnerReportView.as_view()),
     path('api/v1/channel-fees/', ChannelFeeView.as_view()),
     path('api/v1/backup/', BackupView.as_view()),
     path('api/v1/telegram/webhook/', TelegramWebhookView.as_view()),

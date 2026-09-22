@@ -354,6 +354,256 @@ class WaiterPayment(models.Model):
         ]
 
 
+
+# --- Hamkorlar -----------------------------------------------------------
+# Maktab va universitetga taom arzonroq narxda jo'natiladi; ular kun davomida
+# sotadi va kechqurun hisob beradi. Shuning uchun bu pul darhol tushum bo'lib
+# kelmaydi — avval QARZ bo'lib turadi.
+
+PARTNER_KINDS = [
+    ('school', 'Maktab'),
+    ('university', 'Universitet'),
+    ('office', 'Ofis'),
+    ('other', 'Boshqa'),
+]
+PARTNER_KIND_LABELS = dict(PARTNER_KINDS)
+
+# «sent» — egasi aytgan PENDING: ovqat ketdi, hisobot ham, pul ham yo'q.
+PARTNER_DELIVERY_STATUSES = [
+    ('sent', 'Jo‘natildi'),
+    ('reported', 'Hisobot berildi'),
+    ('settled', 'Yopildi'),
+    ('cancelled', 'Bekor qilingan'),
+]
+PARTNER_STATUS_LABELS = dict(PARTNER_DELIVERY_STATUSES)
+
+# Maktab Uzum emas: yetkazib berish platformalari bu yerda yo'q, chunki
+# ularda ushlanma bor va puli kassaga tushmaydi. Hamkor esa naqd, karta,
+# terminal yoki Click bilan to'g'ridan-to'g'ri to'laydi.
+PARTNER_PAYMENT_METHODS = [
+    ('cash', 'Naqd'),
+    ('card', 'Karta'),
+    ('terminal', 'Terminal'),
+    ('click', 'Click'),
+]
+
+
+class Partner(models.Model):
+    """Maktab yoki universitet — biz taom yetkazib beradigan hamkor.
+
+    Mijoz emas: mijoz pulni darhol to'laydi, hamkor esa kun davomida sotadi
+    va kechqurun hisob beradi. Shuning uchun uning puli tushum bo'lib
+    darhol kelmaydi — u avval qarz bo'lib turadi.
+
+    O'chirilmaydi, faqat faolsizlantiriladi: jo'natmalar tarixi unga
+    bog'langan. Ochiq jo'natmasi bor hamkorni faolsizlantirib ham
+    bo'lmaydi — qarz ekrandan yo'qolib, hech kim uni so'ramay qolardi.
+    """
+
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT, related_name='partners')
+    name = models.CharField(max_length=120)
+    kind = models.CharField(max_length=12, choices=PARTNER_KINDS, default='school')
+    contact = models.CharField(max_length=80, blank=True)
+    phone = models.CharField(max_length=30, blank=True)
+    address = models.CharField(max_length=200, blank=True)
+    note = models.CharField(max_length=300, blank=True)
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name']
+        constraints = [
+            models.UniqueConstraint(fields=['branch', 'name'], name='partner_branch_name'),
+        ]
+
+
+class PartnerPrice(models.Model):
+    """Shartnoma narxi: shu hamkor shu taomni qanchadan oladi.
+
+    Narx aynan HAMKOR + TAOM juftligida turadi. Taomda tursa hamma hamkorga
+    bir xil bo'lardi; hamkorda foiz bo'lib tursa «somsa arzon, ichimlik
+    to'liq narxda» degan shartnomani yoza olmasdik.
+
+    Bu ro'yxat faqat jo'natish paytida nusxa olinadi va qatorga muzlatiladi:
+    ertaga narxni o'zgartirish kechagi jo'natmani qayta yozmaydi.
+    """
+
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT)
+    partner = models.ForeignKey(Partner, on_delete=models.PROTECT, related_name='prices')
+    dish = models.ForeignKey('catalog.Dish', on_delete=models.PROTECT, related_name='partner_prices')
+    price = models.DecimalField(max_digits=12, decimal_places=2)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['dish__name']
+        constraints = [
+            models.UniqueConstraint(fields=['partner', 'dish'], name='partner_price_once'),
+            models.CheckConstraint(condition=Q(price__gt=0), name='partner_price_positive'),
+        ]
+
+
+class PartnerDelivery(models.Model):
+    """Bitta jo'natma: ertalab hamkorga berib yuborilgan taomlar.
+
+    Tayyor taomlar qoldig'iga TEGMAYDI: bu ovqat alohida pishiriladi va
+    shundayligicha ketadi. Shuning uchun DishPrep hisobidan ayirilmaydi va
+    tayyor porsiya yo'qligi jo'natishni to'xtatmaydi.
+
+    Ombor esa jo'natish paytida ayriladi: go'sht oshxonadan CHIQDI, maktab
+    uni sotgan-sotmagani go'shtga bog'liq emas. Shu sababli tannarx ham
+    jo'natish kuniga yoziladi.
+
+    Holat raqamlardan KELIB CHIQADI, qo'lda yozilmaydi:
+        hisobot yo'q            -> sent      (egasi aytgan «pending»)
+        berilgan < hisoblangan  -> reported  (qarz bor)
+        berilgan >= hisoblangan -> settled   (yopildi)
+    """
+
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT)
+    partner = models.ForeignKey(Partner, on_delete=models.PROTECT, related_name='deliveries')
+    actor = models.ForeignKey(User, on_delete=models.PROTECT, related_name='partner_deliveries')
+    key = models.UUIDField()
+    request_hash = models.CharField(max_length=64)
+    # Ish kuni: ertalab ketib kechqurun hisob berilgani BITTA kun. Tushum
+    # ham, tannarx ham shu kunga yoziladi.
+    date = models.DateField()
+    status = models.CharField(max_length=10, default='sent', choices=PARTNER_DELIVERY_STATUSES)
+    # Jo'natilganning to'liq qiymati hamkor narxida. Tushum EMAS — hali sotilmagan.
+    total = models.DecimalField(max_digits=14, decimal_places=2)
+    # Jo'natilganning retsept tannarxi, o'sha paytda muzlatilgan. Foyda
+    # zanjiriga shu kiradi: ovqat chiqqan, demak xarajat bo'lgan.
+    cost_total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0'))
+    # Hisobotdan keyin ma'lum bo'ladigan qarz: sotilganlar narxi.
+    due_total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0'))
+    # Shu jo'natma bo'yicha tushgan pul.
+    settled_total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0'))
+    note = models.CharField(max_length=250, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    reported_at = models.DateTimeField(null=True, blank=True)
+    reported_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, null=True, blank=True, related_name='reported_deliveries')
+    closed_at = models.DateTimeField(null=True, blank=True)
+    cancel_reason = models.CharField(max_length=200, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, null=True, blank=True, related_name='cancelled_deliveries')
+
+    class Meta:
+        ordering = ['-date', '-id']
+        constraints = [
+            models.UniqueConstraint(fields=['branch', 'key'], name='partner_delivery_idempotency'),
+            models.CheckConstraint(condition=Q(total__gt=0), name='partner_delivery_positive_total'),
+            models.CheckConstraint(
+                condition=Q(cost_total__gte=0) & Q(due_total__gte=0) & Q(settled_total__gte=0),
+                name='partner_delivery_nonnegative_money'),
+            # Hisobot kelmagan jo'natma hech narsa qarz emas.
+            models.CheckConstraint(
+                condition=~Q(status='sent') | Q(due_total=0),
+                name='partner_delivery_sent_owes_nothing'),
+            # «Yopildi» degani pul to'liq kelgan degani — bog'liqlik bazada turadi.
+            models.CheckConstraint(
+                condition=~Q(status='settled') | Q(settled_total__gte=F('due_total')),
+                name='partner_delivery_settled_is_paid'),
+            models.CheckConstraint(
+                condition=~Q(status__in=['reported', 'settled']) | Q(reported_at__isnull=False),
+                name='partner_delivery_report_has_time'),
+            models.CheckConstraint(
+                condition=~Q(status='cancelled')
+                | (Q(cancelled_at__isnull=False) & ~Q(cancel_reason='')),
+                name='partner_delivery_cancel_needs_reason'),
+        ]
+        indexes = [
+            models.Index(fields=['branch', 'date'], name='partner_delivery_date_idx'),
+            models.Index(fields=['branch', 'status', 'date'], name='partner_delivery_status_idx'),
+        ]
+
+    @property
+    def remaining(self):
+        """Shu jo'natma bo'yicha qolgan qarz."""
+        return self.due_total - self.settled_total
+
+
+class PartnerDeliveryLine(models.Model):
+    """Jo'natmadagi bitta taom: nechta ketdi va nechta sotildi.
+
+    Narx ham, tannarx ham jo'natish paytida muzlatiladi. Sotilmagan
+    porsiyalar hech qayerga qaytmaydi: ularning tannarxi qoladi, tushumi
+    esa yo'q — egasi buni aynan shunday ko'rishi kerak, chunki bu «ertaga
+    kamroq yuboring» degan signal. Masalliq ham qaytmaydi: maktabdan
+    sovigan porsiya qaytadi, un va go'sht emas.
+    """
+
+    delivery = models.ForeignKey(PartnerDelivery, related_name='lines', on_delete=models.PROTECT)
+    dish = models.ForeignKey('catalog.Dish', on_delete=models.PROTECT)
+    name = models.CharField(max_length=120)
+    # Hamkor narxi — shartnoma ro'yxatidan olinadi va shu yerda muzlaydi.
+    price = models.DecimalField(max_digits=12, decimal_places=2)
+    # O'sha kungi menyu narxi: «qanchaga arzon berdik» degan savolga javob
+    # beradi. Hech qanday hisobga kirmaydi, faqat taqqoslash uchun.
+    menu_price = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0'))
+    quantity = models.PositiveIntegerField()
+    cost_per_unit = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0'))
+    cost_total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0'))
+    # Hisobotda to'ldiriladi. Qayta hisobot berilsa USTIGA yoziladi, qo'shilmaydi.
+    sold_quantity = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['id']
+        constraints = [
+            models.UniqueConstraint(fields=['delivery', 'dish'], name='partner_line_dish_once'),
+            models.CheckConstraint(condition=Q(quantity__gt=0), name='partner_line_positive_quantity'),
+            models.CheckConstraint(condition=Q(price__gt=0), name='partner_line_positive_price'),
+            # Berilganidan ko'pini sotib bo'lmaydi.
+            models.CheckConstraint(
+                condition=Q(sold_quantity__lte=F('quantity')), name='partner_line_sold_fits'),
+        ]
+
+    @property
+    def unsold_quantity(self):
+        return self.quantity - self.sold_quantity
+
+
+class PartnerSettlement(models.Model):
+    """Hamkordan tushgan pul. Har to'lov BITTA jo'natmani yopishga ketadi.
+
+    Ofitsiant to'lovidan farqi: u yerda pul restorandan CHIQADI va tushum
+    emas edi. Bu yerda pul KIRADI va haqiqiy tushum — shuning uchun kun
+    yakunidagi kassa hisobiga ham kiradi.
+
+    `delivery` majburiy: egasi «pul berishsa yopiladi» dedi, demak hech
+    narsani yopmaydigan bo'sh pul bo'lishi mumkin emas.
+
+    Bekor qilish o'chirish orqali emas, `voided_at` bilan: pul kelgani
+    tarixda qolishi kerak. Barcha yig'indilar bekor qilinmaganini oladi.
+    """
+
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT)
+    partner = models.ForeignKey(Partner, on_delete=models.PROTECT, related_name='settlements')
+    delivery = models.ForeignKey(PartnerDelivery, on_delete=models.PROTECT, related_name='settlements')
+    actor = models.ForeignKey(User, on_delete=models.PROTECT, related_name='partner_settlements')
+    key = models.UUIDField()
+    request_hash = models.CharField(max_length=64, blank=True)
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    payment_method = models.CharField(max_length=10, choices=PARTNER_PAYMENT_METHODS)
+    paid_on = models.DateField()
+    note = models.CharField(max_length=250, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    void_reason = models.CharField(max_length=200, blank=True)
+    voided_at = models.DateTimeField(null=True, blank=True)
+    voided_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, null=True, blank=True, related_name='voided_settlements')
+
+    class Meta:
+        ordering = ['-paid_on', '-id']
+        constraints = [
+            models.UniqueConstraint(fields=['branch', 'key'], name='partner_settlement_idempotency'),
+            models.CheckConstraint(condition=Q(amount__gt=0), name='partner_settlement_positive_amount'),
+            models.CheckConstraint(
+                condition=Q(voided_at__isnull=True) | ~Q(void_reason=''),
+                name='partner_settlement_void_needs_reason'),
+        ]
+        indexes = [models.Index(fields=['branch', 'paid_on'], name='partner_settlement_paid_idx')]
+
 class ShiftClose(models.Model):
     """Kun yakuni: kassada qancha pul bo'lishi kerak edi va qancha chiqdi.
 
@@ -475,7 +725,7 @@ class StockMovement(models.Model):
     request_hash = models.CharField(max_length=64)
     # «refund» — qaytarilgan buyurtma masallig'i omborga qaytgani. U kirim
     # EMAS: xarid bo'lmagan, shuning uchun xarajat hisobiga ham tushmaydi.
-    kind = models.CharField(max_length=18, choices=[('receipt', 'Kirim'), ('consumption', 'Kunlik sarf'), ('sale_consumption', 'Sotuv bo‘yicha sarf'), ('refund', 'Qaytarish')])
+    kind = models.CharField(max_length=18, choices=[('receipt', 'Kirim'), ('consumption', 'Kunlik sarf'), ('sale_consumption', 'Sotuv bo‘yicha sarf'), ('refund', 'Qaytarish'), ('partner_sale', 'Hamkorga jo‘natildi')])
     # Sotuvda ayriladigan miqdor retsept ulushidan chiqadi va u juda
     # mayda bo'lishi mumkin — ombor maydoni bilan bir xil aniqlikda.
     quantity = models.DecimalField(max_digits=14, decimal_places=6)

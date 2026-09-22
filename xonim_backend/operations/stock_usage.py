@@ -26,7 +26,9 @@ from users.permissions import OwnerOnly
 from .models import Ingredient, StockMovement
 from .money import money, quantity, share
 
-OUT_KINDS = ['consumption', 'sale_consumption']
+# Hamkorga jo'natish ham ombordan chiqim: hisobga olinmasa
+# ochilish va yopilish qoldig'i har kuni noto'g'ri chiqardi.
+OUT_KINDS = ['consumption', 'sale_consumption', 'partner_sale']
 # Qoldiqni oshiradigan harakatlar. Qaytarish ham qoldiqni oshiradi, lekin
 # XARID emas — shuning uchun miqdorga kiradi, xarid puliga kirmaydi.
 IN_KINDS = ['receipt', 'refund']
@@ -34,6 +36,7 @@ KIND_LABELS = {
     'receipt': 'Kirim',
     'consumption': 'Qo‘lda sarf',
     'sale_consumption': 'Sotuv sarfi',
+    'partner_sale': 'Hamkorga jo‘natildi',
     'refund': 'Qaytarish',
 }
 class UsageFilters(serializers.Serializer):
