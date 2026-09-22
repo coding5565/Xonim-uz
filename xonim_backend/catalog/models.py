@@ -11,11 +11,36 @@ class Station(models.TextChoices):
     COUNTER = 'counter', 'Kassa'
 
 
+class StockKind(models.TextChoices):
+    """Taom qanday paydo bo'ladi: oshxonada pishiriladimi yoki tayyor keladimi.
+
+    Bu bo'lim (`Station`) bilan bir narsa EMAS. Station talon qaysi
+    printerdan chiqishini aytadi; bu yerdagi tanlov esa qoldiq qanday
+    yuritilishini belgilaydi:
+
+      · oshxona taomi — ertalab partiya qilib pishiriladi, tayyori
+        tugasa sotilmaydi, chunki oshxona buyurtma kelgach pishirmaydi;
+      · tayyor mahsulot — suv, ichimlik, tashqaridan tayyor holda keladi.
+        U doim sotuvga tayyor, shuning uchun hech qachon sotuvni to'xtatmaydi
+        — qoldig'i faqat sanab boriladi.
+
+    Ikkalasining qoldig'i ham kundan kunga o'tadi: kechqurun ortib qolgani
+    ertasi kuni nolga aylanmaydi.
+    """
+
+    COOKED = 'cooked', 'Oshxona taomi'
+    GOODS = 'goods', 'Tayyor mahsulot'
+
+
 class Category(models.Model):
     branch = models.ForeignKey(Branch, on_delete=models.PROTECT)
     name = models.CharField(max_length=100)
     position = models.PositiveIntegerField(default=0)
     station = models.CharField(max_length=10, choices=Station.choices, default=Station.KITCHEN)
+    # Sukut bo'yicha oshxona taomi: tizim shu qoida bilan ishlab kelgan va
+    # yangilanish kuni hech narsa o'zgarmasligi kerak. Ichimliklar uchun
+    # kategoriya ochilib, shu yerda «tayyor mahsulot» tanlanadi.
+    stock_kind = models.CharField(max_length=10, choices=StockKind.choices, default=StockKind.COOKED)
 
     class Meta:
         ordering = ['position', 'id']
@@ -35,6 +60,8 @@ class Dish(models.Model):
     # Bo'sh qoldirilsa kategoriyadan meros oladi. Alohida qiymat faqat istisnolar
     # uchun: masalan ichimliklar orasida oshxonada damlanadigan choy.
     station = models.CharField(max_length=10, choices=Station.choices, blank=True)
+    # Bo'sh qoldirilsa kategoriyadan meros oladi — xuddi `station` kabi.
+    stock_kind = models.CharField(max_length=10, choices=StockKind.choices, blank=True)
 
     class Meta:
         ordering = ['category__position', 'id']
@@ -50,3 +77,8 @@ class Dish(models.Model):
     @property
     def print_station(self):
         return self.station or self.category.station
+
+    @property
+    def stock_group(self):
+        """Qoldiq qaysi qoida bilan yuritiladi: oshxona taomi yoki tayyor mahsulot."""
+        return self.stock_kind or self.category.stock_kind

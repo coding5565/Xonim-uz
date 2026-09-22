@@ -44,6 +44,7 @@ AUDIT_LABELS = {
     'kitchen.served': 'Oshxona: berildi',
     'stock.ingredient': 'Yangi masalliq qo‘shildi',
     'prep.record': 'Taom tayyorlandi',
+    'prep.writeoff': 'Tayyor taom hisobdan chiqarildi',
     'prep.oversell': 'Tayyorlangandan ko‘p sotildi',
     'stock.price': 'Masalliq narxi o‘zgardi',
     'usage.create': 'Kunlik sarf kiritildi',

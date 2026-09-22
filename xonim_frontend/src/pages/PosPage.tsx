@@ -181,13 +181,17 @@ export default function PosPage() {
   const paymentLabel = methods.find(item => item.method === payment)?.label || payment
 
   const stock = new Map((prep?.dishes || []).map(row => [row.dish, row]))
-  // Miqdori kiritilmagan taom — tayyor emas. Oshxona talon kelgach
+  // Miqdori kiritilmagan OSHXONA taomi — tayyor emas. Oshxona talon kelgach
   // pishirmaydi, u faqat ertalab tayyorlanganidan yig'adi, demak kiritilmagan
   // degani «yo'q» degani. Qoldiq hali yuklanmagan bo'lsa cheklamaymiz —
   // aks holda sahifa ochilishi bilan hamma taom o'chiq ko'rinardi.
+  //
+  // Tayyor mahsulot (suv, ichimlik) esa hech qachon cheklanmaydi: u javonda
+  // turadi va kassir uni berishi mumkin, hisobga kiritilmagan bo'lsa ham.
   const left = (id: number) => {
     if (!prep) return Infinity
     const row = stock.get(id)
+    if (row && !row.blocking) return Infinity
     return row?.tracked ? row.remaining : 0
   }
   // Savatdagi miqdor hali sotilmagan, shuning uchun qoldiqdan alohida ayiriladi.
@@ -396,8 +400,11 @@ export default function PosPage() {
               // Hisoblanmagan taom «tayyor emas», tugagani esa «tugadi» —
               // ikkalasi ham sotilmaydi, lekin kassir farqini bilishi kerak:
               // biri kiritilmagan, ikkinchisi sotilib bitgan.
-              const remaining = prep ? (row?.tracked ? row.remaining - inCart(dish.id) : 0) : null
-              const ready = remaining === null || remaining > 0
+              // Tayyor mahsulotda qoldiq faqat ma'lumot: u sotuvni
+              // to'xtatmaydi, shuning uchun «tayyor emas» deb ham yozilmaydi.
+              const counted = prep && row?.tracked
+              const remaining = counted ? row.remaining - inCart(dish.id) : (prep ? 0 : null)
+              const ready = remaining === null || remaining > 0 || (row ? !row.blocking : false)
               return (
               <button
                 key={dish.id}
@@ -406,8 +413,8 @@ export default function PosPage() {
                 onClick={() => add(dish)}
               >
                 <DishArt name={dish.name} category={dish.category_name} image={dish.image} />
-                {remaining !== null && (
-                  <span className={`prep-badge${remaining <= 0 ? ' out' : remaining <= row!.warn_at ? ' low' : ''}`}>
+                {remaining !== null && (counted || row?.blocking !== false) && (
+                  <span className={`prep-badge${remaining <= 0 ? ' out' : remaining <= (row?.warn_at ?? 0) ? ' low' : ''}`}>
                     {!row?.tracked
                       ? t('Tayyor emas')
                       : remaining <= 0 ? t('Tugadi') : tn('{count} ta qoldi', remaining)}

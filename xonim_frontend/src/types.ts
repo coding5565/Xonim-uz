@@ -23,8 +23,10 @@ export interface Table {
   label: string
   open_order: TableOpenOrder | null
 }
-export interface Category { id: number; name: string; position: number; station: Station }
-export interface Dish { id: number; category: number; category_name: string; name: string; description: string; price: string; portion: string; image: string | null; available: boolean; archived: boolean; station: Station | ''; print_station: Station }
+export type StockKind = 'cooked' | 'goods'
+/** `stock_kind` — qoldiq qanday yuritiladi: oshxona taomimi yoki tayyor mahsulotmi. */
+export interface Category { id: number; name: string; position: number; station: Station; stock_kind: StockKind }
+export interface Dish { id: number; category: number; category_name: string; name: string; description: string; price: string; portion: string; image: string | null; available: boolean; archived: boolean; station: Station | ''; print_station: Station; stock_kind: StockKind | ''; stock_group: StockKind }
 export interface Line { id: number; dish: number; name: string; price: string; quantity: number; note: string; added: boolean }
 export type OrderStatus = 'open' | 'paid' | 'cancelled' | 'refunded'
 export type SaleChannel = 'hall' | 'takeaway' | 'uzum' | 'yandex'
@@ -458,17 +460,35 @@ export interface PrepRow {
   name: string
   prepared: number
   sold: number
+  /** Kun boshidagi qoldiq: kecha ortib qolgani bugunga o'tadi. */
+  carried: number
   remaining: number
+  /** Oshxonada pishiriladimi yoki tayyor keladimi. */
+  group: 'cooked' | 'goods'
+  /** Tayyor mahsulot hech qachon sotuvni to'xtatmaydi. */
+  blocking: boolean
   /** Miqdori kiritilmagan taom cheklanmaydi. */
   tracked: boolean
   out: boolean
   low: boolean
   /** Necha donada ogohlantirish boshlanadi; chegarani server belgilaydi. */
   warn_at: number
+  /** Faqat qoldiqlar ro'yxatida: bugungi partiya bilan izohlab bo'lmaydigan qismi. */
+  aged?: number
 }
 export interface PrepStatus {
   date: string
-  summary: { tracked: number; out: number; low: number; prepared: number; sold: number; remaining: number }
+  summary: {
+    tracked: number
+    out: number
+    low: number
+    prepared: number
+    sold: number
+    carried: number
+    remaining: number
+    cooked: number
+    goods: number
+  }
   dishes: PrepRow[]
 }
 export interface PrepHistory {

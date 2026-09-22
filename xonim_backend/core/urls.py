@@ -12,6 +12,7 @@ from operations.dish_prep import (
     DishPrepLeftoverView,
     DishPrepRowView,
     DishPrepView,
+    DishPrepWriteOffView,
 )
 from operations.finance import FinanceView
 from operations.print_queue import PrintAckView, PrintClaimView
@@ -106,6 +107,7 @@ urlpatterns = [
     path('api/v1/dish-prep/history/', DishPrepHistoryView.as_view()),
     path('api/v1/dish-prep/<int:pk>/', DishPrepRowView.as_view()),
     path('api/v1/dish-prep/leftovers/', DishPrepLeftoverView.as_view()),
+    path('api/v1/dish-prep/write-off/', DishPrepWriteOffView.as_view()),
     path('api/v1/daily-usage/', DailyUsageView.as_view()),
     path('api/v1/daily-usage/compare/', UsageComparisonView.as_view()),
     path('api/v1/dashboard/', DashboardView.as_view()),

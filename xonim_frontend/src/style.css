@@ -1264,3 +1264,14 @@ button.mark.tap:disabled{opacity:.5;cursor:default}
 .data-note.center{text-align:center}
 .theme-dark .cart-service p{color:#b4c5bb}
 .theme-dark .cart-service p b{color:#d7e9de}
+
+/* Tayyor taomlar ikki guruhga bo'linadi: oshxonada pishiriladigani va
+   tayyor keladigani. Ular bitta ro'yxatda turganda kassir qaysi biri
+   sotuvni to'xtatishini ajrata olmasdi. */
+.prep-group{margin-bottom:18px}
+.prep-group-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px;padding:0 2px}
+.prep-group-head strong{font:650 15px 'Manrope',sans-serif;color:#22463a}
+.prep-group-head span{font-size:12.5px;color:#8d9a92}
+.prep-group-head svg{color:#7f9e8c}
+.theme-dark .prep-group-head strong{color:#d7e9de}
+.theme-dark .prep-group-head span{color:#8fa79a}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } fr
 import { Link } from 'react-router-dom'
 import { Eye, ImagePlus, Layers3, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { api, list, money } from '../api'
-import type { Category, Dish, Ingredient, Recipe, Station } from '../types'
+import type { Category, Dish, Ingredient, Recipe, Station, StockKind } from '../types'
 import { useI18n } from '../i18n'
 import AppModal from '../components/AppModal'
 import DishArt from '../components/DishArt'
@@ -41,6 +41,11 @@ export default function CatalogPage() {
   const [recipeLines, setRecipeLines] = useState<{ ingredient: number; quantity: string; small: boolean }[]>([])
   const [categoryName, setCategoryName] = useState('')
   const [categoryStation, setCategoryStation] = useState<Station>('kitchen')
+  // Qoldiq qanday yuritilishi: oshxona taomi tugasa sotilmaydi, tayyor
+  // mahsulot esa hech qachon to'xtatmaydi.
+  const [categoryStock, setCategoryStock] = useState<StockKind>('cooked')
+  // Tahrirlanayotgan kategoriya; bo'sh bo'lsa yangisi yaratiladi.
+  const [categoryId, setCategoryId] = useState<number>()
 
   const update = (patch: Partial<DishForm>) => setForm(previous => ({ ...previous, ...patch }))
 
@@ -178,13 +183,20 @@ export default function CatalogPage() {
     setBusy(true)
     setFormError('')
     try {
-      await api('categories/', {
-        method: 'POST',
-        body: JSON.stringify({ name: categoryName, position: categories.length, station: categoryStation }),
+      await api(categoryId ? `categories/${categoryId}/` : 'categories/', {
+        method: categoryId ? 'PATCH' : 'POST',
+        body: JSON.stringify({
+          name: categoryName,
+          position: categoryId ? undefined : categories.length,
+          station: categoryStation,
+          stock_kind: categoryStock,
+        }),
       })
       setModal('')
+      setCategoryId(undefined)
       setCategoryName('')
       setCategoryStation('kitchen')
+      setCategoryStock('cooked')
       await load()
     } catch (exception) {
       setFormError((exception as Error).message)
@@ -206,7 +218,37 @@ export default function CatalogPage() {
           <p>{t('Kategoriyalar, taomlar va narxlar — bir joyda.')}</p>
         </div>
         <div className="heading-actions">
-          <button className="button secondary" onClick={() => { setModal('category'); setFormError('') }}>
+          {/* Tanlangan kategoriyani tahrirlash: qoldiq turini keyin
+              o'zgartirish kerak bo'lsa, taomlarni bittalab qayta saqlashga
+              hojat qolmasin. */}
+          {!!category && (
+            <button
+              className="button secondary"
+              onClick={() => {
+                const picked = categories.find(item => item.id === category)
+                if (!picked) return
+                setCategoryId(picked.id)
+                setCategoryName(picked.name)
+                setCategoryStation(picked.station)
+                setCategoryStock(picked.stock_kind)
+                setFormError('')
+                setModal('category')
+              }}
+            >
+              <Pencil size={17} />{t('Kategoriyani tahrirlash')}
+            </button>
+          )}
+          <button
+            className="button secondary"
+            onClick={() => {
+              setCategoryId(undefined)
+              setCategoryName('')
+              setCategoryStation('kitchen')
+              setCategoryStock('cooked')
+              setModal('category')
+              setFormError('')
+            }}
+          >
             <Layers3 size={17} />{t('Kategoriya')}
           </button>
           <button className="button primary" onClick={() => openDish()}><Plus size={18} />{t('Taom qo‘shish')}</button>
@@ -283,7 +325,11 @@ export default function CatalogPage() {
         <Link to="/menu" target="_blank">{t('Menyuni ko‘rish')} →</Link>
       </div>
 
-      <AppModal open={modal === 'category'} title={t('Yangi kategoriya')} onClose={() => { if (!busy) setModal('') }}>
+      <AppModal
+        open={modal === 'category'}
+        title={categoryId ? t('Kategoriyani tahrirlash') : t('Yangi kategoriya')}
+        onClose={() => { if (!busy) setModal('') }}
+      >
         <form onSubmit={saveCategory}>
           <label>
             {t('Kategoriya nomi')}
@@ -301,6 +347,16 @@ export default function CatalogPage() {
               <option value="kitchen">{t('Oshxona — pishiriladi')}</option>
               <option value="counter">{t('Kassa — tayyor (suv, ichimlik)')}</option>
             </select>
+          </label>
+          <label>
+            {t('Qoldiq qanday yuritiladi?')}
+            <select value={categoryStock} onChange={event => setCategoryStock(event.target.value as StockKind)}>
+              <option value="cooked">{t('Oshxona taomi — tayyori tugasa sotilmaydi')}</option>
+              <option value="goods">{t('Tayyor mahsulot — doim sotuvga tayyor')}</option>
+            </select>
+            <small className="field-hint">
+              {t('Ikkalasining ham qoldig‘i ertangi kunga o‘tadi. Farqi: oshxona taomi tugaganda sotuv to‘xtaydi.')}
+            </small>
           </label>
           {formError && <p className="alert error">{formError}</p>}
           <button className="button primary full" disabled={busy}>

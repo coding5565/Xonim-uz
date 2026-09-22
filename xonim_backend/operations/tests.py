@@ -16,7 +16,7 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient
 
-from catalog.models import Category, Dish
+from catalog.models import Category, Dish, Station, StockKind
 from users.models import AuditEvent, Branch, User
 
 from .models import (
@@ -2627,13 +2627,20 @@ class DishPrepTests(TestCase):
         self.assertEqual(summary['sold'], 18)
         self.assertEqual(summary['remaining'], 2)
 
-    def test_yesterday_batch_does_not_carry_into_today(self):
-        # Kecha pishirilgani bugun sotilmaydi - har kun noldan boshlanadi.
+    def test_yesterday_leftover_carries_into_today(self):
+        # Kecha ortib qolgan porsiyalar jismonan yo'qolmaydi, shuning uchun
+        # ular ertangi kunga o'tadi va sotilaverishi mumkin.
         DishPrep.objects.create(
             branch=self.branch, dish=self.manti, actor=self.cashier,
             date=timezone.localdate() - timedelta(days=1), quantity=30,
         )
-        self.assertFalse(self.row(self.manti)['tracked'])
+        row = self.row(self.manti)
+        self.assertTrue(row['tracked'])
+        self.assertEqual(row['carried'], 30)
+        self.assertEqual(row['prepared'], 0)
+        self.assertEqual(row['remaining'], 30)
+        self.assertFalse(row['out'])
+        # Tarix esa bugungi kiritishlarni ko'rsatadi, kechagini emas.
         self.assertEqual(self.client.get('/api/v1/dish-prep/history/').data['rows'], [])
 
     def test_the_owner_sees_what_was_left_unsold(self):
@@ -4534,3 +4541,149 @@ class PaymentMethodBreakdownTests(TestCase):
 
     def test_a_method_that_does_not_exist_is_refused(self):
         self.assertEqual(self.board('&method=payme').status_code, 400)
+
+
+class StockCarriesOverTests(TestCase):
+    """Qoldiq kundan kunga o'tadi va ikkita guruh boshqacha yuritiladi.
+
+    Oshxona taomi ertalab pishiriladi — tayyori tugasa sotilmaydi. Suv esa
+    javonda turadi: uni hech qachon «yo'q» deb rad etib bo'lmaydi, faqat
+    sanab boriladi. Ikkalasining ham qoldig'i ertasi kuni nolga aylanmaydi.
+    """
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.kitchen_cat = Category.objects.create(branch=self.branch, name='Taomlar', stock_kind=StockKind.COOKED)
+        self.drinks = Category.objects.create(
+            branch=self.branch, name='Ichimliklar', station=Station.COUNTER, stock_kind=StockKind.GOODS)
+        self.manti = Dish.objects.create(branch=self.branch, category=self.kitchen_cat, name='Manti', price=Decimal('30000'))
+        self.water = Dish.objects.create(branch=self.branch, category=self.drinks, name='Suv', price=Decimal('5000'))
+        self.client = APIClient()
+        self.client.force_authenticate(self.cashier)
+        self.today = timezone.localdate()
+
+    def put_in(self, dish, quantity, day=None):
+        return DishPrep.objects.create(
+            branch=self.branch, dish=dish, actor=self.cashier,
+            date=day or self.today, quantity=quantity,
+        )
+
+    def sell(self, dish, quantity, method='cash'):
+        return create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': method,
+            'lines': [{'dish': dish.id, 'quantity': quantity, 'note': ''}],
+        })
+
+    def row(self, dish):
+        data = self.client.get('/api/v1/dish-prep/').data
+        return next(item for item in data['dishes'] if item['dish'] == dish.id)
+
+    def test_a_dish_belongs_to_the_group_its_category_says(self):
+        self.assertEqual(self.row(self.manti)['group'], 'cooked')
+        self.assertEqual(self.row(self.water)['group'], 'goods')
+        self.assertTrue(self.row(self.manti)['blocking'])
+        self.assertFalse(self.row(self.water)['blocking'])
+
+    def test_a_dish_can_override_its_category(self):
+        # Ichimliklar orasida oshxonada damlanadigan choy — istisno.
+        tea = Dish.objects.create(
+            branch=self.branch, category=self.drinks, name='Choy', price=Decimal('8000'),
+            stock_kind=StockKind.COOKED)
+        self.assertEqual(self.row(tea)['group'], 'cooked')
+
+    def test_the_leftover_opens_the_next_day(self):
+        self.put_in(self.manti, 20, self.today - timedelta(days=1))
+        self.sell(self.manti, 8)
+        row = self.row(self.manti)
+        self.assertEqual(row['carried'], 20)
+        self.assertEqual(row['prepared'], 0)
+        self.assertEqual(row['sold'], 8)
+        self.assertEqual(row['remaining'], 12)
+
+    def test_the_three_numbers_always_add_up(self):
+        self.put_in(self.manti, 15, self.today - timedelta(days=1))
+        self.put_in(self.manti, 10)
+        self.sell(self.manti, 6)
+        row = self.row(self.manti)
+        # Kecha qolgan + bugun tayyorlandi − bugun sotildi = qoldiq.
+        self.assertEqual(row['carried'] + row['prepared'] - row['sold'], row['remaining'])
+        self.assertEqual(row['remaining'], 19)
+
+    def test_water_is_sold_even_when_nobody_entered_it(self):
+        # Suv javonda turibdi: kassir uni bera olishi kerak.
+        order = self.sell(self.water, 2)
+        self.assertEqual(order.status, 'paid')
+        row = self.row(self.water)
+        self.assertFalse(row['tracked'])
+        self.assertEqual(row['sold'], 2)
+
+    def test_water_counts_down_and_may_go_below_zero(self):
+        self.put_in(self.water, 24)
+        self.sell(self.water, 30)
+        row = self.row(self.water)
+        self.assertEqual(row['remaining'], -6)
+        # Minus — xato emas, «kirim yozilmagan» degan signal. Sotuv esa
+        # to'xtamaydi.
+        self.assertEqual(self.sell(self.water, 1).status, 'paid')
+        self.assertTrue(AuditEvent.objects.filter(action='prep.oversell').exists())
+
+    def test_a_cooked_dish_still_stops_when_it_runs_out(self):
+        self.put_in(self.manti, 2)
+        self.sell(self.manti, 2)
+        with self.assertRaises(ValidationError):
+            self.sell(self.manti, 1)
+
+    def test_sales_before_the_first_intake_are_not_subtracted(self):
+        # Hisob taom birinchi marta kiritilgan kundan boshlanadi: undan
+        # oldingi savdo qoldiqni minusga tortib ketmasligi kerak.
+        old = create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': 'cash',
+            'lines': [{'dish': self.water.id, 'quantity': 50, 'note': ''}],
+        })
+        Order.objects.filter(pk=old.id).update(
+            created_at=timezone.now() - timedelta(days=3), paid_at=timezone.now() - timedelta(days=3))
+        self.put_in(self.water, 24)
+        self.assertEqual(self.row(self.water)['remaining'], 24)
+
+    def test_the_owner_writes_off_what_is_no_longer_good(self):
+        self.put_in(self.manti, 12, self.today - timedelta(days=1))
+        owner = APIClient()
+        owner.force_authenticate(self.owner)
+        response = owner.post('/api/v1/dish-prep/write-off/', {
+            'lines': [{'dish': self.manti.id, 'quantity': 12, 'note': 'Kechagi manti'}],
+        }, format='json')
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(self.row(self.manti)['remaining'], 0)
+        self.assertTrue(AuditEvent.objects.filter(action='prep.writeoff').exists())
+        # Hisobdan chiqarilgach yana sotib bo'lmaydi.
+        with self.assertRaises(ValidationError):
+            self.sell(self.manti, 1)
+
+    def test_more_than_the_balance_cannot_be_written_off(self):
+        self.put_in(self.manti, 5)
+        owner = APIClient()
+        owner.force_authenticate(self.owner)
+        response = owner.post('/api/v1/dish-prep/write-off/', {
+            'lines': [{'dish': self.manti.id, 'quantity': 9, 'note': ''}],
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self.row(self.manti)['remaining'], 5)
+
+    def test_only_the_owner_writes_off(self):
+        self.put_in(self.manti, 5)
+        response = self.client.post('/api/v1/dish-prep/write-off/', {
+            'lines': [{'dish': self.manti.id, 'quantity': 1, 'note': ''}],
+        }, format='json')
+        self.assertEqual(response.status_code, 403)
+
+    def test_the_leftovers_view_tells_todays_batch_from_the_older_one(self):
+        self.put_in(self.manti, 10, self.today - timedelta(days=1))
+        self.put_in(self.manti, 4)
+        owner = APIClient()
+        owner.force_authenticate(self.owner)
+        row = owner.get('/api/v1/dish-prep/leftovers/').data['leftovers'][0]
+        self.assertEqual(row['remaining'], 14)
+        # Bugungi partiya bilan izohlab bo'lmaydigan qismi — eskisi.
+        self.assertEqual(row['aged'], 10)

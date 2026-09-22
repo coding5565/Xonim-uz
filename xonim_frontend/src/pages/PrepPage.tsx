@@ -1,17 +1,23 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { AlertTriangle, ChefHat, CircleCheck, ClipboardList, CookingPot, Search, Soup, Trash2 } from 'lucide-react'
+import {
+  AlertTriangle, ChefHat, CircleCheck, ClipboardList, CookingPot, Package, Search, Soup, Trash2,
+} from 'lucide-react'
 import { api, dateLabel } from '../api'
 import { useI18n } from '../i18n'
 import { useSession } from '../session'
-import type { PrepHistory, PrepLeftovers, PrepStatus } from '../types'
+import type { PrepHistory, PrepLeftovers, PrepRow, PrepStatus } from '../types'
 import AppModal from '../components/AppModal'
 import { CardsSkeleton, TableSkeleton } from '../components/Skeleton'
 
-/** Bugun oshxona nechta porsiya tayyorlagani va nechtasi qolgani.
+/** Tayyor porsiyalar hisobi: oshxona taomlari va tayyor mahsulotlar.
  *
- * Kassir ertalab kiritadi, kun davomida yana qo'shadi. Qoldiq sotuv bilan
- * kamayadi va Kassa ekranida ham ko'rinadi. Miqdori kiritilmagan taom
- * cheklanmaydi — unutilgan bo'lsa restoran to'xtab qolmasligi kerak.
+ * Ikkita guruh bitta jadvalda turganda chalkashlik bo'lardi: suvni
+ * «pishirish» kerak emas, manti esa javonda turmaydi. Shuning uchun ular
+ * alohida bo'limlarda.
+ *
+ * Qoldiq kundan kunga o'tadi — kechqurun ortib qolgani ertasi kuni nolga
+ * aylanmaydi. Kun boshidagi qoldiq «kecha qolgan» ustunida alohida
+ * ko'rinadi, shunda bugungi partiya bilan aralashib ketmaydi.
  */
 export default function PrepPage() {
   const { t, tn } = useI18n()
@@ -30,6 +36,9 @@ export default function PrepPage() {
   const [draft, setDraft] = useState<Record<number, string>>({})
   // O'chirish tasdig'i kutayotgan yozuv.
   const [removing, setRemoving] = useState<PrepHistory['rows'][number]>()
+  // Hisobdan chiqarilayotgan taom va miqdori.
+  const [writingOff, setWritingOff] = useState<PrepRow>()
+  const [writeOffAmount, setWriteOffAmount] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -59,6 +68,9 @@ export default function PrepPage() {
   )
   const tracked = dishes.filter(row => row.tracked)
   const warnings = tracked.filter(row => row.out || row.low)
+  // Ikki guruh: oshxonada pishiriladigani va tayyor keladigani.
+  const cooked = filtered.filter(row => row.group === 'cooked')
+  const goods = filtered.filter(row => row.group === 'goods')
   const lines = Object.entries(draft)
     .map(([dish, value]) => ({ dish: Number(dish), quantity: Number(value), note }))
     .filter(line => line.quantity > 0)
@@ -73,6 +85,34 @@ export default function PrepPage() {
       setStatus(await api<PrepStatus>('dish-prep/', { method: 'POST', body: JSON.stringify({ lines }) }))
       setDraft({})
       setNote('')
+      setHistory(await api<PrepHistory>('dish-prep/history/'))
+      if (owner) setLeftovers(await api<PrepLeftovers>('dish-prep/leftovers/'))
+    } catch (exception) {
+      setFormError((exception as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Qolgan porsiyalarni hisobdan chiqaradi — faqat egasi.
+   *
+   * Qoldiq kundan kunga o'tgani uchun kerak: dushanbadagi manti jumagacha
+   * «bor» bo'lib tursa, oshxona cheklovi ma'nosini yo'qotadi.
+   */
+  async function saveWriteOff(event: FormEvent) {
+    event.preventDefault()
+    if (!writingOff || busy) return
+    const quantity = Number(writeOffAmount)
+    if (!(quantity > 0)) return
+    setBusy(true)
+    setFormError('')
+    try {
+      setStatus(await api<PrepStatus>('dish-prep/write-off/', {
+        method: 'POST',
+        body: JSON.stringify({ lines: [{ dish: writingOff.dish, quantity, note: '' }] }),
+      }))
+      setWritingOff(undefined)
+      setWriteOffAmount('')
       setHistory(await api<PrepHistory>('dish-prep/history/'))
       if (owner) setLeftovers(await api<PrepLeftovers>('dish-prep/leftovers/'))
     } catch (exception) {
@@ -183,34 +223,42 @@ export default function PrepPage() {
         </header>
         {!status ? <TableSkeleton rows={5} columns={3} /> : (
           <form className="prep-form" onSubmit={save}>
-            <div className="prep-grid">
-              {filtered.map(row => (
-                <label
-                  key={row.dish}
-                  className={`prep-tile${row.out ? ' out' : row.low ? ' low' : ''}`}
-                >
-                  <span className="prep-name">{row.name}</span>
-                  {/* Hisobi yuritilmayotgan taomda yozadigan narsa yo'q: har
-                      qatorda takrorlangan izoh ko'zni charchatadi. */}
-                  <span className="prep-state">
-                    {row.tracked
-                      ? t('{prepared} dan {remaining} qoldi', { prepared: row.prepared, remaining: row.remaining })
-                      : row.sold ? tn('{count} ta sotilgan', row.sold) : ''}
-                  </span>
-                  <input
-                    value={draft[row.dish] ?? ''}
-                    onChange={event => setDraft(previous => ({ ...previous, [row.dish]: event.target.value }))}
-                    type="number"
-                    min="0"
-                    max="9999"
-                    step="1"
-                    inputMode="numeric"
-                    placeholder="0"
-                    aria-label={t('{name} uchun tayyorlangan miqdor', { name: row.name })}
-                  />
-                </label>
-              ))}
-            </div>
+            {[
+              { key: 'cooked', rows: cooked, title: 'Oshxona taomlari', hint: 'Oshxonada pishiriladi — tayyori tugasa sotilmaydi', icon: <ChefHat size={15} /> },
+              { key: 'goods', rows: goods, title: 'Tayyor mahsulotlar', hint: 'Suv va tashqaridan keladigan mahsulotlar — sotuvni hech qachon to‘xtatmaydi', icon: <Package size={15} /> },
+            ].filter(group => group.rows.length).map(group => (
+              <div key={group.key} className="prep-group">
+                <p className="prep-group-head">{group.icon}<strong>{t(group.title)}</strong><span>{t(group.hint)}</span></p>
+                <div className="prep-grid">
+                  {group.rows.map(row => (
+                    <label
+                      key={row.dish}
+                      className={`prep-tile${row.out ? ' out' : row.low ? ' low' : ''}`}
+                    >
+                      <span className="prep-name">{row.name}</span>
+                      {/* Hisobi yuritilmayotgan taomda yozadigan narsa yo'q: har
+                          qatorda takrorlangan izoh ko'zni charchatadi. */}
+                      <span className="prep-state">
+                        {row.tracked
+                          ? t('{prepared} dan {remaining} qoldi', { prepared: row.prepared, remaining: row.remaining })
+                          : row.sold ? tn('{count} ta sotilgan', row.sold) : ''}
+                      </span>
+                      <input
+                        value={draft[row.dish] ?? ''}
+                        onChange={event => setDraft(previous => ({ ...previous, [row.dish]: event.target.value }))}
+                        type="number"
+                        min="0"
+                        max="9999"
+                        step="1"
+                        inputMode="numeric"
+                        placeholder="0"
+                        aria-label={t('{name} uchun tayyorlangan miqdor', { name: row.name })}
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
             {!filtered.length && (
               <div className="empty-state compact">
                 <strong>{t('Bunday taom topilmadi')}</strong>
@@ -242,7 +290,7 @@ export default function PrepPage() {
         <header className="panel-heading">
           <div>
             <h2>{t('Bugungi holat')}</h2>
-            <p>{t('Tayyorlangan − sotilgan = qoldiq')}</p>
+            <p>{t('Kecha qolgan + bugun tayyorlandi − sotilgan = qoldiq')}</p>
           </div>
           <ClipboardList size={18} />
         </header>
@@ -251,16 +299,22 @@ export default function PrepPage() {
             <thead>
               <tr>
                 <th>{t('TAOM')}</th>
+                <th>{t('KECHA QOLGAN')}</th>
                 <th>{t('TAYYORLANGAN')}</th>
                 <th>{t('SOTILGAN')}</th>
                 <th>{t('QOLDIQ')}</th>
                 <th>{t('HOLAT')}</th>
+                {owner && <th>{t('AMAL')}</th>}
               </tr>
             </thead>
             <tbody>
               {tracked.map(row => (
                 <tr key={row.dish}>
-                  <td><strong>{row.name}</strong></td>
+                  <td>
+                    <strong>{row.name}</strong>
+                    <small>{t(row.group === 'goods' ? 'Tayyor mahsulot' : 'Oshxona taomi')}</small>
+                  </td>
+                  <td className="number">{row.carried}</td>
                   <td className="number">{row.prepared}</td>
                   <td className="number">{row.sold}</td>
                   <td className="number"><strong>{row.remaining}</strong></td>
@@ -271,6 +325,18 @@ export default function PrepPage() {
                         : row.out ? t('Tugadi') : row.low ? t('Kam qoldi') : t('Yetarli')}
                     </span>
                   </td>
+                  {owner && (
+                    <td>
+                      {row.remaining > 0 && (
+                        <button
+                          className="text-link"
+                          onClick={() => { setWritingOff(row); setWriteOffAmount(String(row.remaining)) }}
+                        >
+                          {t('Hisobdan chiqarish')}
+                        </button>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -290,7 +356,7 @@ export default function PrepPage() {
           <header className="panel-heading">
             <div>
               <h2>{t('Sotilmay qolgani')}</h2>
-              <p>{t('Kun oxirida shu taomlar ortib qoladi — ertaga kamroq tayyorlash mumkin')}</p>
+              <p>{t('Qoldiq ertangi kunga o‘tadi')}</p>
             </div>
             <span className="pill">{tn('{count} ta taom', leftovers.leftovers.length)}</span>
           </header>
@@ -358,6 +424,52 @@ export default function PrepPage() {
           )}
         </div>
       </section>
+
+      <AppModal
+        open={!!writingOff}
+        title={t('Qoldiqni hisobdan chiqarish')}
+        onClose={() => { if (!busy) setWritingOff(undefined) }}
+      >
+        {writingOff && (
+          <form onSubmit={saveWriteOff}>
+            <p className="data-note">
+              {t('«{name}» · hozirgi qoldiq {count} ta', {
+                name: writingOff.name, count: writingOff.remaining,
+              })}
+            </p>
+            <label>
+              {t('Qancha hisobdan chiqarilsin?')}
+              <input
+                value={writeOffAmount}
+                onChange={event => setWriteOffAmount(event.target.value)}
+                type="number"
+                min="1"
+                max={writingOff.remaining}
+                step="1"
+                required
+                autoFocus
+              />
+            </label>
+            {/* Qoldiq kundan kunga o'tadi, shuning uchun uni kamaytiradigan
+                yagona yo'l shu. Yozuv jurnalda qoladi. */}
+            <p className="alert">
+              {t('Qoldiq shu miqdorga kamayadi va qaytarib bo‘lmaydi. Amal jurnalga yoziladi.')}
+            </p>
+            {formError && <p className="alert error">{formError}</p>}
+            <button className="button danger full" disabled={busy}>
+              <Trash2 size={17} />{busy ? t('Saqlanmoqda…') : t('Hisobdan chiqarish')}
+            </button>
+            <button
+              type="button"
+              className="button secondary full"
+              disabled={busy}
+              onClick={() => setWritingOff(undefined)}
+            >
+              {t('Bekor qilish')}
+            </button>
+          </form>
+        )}
+      </AppModal>
 
       <AppModal
         open={!!removing}

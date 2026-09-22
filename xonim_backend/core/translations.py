@@ -12,6 +12,8 @@ RU = {
         'История движений по складу доступна только суперадмину.',
     '{name} — bugun tayyorlanmagan': '{name} — сегодня не приготовлено',
     '{name} — {count} ta qoldi': '{name} — осталось {count}',
+    '{name} — qoldiq {count} ta, undan ko‘pini hisobdan chiqarib bo‘lmaydi.':
+        '{name} — в остатке {count}, списать больше нельзя.',
     'Bu taomlar tayyor emas: {dishes}. «Tayyor taomlar» bo‘limida bugun nechta tayyorlanganini kiriting.':
         'Эти блюда не готовы: {dishes}. Укажите в разделе «Готовые блюда», сколько приготовлено сегодня.',
     'Ofitsiant topilmadi.': 'Официант не найден.',
@@ -226,6 +228,8 @@ EN = {
         'The stock movement history is for the superadmin only.',
     '{name} — bugun tayyorlanmagan': '{name} — not cooked today',
     '{name} — {count} ta qoldi': '{name} — {count} left',
+    '{name} — qoldiq {count} ta, undan ko‘pini hisobdan chiqarib bo‘lmaydi.':
+        '{name} — {count} left, you cannot write off more than that.',
     'Bu taomlar tayyor emas: {dishes}. «Tayyor taomlar» bo‘limida bugun nechta tayyorlanganini kiriting.':
         'These dishes are not ready: {dishes}. Enter today’s cooked counts under «Ready dishes».',
     'Ofitsiant topilmadi.': 'Waiter not found.',

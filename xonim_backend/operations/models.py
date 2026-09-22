@@ -498,11 +498,17 @@ class StockMovement(models.Model):
 
 
 class DishPrep(models.Model):
-    """Bugun oshxonada nechta porsiya tayyorlangani.
+    """Tayyor porsiyalar hisobi: kirim va chiqim yozuvlari.
 
     Bir kunda bir taomga bir nechta yozuv bo'ladi — ertalab 20 ta, tushda
     yana 15 ta. Ular qo'shiladi, ustiga yozilmaydi: shunda kun davomida
     nima qo'shilgani ham ko'rinib turadi.
+
+    Miqdor MANFIY ham bo'lishi mumkin. Qoldiq kundan kunga o'tadigan
+    bo'lgach, uni kamaytiradigan yo'l kerak bo'ldi: dushanbadagi manti
+    jumagacha «bor» bo'lib turavermasligi uchun egasi qolganini hisobdan
+    chiqaradi. Chiqim ham shu jadvalga yoziladi — tarix bitta joyda
+    qolsin.
 
     Diqqat: bu yozuv ombordan masalliq AYIRMAYDI. Masalliq sotuv paytida
     retsept bo'yicha ayriladi va shundayligicha qoladi — aks holda bitta
@@ -513,13 +519,15 @@ class DishPrep(models.Model):
     dish = models.ForeignKey('catalog.Dish', on_delete=models.PROTECT, related_name='preps')
     actor = models.ForeignKey(User, on_delete=models.PROTECT)
     date = models.DateField()
-    quantity = models.PositiveIntegerField()
+    quantity = models.IntegerField()
     note = models.CharField(max_length=200, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['-date', '-id']
-        constraints = [models.CheckConstraint(condition=Q(quantity__gt=0), name='dish_prep_positive')]
+        # Nol yozuvning ma'nosi yo'q: u na qo'shadi, na ayiradi, faqat
+        # tarixni chalg'itadi.
+        constraints = [models.CheckConstraint(condition=~Q(quantity=0), name='dish_prep_not_zero')]
         indexes = [models.Index(fields=['branch', 'date'], name='dish_prep_branch_date_idx')]
 
 
