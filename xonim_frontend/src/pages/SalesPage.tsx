@@ -14,6 +14,8 @@ interface Filters {
   end: string
   category: string
   dish: string
+  /** Moliya sahifasidan kelgan to'lov turi: faqat shu yo'l bilan to'langanlari. */
+  method: string
   mine: boolean
 }
 
@@ -21,6 +23,7 @@ function queryFor(filters: Filters) {
   const query = new URLSearchParams({ start: filters.start, end: filters.end })
   if (filters.category) query.set('category', filters.category)
   if (filters.dish) query.set('dish', filters.dish)
+  if (filters.method) query.set('method', filters.method)
   if (filters.mine) query.set('mine', 'true')
   return query.toString()
 }
@@ -46,6 +49,7 @@ export default function SalesPage() {
     end: params.get('end') || today(),
     category: params.get('category') || '',
     dish: params.get('dish') || '',
+    method: params.get('method') || '',
     mine: params.get('mine') === 'true',
   })
   const [dishQuery, setDishQuery] = useState('')
@@ -232,6 +236,15 @@ export default function SalesPage() {
               {visibleDishes.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
           </label>
+          <label>
+            {t('To‘lov turi')}
+            <select value={filters.method} onChange={event => apply({ method: event.target.value }, true)}>
+              <option value="">{t('Hammasi')}</option>
+              {(user?.payment_methods || []).map(item => (
+                <option key={item.method} value={item.method}>{t(item.label)}</option>
+              ))}
+            </select>
+          </label>
           <label className="checkbox">
             <input
               type="checkbox"
@@ -281,6 +294,15 @@ export default function SalesPage() {
             {data.methods.map(row => (
               <span key={row.method}>{t(row.label)}: <b>{money(row.revenue)} {t('so‘m')}</b></span>
             ))}
+            {!!filters.method && (
+              <span>
+                <b>
+                  {t('Faqat {method} orqali to‘langanlari', {
+                    method: t((user?.payment_methods || []).find(item => item.method === filters.method)?.label || filters.method),
+                  })}
+                </b>
+              </span>
+            )}
             {filters.mine && <span><b>{t('Faqat {name} savdolari', { name: user?.name || '' })}</b></span>}
           </p>
 

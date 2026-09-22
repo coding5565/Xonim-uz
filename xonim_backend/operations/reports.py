@@ -13,7 +13,7 @@ from rest_framework import serializers
 from catalog.models import Category, Dish
 from core.i18n import _
 
-from .models import SALE_CHANNEL_LABELS, SALE_PAYMENT_LABELS, Order, OrderLine
+from .models import SALE_CHANNEL_LABELS, SALE_PAYMENT_CHOICES, SALE_PAYMENT_LABELS, Order, OrderLine
 from .money import CENT, money, percent
 
 
@@ -287,6 +287,8 @@ class SalesBoardFilters(serializers.Serializer):
     end = serializers.DateField(required=False)
     category = serializers.IntegerField(min_value=1, required=False)
     dish = serializers.IntegerField(min_value=1, required=False)
+    # Moliya sahifasidagi to'lov turi ustiga bosilganda shu filtr keladi.
+    method = serializers.ChoiceField(choices=SALE_PAYMENT_CHOICES, required=False)
     mine = serializers.BooleanField(default=False)
 
     def validate(self, attrs):
@@ -336,6 +338,8 @@ def build_sales_board(user, filters):
         lines = lines.filter(dish__category_id=filters['category'])
     if filters.get('dish'):
         lines = lines.filter(dish_id=filters['dish'])
+    if filters.get('method'):
+        lines = lines.filter(order__payment_method=filters['method'])
 
     totals = lines.aggregate(revenue=revenue_sum, items=Sum('quantity'), orders=Count('order_id', distinct=True))
     # Chegirma qatorlarga taqsimlanib, har bir kesimdan ayiriladi.
@@ -410,6 +414,10 @@ def build_sales_board(user, filters):
     )
     if filters.get('mine'):
         checks = checks.filter(cashier=user)
+    if filters.get('method'):
+        # Cheklar ro'yxati alohida so'rov: taom filtri bo'lmasa qatorlar
+        # kesimi unga qo'llanmaydi va butun kun ochilib ketardi.
+        checks = checks.filter(payment_method=filters['method'])
     if filters.get('category') or filters.get('dish'):
         checks = checks.filter(id__in=lines.values('order_id'))
 
@@ -417,7 +425,8 @@ def build_sales_board(user, filters):
     return {
         'filters': {
             'start': filters['start'], 'end': filters['end'],
-            'category': filters.get('category'), 'dish': filters.get('dish'), 'mine': filters.get('mine', False),
+            'category': filters.get('category'), 'dish': filters.get('dish'),
+            'method': filters.get('method') or None, 'mine': filters.get('mine', False),
         },
         'summary': {
             'revenue': cash(revenue),

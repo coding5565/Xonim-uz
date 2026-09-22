@@ -467,7 +467,7 @@ class WorkflowTests(TestCase):
         self.assertEqual(self.client.post(f'/api/v1/orders/{order.id}/pay/', {'payment_method': 'payme'}).status_code, 400)
 
         listed = {item['method'] for item in self.client.get('/api/v1/auth/me/').data['payment_methods']}
-        self.assertEqual(listed, {'cash', 'card', 'uzum', 'click', 'yandex'})
+        self.assertEqual(listed, {'cash', 'card', 'terminal', 'uzum', 'click', 'yandex'})
 
     def test_sales_board_groups_what_sold_and_respects_filters(self):
         create_order(self.cashier, self.order_data())
@@ -2437,7 +2437,7 @@ class SalesChannelTests(TestCase):
         cashier = APIClient()
         cashier.force_authenticate(self.cashier)
         rows = {row['method']: row for row in cashier.get('/api/v1/shift/').data['breakdown']}
-        self.assertEqual(sorted(rows), ['card', 'cash', 'click', 'uzum', 'yandex'])
+        self.assertEqual(sorted(rows), ['card', 'cash', 'click', 'terminal', 'uzum', 'yandex'])
         self.assertEqual(Decimal(rows['uzum']['amount']), Decimal('100000'))
         self.assertEqual(Decimal(rows['yandex']['amount']), Decimal('0'))
         self.assertEqual(rows['yandex']['count'], 0)
@@ -4461,3 +4461,76 @@ class PrintQueueTests(TestCase):
     @override_settings(PRINT_AGENT_TOKEN='')
     def test_without_a_token_the_queue_is_closed(self):
         self.assertEqual(self.claim(token='').status_code, 403)
+
+
+class PaymentMethodBreakdownTests(TestCase):
+    """Har bir to'lov yo'li alohida ko'rinadi va ustiga bosilsa ajratib beradi.
+
+    Egasi bank bilan hisob-kitobni shu kesim bo'yicha qiladi: terminaldan
+    qancha tushganini kartadan ajratib ko'ra olmasa, bankning hisobotini
+    tizimning raqami bilan solishtirib bo'lmaydi.
+    """
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.category = Category.objects.create(branch=self.branch, name='Taom')
+        self.dish = Dish.objects.create(branch=self.branch, category=self.category, name='Osh', price=Decimal('50000'))
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+        prepare(self.cashier, *Dish.objects.filter(branch=self.branch))
+
+    def sell(self, method, quantity=1):
+        return create_order(self.cashier, {
+            'key': uuid4(), 'table': '', 'waiter': '', 'payment_method': method,
+            'lines': [{'dish': self.dish.id, 'quantity': quantity, 'note': ''}],
+        })
+
+    def board(self, query=''):
+        today = timezone.localdate()
+        return self.client.get(f'/api/v1/sales/board/?start={today}&end={today}{query}')
+
+    def test_the_terminal_is_a_payment_method_of_its_own(self):
+        order = self.sell('terminal')
+        self.assertEqual(order.payment_method, 'terminal')
+        rails = {item['method'] for item in self.client.get('/api/v1/auth/me/').data['payment_methods']}
+        self.assertIn('terminal', rails)
+        # Kartadan ajralib turadi: ikkalasi bir xil qatorga qo'shilib ketmaydi.
+        rows = {row['method']: row for row in self.client.get('/api/v1/finance/').data['methods']}
+        self.assertEqual(rows['terminal']['revenue'], '50000.00')
+        self.assertEqual(rows['card']['revenue'], '0.00')
+
+    def test_every_method_stays_on_the_list_even_with_no_sales(self):
+        self.sell('cash')
+        rows = {row['method']: row for row in self.client.get('/api/v1/finance/').data['methods']}
+        # Savdosi yo'q yo'l ham nol bo'lib turadi: yo'q qator «tekshirilmagan»
+        # degani emas.
+        self.assertEqual(sorted(rows), ['card', 'cash', 'click', 'terminal', 'uzum', 'yandex'])
+        self.assertEqual(rows['cash']['revenue'], '50000.00')
+        self.assertEqual(rows['click']['orders'], 0)
+
+    def test_the_board_shows_one_method_when_asked(self):
+        self.sell('cash', 2)          # 100 000
+        self.sell('terminal')         # 50 000
+        everything = self.board().data
+        self.assertEqual(everything['summary']['revenue'], '150000.00')
+        self.assertEqual(len(everything['checks']), 2)
+
+        only = self.board('&method=terminal').data
+        self.assertEqual(only['summary']['revenue'], '50000.00')
+        self.assertEqual(only['filters']['method'], 'terminal')
+        # Cheklar ro'yxati ham ajraladi: jami bilan ro'yxat bir-biriga mos
+        # kelmasa, egasi qaysi raqamga ishonishni bilmaydi.
+        self.assertEqual([row['payment_method'] for row in only['checks']], ['terminal'])
+        self.assertEqual(sorted(row['method'] for row in only['methods']), ['terminal'])
+
+    def test_the_dish_breakdown_follows_the_method_filter(self):
+        self.sell('cash', 3)
+        self.sell('terminal', 1)
+        only = self.board('&method=terminal').data
+        self.assertEqual([row['quantity'] for row in only['dishes']], [1])
+        self.assertEqual(only['summary']['items'], 1)
+
+    def test_a_method_that_does_not_exist_is_refused(self):
+        self.assertEqual(self.board('&method=payme').status_code, 400)

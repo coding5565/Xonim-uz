@@ -10,6 +10,10 @@ from users.models import Branch, User
 SALE_PAYMENT_METHODS = [
     ('cash', 'Naqd'),
     ('card', 'Karta'),
+    # Bank terminali kartadan alohida yuriladi: pul bir xil yo'ldan kelsa
+    # ham, egasi qaysi qurilmadan qancha tushganini ajratib ko'rishni
+    # so'radi — hisob-kitob bank bilan shu bo'yicha solishtiriladi.
+    ('terminal', 'Terminal'),
     ('uzum', 'Uzum'),
     ('click', 'Click'),
     ('yandex', 'Yandex'),

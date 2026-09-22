@@ -341,8 +341,10 @@ export default function FinancePage() {
             <Coins size={18} />
           </header>
           <div className="category-ranking">
+            {/* Ustiga bosilganda savdo sahifasi faqat shu yo'l bilan
+                to'langan cheklarni ko'rsatadi. */}
             {data.methods.map(row => (
-              <Link key={row.method} to={`/sales?${range}`}>
+              <Link key={row.method} to={`/sales?${range}&method=${row.method}`}>
                 <div>
                   <div>
                     <strong>{t(row.label)}</strong>

@@ -71,7 +71,7 @@ export interface Movement { id: number; ingredient_name: string; unit: string; k
 export interface Dashboard { revenue: string; expenses: string; net_cash: string; cost: string; gross_profit: string; gross_margin: string; paid_count: number; open_count: number; previous_revenue: string; by_method: MethodRevenue[]; low_stock: number; trend: {date: string; revenue: string; expenses: string}[]; period: {kind: 'days' | 'month'; start: string; end: string}; months: string[]; expense_categories: {category: string; total: string}[]; recent_orders: Order[]; as_of: string; basis: string }
 export interface SalesReport { filters:{start:string;end:string;group:'day'|'month';category:number|null;dish:number|null}; summary:{revenue:string;cost:string;gross_profit:string;gross_margin:string;orders:number;items:number;average_check:string;by_method:MethodRevenue[]}; trend:{date:string;revenue:string;orders:number;items:number}[]; categories:{category_id:number;category:string;quantity:number;revenue:string;cost:string;gross_profit:string;orders:number}[]; dishes:{dish_id:number;dish:string;category:string;quantity:number;revenue:string;cost:string;gross_profit:string;orders:number}[] }
 export interface SalesBoard {
-  filters: { start: string; end: string; category: number | null; dish: number | null; mine: boolean }
+  filters: { start: string; end: string; category: number | null; dish: number | null; method: string | null; mine: boolean }
   summary: { revenue: string; orders: number; items: number; average_check: string; top_dish: string | null; peak_hour: number | null; peak_hour_revenue: string | null }
   methods: { method: string; label: string; orders: number; revenue: string }[]
   hours: { hour: number; orders: number; revenue: string }[]

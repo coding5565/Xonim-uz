@@ -32,7 +32,7 @@ from users.permissions import OwnerOnly
 from .models import (
     DELIVERY_CHANNELS,
     SALE_CHANNEL_LABELS,
-    SALE_PAYMENT_LABELS,
+    SALE_PAYMENT_METHODS,
     Expense,
     Ingredient,
     Order,
@@ -269,13 +269,20 @@ def build_finance(branch, start, end, today):
         'salary': row['category'] == SALARY_CATEGORY,
     } for row in spend.values('category').annotate(total=Sum('amount'), count=Count('id')).order_by('-total')]
 
-    methods = [{
-        'method': row['payment_method'],
-        'label': SALE_PAYMENT_LABELS.get(row['payment_method'], row['payment_method'] or '—'),
-        'revenue': money(row['total']),
-        'orders': row['count'],
-        'share': percent(row['total'], revenue),
-    } for row in paid.values('payment_method').annotate(total=Sum('total'), count=Count('id')).order_by('-total')]
+    # Har bir to'lov turi doim ro'yxatda turadi, savdosi bo'lmagani ham nol
+    # bo'lib: yo'q qator «tekshirilmagan» degani emasligi ko'rinib tursin va
+    # egasi qaysi yo'l umuman ishlatilmayotganini bilsin.
+    method_rows = {
+        row['payment_method']: row
+        for row in paid.values('payment_method').annotate(total=Sum('total'), count=Count('id'))
+    }
+    methods = sorted(({
+        'method': method,
+        'label': label,
+        'revenue': money(method_rows.get(method, {}).get('total')),
+        'orders': method_rows.get(method, {}).get('count', 0),
+        'share': percent(method_rows.get(method, {}).get('total') or Decimal('0'), revenue),
+    } for method, label in SALE_PAYMENT_METHODS), key=lambda row: Decimal(row['revenue']), reverse=True)
 
     # Oylik ulushi SalaryPayment bilan bog'langan Expense qatorlaridan olinadi.
     # Expense.category erkin matn, shuning uchun 'Ish haqi' deb qo'lda yozilgan
