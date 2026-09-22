@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
-  ArrowUpRight, BarChart3, Banknote, Bot, ChefHat, ChevronRight, Command, ConciergeBell, CookingPot, Handshake, History, LayoutDashboard, LogOut, Menu, PiggyBank,
-  LayoutGrid, Moon, Package, PanelLeftClose, ReceiptText, Settings2, ShoppingBag, Store, Sun, Users, UtensilsCrossed, Wallet,
+  ArrowUpRight, BarChart3, Banknote, Bot, ChefHat, ChevronRight, Command, ConciergeBell, CookingPot, Gift, Handshake, History, LayoutDashboard, LogOut, Menu, PiggyBank,
+  LayoutGrid, Moon, Package, PanelLeftClose, ReceiptText, Settings2, ShoppingBag, Soup, Store, Sun, Users, UtensilsCrossed, Wallet,
 } from 'lucide-react'
 import { api } from './api'
 import { SHOW_KITCHEN_SCREEN } from './config'
@@ -30,6 +30,10 @@ const navItems: NavItem[] = [
   // Maktab va universitetga jo'natish ham ertalabki ish: «Tayyor taomlar»dan
   // keyin turadi, chunki kunning tartibi shunday.
   { path: '/hamkorlar', name: 'Hamkorlar', icon: Handshake, roles: ['owner', 'cashier'] },
+  // Aksiya bonuslari va hodimlar ovqati: ikkalasida ham ovqat chiqadi,
+  // pul kelmaydi. Yozuvni kassir kiritadi, shuning uchun unga ham ochiq.
+  { path: '/bonuslar', name: 'Bonuslar', icon: Gift, roles: ['owner', 'cashier'] },
+  { path: '/hodimlar-ovqati', name: 'Hodimlar ovqati', icon: Soup, roles: ['owner', 'cashier'] },
   { path: '/reports', name: 'Savdo hisobotlari', icon: BarChart3, roles: ['owner'] },
   { path: '/assistant', name: 'AI yordamchi', icon: Bot, roles: ['owner'] },
   { path: '/kitchen', name: 'Oshxona', icon: ChefHat, roles: ['owner', 'kitchen'], badge: 'KDS' },

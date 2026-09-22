@@ -11,6 +11,11 @@ Ikki marta sanashning oldini olish qoidalari:
   · Ombor xaridi (StockMovement.kind='receipt') foyda zanjiriga KIRMAYDI:
     u tovarga aylanadi va sotilganda tannarx sifatida hisobga olinadi.
     U faqat pul oqimida ko'rinadi.
+  · Aksiya bonusi ALOHIDA hisoblanmaydi: u narxi nol bo'lgan oddiy
+    buyurtma qatori, ya'ni tushumga qo'shilmaydi, tannarxga esa
+    qatorlarning o'z yig'indisi orqali o'z-o'zidan kiradi.
+  · Hodimlar ovqatida pul yo'q, lekin ovqat bor: tannarxi foydadan
+    ayiriladi, menyu qiymati esa hech qanday jamiga kirmaydi.
 
 Foyda bilan pul oqimi farqi algebraik aniq:
     sof_pul = sof_foyda + tannarx + to'lanmagan_xarajat − ombor_xaridi
@@ -18,7 +23,7 @@ Foyda bilan pul oqimi farqi algebraik aniq:
 from datetime import timedelta
 from decimal import Decimal
 
-from django.db.models import Count, F, Q, Sum
+from django.db.models import Count, DecimalField, F, Q, Sum
 from django.db.models.functions import Coalesce, TruncMonth
 from django.utils import timezone
 from rest_framework import serializers
@@ -40,6 +45,7 @@ from .models import (
     PartnerDelivery,
     PartnerSettlement,
     SalaryPayment,
+    StaffMeal,
     StockMovement,
     WaiterPayment,
 )
@@ -243,6 +249,8 @@ def build_finance(branch, start, end, today):
         returned=Coalesce(Sum('cost_total', filter=Q(kind='refund')), Decimal('0')),
         # Hamkorga ketgan masalliq: ombordan jo'natish kuni chiqadi.
         partner=Coalesce(Sum('cost_total', filter=Q(kind='partner_sale')), Decimal('0')),
+        # Hodimlar yegan ovqat masallig'i.
+        staff=Coalesce(Sum('cost_total', filter=Q(kind='staff_meal')), Decimal('0')),
     )
     purchases, waste = moves['purchases'], moves['waste']
 
@@ -279,6 +287,24 @@ def build_finance(branch, start, end, today):
             total=Coalesce(Sum('amount'), Decimal('0')))['total']
     )
     partner_profit = partner_revenue - partner_cogs
+
+    # --- Hodimlar ovqati ---
+    #
+    # Pul kelmaydi, lekin ovqat chiqadi. Tannarx foydadan ayiriladi, chunki
+    # masalliq haqiqatda sarflangan. Menyu qiymati esa hech qanday jamiga
+    # kirmaydi: u pul hech qachon mavjud bo'lmagan, faqat «sotilganda
+    # qancha bo'lardi» degan taqqoslash uchun turadi.
+    staff_rows = StaffMeal.objects.filter(branch=branch, date__gte=start, date__lte=end).aggregate(
+        cost=Coalesce(Sum('cost_total'), Decimal('0')),
+        portions=Coalesce(Sum('quantity'), 0),
+        value=Coalesce(
+            Sum(F('menu_price') * F('quantity'),
+                output_field=DecimalField(max_digits=16, decimal_places=2)),
+            Decimal('0'),
+        ),
+        records=Count('id'),
+    )
+    staff_cogs = staff_rows['cost']
 
     # Ofitsiant xizmat haqi: mijozdan yig'iladi, lekin restoranning puli
     # emas. Shuning uchun tushumga ham, foydaga ham kirmaydi — faqat pul
@@ -356,7 +382,8 @@ def build_finance(branch, start, end, today):
     # Hamkor savdosi alohida juftlik bo'lib kiradi: tushumi ham, tannarxi
     # ham o'ziniki. `revenue` ga qo'shilmaydi, chunki u yettita nisbatning
     # maxraji — o'rtacha chek ham, kanal ulushi ham undan hisoblanadi.
-    net_profit = gross_profit + partner_profit - expense_total - waste - platform_total
+    net_profit = (
+        gross_profit + partner_profit - staff_cogs - expense_total - waste - platform_total)
     total_revenue = revenue + partner_revenue
 
     salary_spend = spend.filter(salary_payment__isnull=False).aggregate(
@@ -374,7 +401,7 @@ def build_finance(branch, start, end, today):
         total=Coalesce(Sum('amount'), Decimal('0')), count=Count('id'),
     )
     stock_value = sum((item.stock_value for item in Ingredient.objects.filter(branch=branch)), Decimal('0'))
-    consumed = moves['sold'] + waste + moves['partner'] - moves['returned']
+    consumed = moves['sold'] + waste + moves['partner'] + moves['staff'] - moves['returned']
 
     return {
         'filters': {
@@ -400,6 +427,8 @@ def build_finance(branch, start, end, today):
             'partner_cogs': money(partner_cogs),
             'partner_profit': money(partner_profit),
             'partner_margin': percent(partner_profit, partner_revenue),
+            # Hodimlar yegan ovqat: tushumsiz tannarx.
+            'staff_meals': money(staff_cogs),
             'total_revenue': money(total_revenue),
             'net_profit': money(net_profit),
             # Maxraj — ikkala tushum: numerator hamkor foydasini oldi,
@@ -431,8 +460,10 @@ def build_finance(branch, start, end, today):
             # ikkalasi ham mavjud naqshning aynan o'zi: tannarx pul emas
             # (xuddi `cogs` kabi), qarz harakati esa `unpaid` ning teskarisi —
             # u yerda biz qarzdor edik, bu yerda bizga qarzdor.
+            # Hodim ovqati ham xuddi `cogs` kabi: tannarx pul emas, shuning
+            # uchun foydadan ayirilgan joyi ko'prikda qaytarib qo'shiladi.
             'bridge': money(
-                net_profit + cogs + partner_cogs + waste + unpaid - purchases
+                net_profit + cogs + partner_cogs + staff_cogs + waste + unpaid - purchases
                 + service_collected - handed['total']
                 + (partner_cash['total'] - partner_revenue)),
         },
@@ -465,6 +496,14 @@ def build_finance(branch, start, end, today):
             'debt': money(partner_debt),
             'share': percent(partner_revenue, total_revenue),
         },
+        # Hodimlar ovqati: pul emas, lekin ombordan chiqqan taom.
+        'staff_meals': {
+            'cost': money(staff_cogs),
+            'value': money(staff_rows['value']),
+            'portions': staff_rows['portions'],
+            'records': staff_rows['records'],
+            'share': percent(staff_cogs, cogs + staff_cogs),
+        },
         # Ofitsiantlar hisobi: yig'ilgan, berilgan va qolgan.
         'service': {
             'collected': money(service_collected),
@@ -479,8 +518,9 @@ def build_finance(branch, start, end, today):
             'consumed': money(consumed),
             # Farq ikkala tomondan bir xil hodisada o'lchanadi: hamkor tannarxi
             # ham retsept tomonida, ham ombor tomonida turadi.
-            'gap': money(cogs + partner_cogs - consumed),
-            'gap_share': percent(abs(cogs + partner_cogs - consumed), consumed) if consumed else '',
+            'gap': money(cogs + partner_cogs + staff_cogs - consumed),
+            'gap_share': (
+                percent(abs(cogs + partner_cogs + staff_cogs - consumed), consumed) if consumed else ''),
             # «Masalliq» xarajati ombor kirimi bilan yonma-yon turadi: ikkalasi
             # ham nolga teng bo'lmasa, bitta xarid ikki marta yozilgan bo'lishi
             # mumkin va buni faqat egasi bilib ayta oladi.

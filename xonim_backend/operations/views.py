@@ -328,12 +328,32 @@ class ExpenseViewSet(mixins.ListModelMixin, mixins.UpdateModelMixin,
         instance.delete()
 
 
-class IngredientViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):
+class IngredientViewSet(
+    mixins.ListModelMixin, mixins.CreateModelMixin, mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin, viewsets.GenericViewSet,
+):
+    """Ombordagi mahsulotlar: qo'shish, tahrirlash va ro'yxatdan chiqarish.
+
+    O'chirish ikki xil ishlaydi va qaysi biri bo'lishini mahsulotning tarixi
+    hal qiladi. Hech qachon ishlatilmagan yozuv butunlay o'chadi — u shunchaki
+    xato kiritilgan. Kirimi yoki sarfi bo'lgani esa ARXIVLANADI: o'tgan
+    oyning ombor hisobotida uning nomi turibdi va u yo'qolsa hisobot
+    o'qib bo'lmaydigan bo'lib qolardi.
+    """
+
     permission_classes = [SalesOnly]
     serializer_class = IngredientSerializer
 
     def get_queryset(self):
-        return Ingredient.objects.filter(branch=self.request.user.branch)
+        rows = Ingredient.objects.filter(branch=self.request.user.branch)
+        # Yashirish FAQAT ro'yxatga tegadi. Bitta yozuvni ochish, tahrirlash
+        # va qaytarib olish har doim ishlashi kerak — aks holda arxivlangan
+        # mahsulotni hech qachon tiklab bo'lmasdi.
+        if self.action != 'list':
+            return rows
+        if self.request.query_params.get('archived') in ('1', 'true'):
+            return rows
+        return rows.filter(archived=False)
 
     @transaction.atomic
     def perform_create(self, serializer):
@@ -360,6 +380,32 @@ class IngredientViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.U
             )
         else:
             audit(self.request.user, 'stock.ingredient', f'{obj.name} · ma’lumot o‘zgartirildi')
+
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        # Retseptdagi mahsulot umuman chiqmaydi: retsept tannarxsiz qolib
+        # ketardi va buni hech kim sezmasdi.
+        recipes = list(
+            Recipe.objects.filter(lines__ingredient=instance).distinct().values_list('name', flat=True)[:5]
+        )
+        if recipes:
+            raise serializers.ValidationError(_(
+                '«{name}» {recipes} retseptida ishlatilyapti — avval retseptdan olib tashlang.',
+            ).format(name=instance.name, recipes=', '.join(recipes)))
+
+        if StockMovement.objects.filter(ingredient=instance).exists():
+            # Tarixi bor: o'chirmaymiz, ro'yxatdan olamiz.
+            instance.archived = True
+            instance.save(update_fields=['archived'])
+            audit(
+                self.request.user, 'stock.ingredient',
+                f'{instance.name} · ro‘yxatdan olindi · qoldiq '
+                f'{quantity_text(instance.quantity)} {instance.unit}',
+            )
+            return
+        name = instance.name
+        instance.delete()
+        audit(self.request.user, 'stock.ingredient', f'{name} · o‘chirildi')
 
 
 class RecipeViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.RetrieveModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):

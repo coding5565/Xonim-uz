@@ -229,10 +229,88 @@ class OrderLine(models.Model):
     # after ingredients or recipes are updated later.
     cost_per_unit = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     cost_total = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    # Bonus qatori: mijozga tekin berilgan porsiya. `price` nol bo'ladi,
+    # shuning uchun hisob, tushum va o'rtacha chek o'z-o'zidan to'g'ri
+    # qoladi — hech bir mavjud yig'indini o'zgartirish shart emas.
+    bonus = models.BooleanField(default=False)
+    # Sotuv paytidagi menyu narxi. Oddiy qatorda `price` bilan bir xil,
+    # bonus qatorida esa «qanchalik pul tekin ketdi» degan savolga javob
+    # beradigan yagona raqam.
+    menu_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     class Meta:
         # Receipts and the kitchen ticket must show the first order before the additions.
         ordering = ['id']
+
+
+class BonusRule(models.Model):
+    """Aksiya: shu kanalda shu taom buyurtma qilinsa, ustiga tekin qo‘shiladi.
+
+    Uzum bilan shartnoma bo‘yicha mijoz «Bozor honim» buyurtma qilsa, nechta
+    olganidan qat’i nazar ustiga bittasi tekin ketadi: 1 ta olsa 2 ta, 10 ta
+    olsa 11 ta. Buyurtmada u taom bo‘lmasa, bonus ham yo‘q.
+
+    Qoida kodda emas, shu yerda turadi va superadmin tahrirlaydi: aksiya
+    tugashi, taom nomi o‘zgarishi yoki boshqa kanalga ko‘chishi mumkin.
+
+    Diqqat: qoida o‘zgarsa o‘tgan buyurtmalar o‘zgarmaydi — bonus sotuv
+    paytida oddiy qator bo‘lib yozilib qoladi.
+    """
+
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT, related_name='bonus_rules')
+    channel = models.CharField(max_length=10, choices=SALE_CHANNELS)
+    dish = models.ForeignKey('catalog.Dish', on_delete=models.PROTECT, related_name='bonus_rules')
+    # Nechta tekin ketishi. Mijoz nechta olganiga bog‘liq emas.
+    free_quantity = models.PositiveIntegerField(default=1)
+    active = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['channel', 'dish__name']
+        constraints = [
+            # Bir kanalda bir taomga bitta qoida: ikkitasi bo‘lsa nechta
+            # tekin ketishi qaysi qator birinchi o‘qilganiga bog‘liq bo‘lardi.
+            models.UniqueConstraint(fields=['branch', 'channel', 'dish'], name='bonus_rule_unique'),
+            models.CheckConstraint(condition=Q(free_quantity__gt=0), name='bonus_rule_positive'),
+        ]
+
+
+class StaffMeal(models.Model):
+    """Hodim o‘z oshxonamizdan yegan ovqat.
+
+    Pul olinmaydi va bu hech kimning oyligiga ta’sir qilmaydi — yozuv faqat
+    «oyiga qancha ketyapti» degan savolga javob berish uchun. Lekin ovqat
+    haqiqatda chiqadi, shuning uchun masalliq ombordan ayiriladi va tannarx
+    foydadan chiqib ketadi.
+
+    Kim yegani izohda yoziladi: ro‘yxatdan tanlash shart emas, mehmon
+    kelishi ham, bir kishi boshqasi uchun olishi ham mumkin.
+    """
+
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT)
+    actor = models.ForeignKey(User, on_delete=models.PROTECT)
+    key = models.UUIDField()
+    request_hash = models.CharField(max_length=64)
+    dish = models.ForeignKey('catalog.Dish', on_delete=models.PROTECT, related_name='staff_meals')
+    # Nom va narx yozuv paytida muzlatiladi: taom keyin qayta nomlansa yoki
+    # qimmatlashsa ham o‘tgan oyning hisoboti o‘zgarmaydi.
+    name = models.CharField(max_length=120)
+    quantity = models.PositiveIntegerField()
+    menu_price = models.DecimalField(max_digits=12, decimal_places=2)
+    cost_per_unit = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    cost_total = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    # Kim yegani. Bo‘sh qoldirib bo‘lmaydi — yozuvning butun ma’nosi shunda.
+    note = models.CharField(max_length=200)
+    date = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(fields=['branch', 'key'], name='staff_meal_idempotency'),
+            models.CheckConstraint(condition=Q(quantity__gt=0), name='staff_meal_positive'),
+        ]
+        indexes = [models.Index(fields=['branch', 'date'], name='staff_meal_branch_date_idx')]
 
 
 class Expense(models.Model):
@@ -701,6 +779,11 @@ class Ingredient(models.Model):
     # O'rtacha tortilgan tannarx: har kirimda qayta hisoblanadi. Sarf shu narxda
     # baholanadi, shuning uchun eski partiya narxi keyingi sarfga ta'sir qiladi.
     unit_cost = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    # Ishlatilmay qolgan mahsulot ro'yxatdan yo'qoladi, lekin tarixi qoladi.
+    # Butunlay o'chirish faqat hech qachon ishlatilmagan yozuvga ruxsat
+    # etiladi — aks holda o'tgan oyning ombor hisoboti nomsiz qatorlarga
+    # to'lib ketardi.
+    archived = models.BooleanField(default=False)
 
     class Meta:
         ordering = ['name']
@@ -725,7 +808,7 @@ class StockMovement(models.Model):
     request_hash = models.CharField(max_length=64)
     # «refund» — qaytarilgan buyurtma masallig'i omborga qaytgani. U kirim
     # EMAS: xarid bo'lmagan, shuning uchun xarajat hisobiga ham tushmaydi.
-    kind = models.CharField(max_length=18, choices=[('receipt', 'Kirim'), ('consumption', 'Kunlik sarf'), ('sale_consumption', 'Sotuv bo‘yicha sarf'), ('refund', 'Qaytarish'), ('partner_sale', 'Hamkorga jo‘natildi')])
+    kind = models.CharField(max_length=18, choices=[('receipt', 'Kirim'), ('consumption', 'Kunlik sarf'), ('sale_consumption', 'Sotuv bo‘yicha sarf'), ('refund', 'Qaytarish'), ('partner_sale', 'Hamkorga jo‘natildi'), ('staff_meal', 'Hodimlar ovqati')])
     # Sotuvda ayriladigan miqdor retsept ulushidan chiqadi va u juda
     # mayda bo'lishi mumkin — ombor maydoni bilan bir xil aniqlikda.
     quantity = models.DecimalField(max_digits=14, decimal_places=6)

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ArrowDownToLine, ClipboardList, Coins, Minus, Package, Plus } from 'lucide-react'
+import { ArrowDownToLine, ClipboardList, Coins, Minus, Package, Pencil, Plus, Trash2 } from 'lucide-react'
 import { api, list, money, today } from '../api'
 import { useI18n } from '../i18n'
 import { useSession } from '../session'
@@ -9,7 +9,7 @@ import AppModal from '../components/AppModal'
 import StockUsagePanel from '../components/StockUsagePanel'
 import DailyUsagePanel from '../components/DailyUsagePanel'
 
-type Modal = '' | 'item' | 'receipt' | 'consumption'
+type Modal = '' | 'item' | 'receipt' | 'consumption' | 'edit' | 'remove'
 
 interface MovementForm {
   ingredient: number
@@ -30,7 +30,10 @@ interface ItemForm {
 }
 
 const modalTitle = (modal: Modal) =>
-  modal === 'item' ? 'Yangi mahsulot' : modal === 'receipt' ? 'Omborga kirim' : 'Kunlik haqiqiy sarf'
+  modal === 'item' ? 'Yangi mahsulot'
+    : modal === 'edit' ? 'Mahsulotni tahrirlash'
+      : modal === 'remove' ? 'Mahsulotni ro‘yxatdan chiqarish'
+        : modal === 'receipt' ? 'Omborga kirim' : 'Kunlik haqiqiy sarf'
 
 export default function InventoryPage() {
   const { t, tn } = useI18n()
@@ -68,6 +71,8 @@ export default function InventoryPage() {
     ingredient: 0, quantity: '', cost_total: '', note: '', kind: 'consumption', date: today(),
   })
   const [item, setItem] = useState<ItemForm>({ name: '', unit: 'kg', minimum: '0', unit_cost: '' })
+  // Tahrir va o'chirish uchun tanlangan mahsulot.
+  const [chosen, setChosen] = useState<Ingredient>()
 
   const updateForm = (patch: Partial<MovementForm>) => setForm(previous => ({ ...previous, ...patch }))
   const updateItem = (patch: Partial<ItemForm>) => setItem(previous => ({ ...previous, ...patch }))
@@ -110,6 +115,58 @@ export default function InventoryPage() {
       date: today(),
     })
     setItem({ name: '', unit: 'kg', minimum: '0', unit_cost: '' })
+  }
+
+  /** Tahrir oynasini mahsulotning hozirgi qiymatlari bilan ochadi. */
+  function edit(row: Ingredient) {
+    setChosen(row)
+    setItem({
+      name: row.name, unit: row.unit,
+      minimum: row.minimum, unit_cost: row.unit_cost,
+    })
+    setFormError('')
+    setModal('edit')
+  }
+
+  /** O'chirish tasdig'i. Nima bo'lishini oldindan aytib turadi. */
+  function confirmRemove(row: Ingredient) {
+    setChosen(row)
+    setFormError('')
+    setModal('remove')
+  }
+
+  async function saveEdit(event: FormEvent) {
+    event.preventDefault()
+    if (!chosen || busy) return
+    setBusy(true)
+    setFormError('')
+    try {
+      await api(`ingredients/${chosen.id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify({ ...item, unit_cost: item.unit_cost || '0' }),
+      })
+      setModal('')
+      await load()
+    } catch (exception) {
+      setFormError((exception as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function remove() {
+    if (!chosen || busy) return
+    setBusy(true)
+    setFormError('')
+    try {
+      await api(`ingredients/${chosen.id}/`, { method: 'DELETE' })
+      setModal('')
+      await load()
+    } catch (exception) {
+      setFormError((exception as Error).message)
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function save(event: FormEvent) {
@@ -245,6 +302,27 @@ export default function InventoryPage() {
                         >
                           <Minus size={14} />{t('Sarf')}
                         </button>
+                        {/* Nomini tuzatish va ro'yxatdan chiqarish — faqat
+                            egasiga: qoldiqqa tegmaydi, lekin ro'yxatni
+                            o'zgartiradi. */}
+                        {owner && (
+                          <>
+                            <button
+                              className="table-action"
+                              title={t('{name} ni tahrirlash', { name: row.name })}
+                              onClick={() => edit(row)}
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button
+                              className="table-action"
+                              title={t('{name} ni ro‘yxatdan chiqarish', { name: row.name })}
+                              onClick={() => confirmRemove(row)}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -292,7 +370,11 @@ export default function InventoryPage() {
       </>
       )}
 
-      <AppModal open={!!modal} title={t(modalTitle(modal))} onClose={() => { if (!busy) setModal('') }}>
+      <AppModal
+        open={modal === 'item' || modal === 'receipt' || modal === 'consumption'}
+        title={t(modalTitle(modal))}
+        onClose={() => { if (!busy) setModal('') }}
+      >
         <form onSubmit={save}>
           <fieldset disabled={busy || !!pending}>
             {modal === 'item' ? (
@@ -414,6 +496,114 @@ export default function InventoryPage() {
             {busy ? t('Saqlanmoqda…') : pending ? t('Oldingi amalni tekshirish') : t('Hisobga olish')}
           </button>
         </form>
+      </AppModal>
+
+      {/* ── Tahrirlash ── */}
+      <AppModal
+        open={modal === 'edit'}
+        title={t('{name} · tahrirlash', { name: chosen?.name || '' })}
+        onClose={() => { if (!busy) setModal('') }}
+      >
+        <form onSubmit={saveEdit}>
+          <label>
+            {t('Mahsulot nomi')}
+            <input
+              value={item.name}
+              onChange={event => updateItem({ name: event.target.value })}
+              required
+              maxLength={100}
+              autoFocus
+            />
+            <small className="field-hint">
+              {t('Nom o‘zgarsa retseptlar ham yangi nom bilan ko‘rinadi — bog‘lanish uzilmaydi.')}
+            </small>
+          </label>
+          <div className="form-row">
+            <label>
+              {t('Birlik')}
+              <select
+                value={item.unit}
+                onChange={event => updateItem({ unit: event.target.value })}
+                disabled={chosen?.has_history}
+              >
+                <option value="kg">{t('kg')}</option>
+                <option value="l">{t('l')}</option>
+                <option value="dona">{t('dona')}</option>
+              </select>
+              {chosen?.has_history && (
+                <small className="field-hint">
+                  {t('Kirim-chiqim tarixi bor — birlikni o‘zgartirib bo‘lmaydi.')}
+                </small>
+              )}
+            </label>
+            <label>
+              {t('Minimal qoldiq')}
+              <input
+                value={item.minimum}
+                onChange={event => updateItem({ minimum: event.target.value })}
+                type="number"
+                min="0"
+                step="0.001"
+                required
+              />
+            </label>
+          </div>
+          <label>
+            {t('1 {unit} narxi, so‘m', { unit: item.unit })}
+            <input
+              value={item.unit_cost}
+              onChange={event => updateItem({ unit_cost: event.target.value })}
+              type="number"
+              min="0"
+              step="1"
+            />
+            <small className="field-hint">
+              {t('Narx o‘zgarsa shu mahsulot ishlatilgan retseptlar tannarxi darhol qayta hisoblanadi.')}
+            </small>
+          </label>
+          <p className="data-note">
+            {t('Qoldiq bu yerdan o‘zgarmaydi — u faqat kirim va sarf orqali harakatlanadi.')}
+          </p>
+          {formError && <p className="alert error">{formError}</p>}
+          <button className="button primary full" disabled={busy}>
+            {busy ? t('Saqlanmoqda…') : t('Saqlash')}
+          </button>
+        </form>
+      </AppModal>
+
+      {/* ── Ro'yxatdan chiqarish ── */}
+      <AppModal
+        open={modal === 'remove'}
+        title={t('{name} · ro‘yxatdan chiqarish', { name: chosen?.name || '' })}
+        onClose={() => { if (!busy) setModal('') }}
+      >
+        {/* Tugmani bosishdan oldin nima bo'lishi aytiladi: retseptdagi
+            mahsulot umuman chiqmaydi, tarixlisi esa arxivlanadi. */}
+        {chosen?.in_use ? (
+          <p className="alert error">
+            {t('Bu mahsulot retseptda ishlatilyapti — avval retseptdan olib tashlang, so‘ng ro‘yxatdan chiqaring.')}
+          </p>
+        ) : chosen?.has_history ? (
+          <p className="alert">
+            {t('Bu mahsulotda kirim-chiqim tarixi bor, shuning uchun u o‘chirilmaydi — ro‘yxatdan olinadi. Eski hisobotlarda nomi va harakatlari joyida qoladi.')}
+          </p>
+        ) : (
+          <p className="alert">
+            {t('Bu mahsulot hech qachon ishlatilmagan — butunlay o‘chiriladi.')}
+          </p>
+        )}
+        {!!chosen && Number(chosen.quantity) !== 0 && (
+          <p className="data-note">
+            {t('Hozirgi qoldiq: {amount} {unit}. U yo‘qolmaydi va ombor qiymatida turaveradi.', {
+              amount: money(chosen.quantity), unit: t(chosen.unit),
+            })}
+          </p>
+        )}
+        {formError && <p className="alert error">{formError}</p>}
+        <button className="button danger full" disabled={busy || chosen?.in_use} onClick={remove}>
+          {busy ? t('Saqlanmoqda…')
+            : chosen?.has_history ? t('Ro‘yxatdan chiqarish') : t('O‘chirish')}
+        </button>
       </AppModal>
     </>
   )

@@ -89,6 +89,28 @@ RU = {
         'Для «{name}» не задана цена партнёра — отправить нельзя. Цену по договору вносит суперадмин.',
     '«{name}» — {sent} ta jo‘natilgan, {sold} ta sotilgan deb bo‘lmaydi.':
         '«{name}» — отправлено {sent}, продано {sold} быть не может.',
+    'Arxivlangan taomga bonus belgilab bo‘lmaydi.':
+        'Нельзя назначить бонус на архивное блюдо.',
+    'Bonus qoidasi topilmadi.':
+        'Правило бонуса не найдено.',
+    'Faqat bugungi yozuvni o‘chirish mumkin.':
+        'Удалить можно только сегодняшнюю запись.',
+    'Kelajakdagi sana mumkin emas.':
+        'Будущая дата недопустима.',
+    'Qoida o‘chirildi.':
+        'Правило удалено.',
+    'Saqlandi. Yangi qoida shu paytdan keyingi buyurtmalarga qo‘llanadi.':
+        'Сохранено. Новое правило применяется к заказам с этого момента.',
+    'Taom topilmadi.':
+        'Блюдо не найдено.',
+    'Yozuv o‘chirildi va masalliq omborga qaytarildi.':
+        'Запись удалена, продукты вернулись на склад.',
+    'Yozuv topilmadi.':
+        'Запись не найдена.',
+    'Bu mahsulotda kirim-chiqim tarixi bor — o‘lchov birligini o‘zgartirib bo‘lmaydi. Yangi nom bilan yangi mahsulot oching.':
+        'По этому продукту есть история прихода и расхода — единицу измерения изменить нельзя. Заведите новый продукт с другим названием.',
+    '«{name}» {recipes} retseptida ishlatilyapti — avval retseptdan olib tashlang.':
+        '«{name}» используется в рецепте {recipes} — сначала уберите его оттуда.',
     'Xodim topilmadi.': 'Сотрудник не найден.',
     'Kategoriya topilmadi.': 'Категория не найдена.',
     'Bu qator hisobda yo‘q.': 'Этой строки нет в счёте.',
@@ -365,6 +387,28 @@ EN = {
         'There is no partner price for “{name}”, so it cannot be sent. The superadmin enters the contract price.',
     '«{name}» — {sent} ta jo‘natilgan, {sold} ta sotilgan deb bo‘lmaydi.':
         '“{name}” — {sent} were sent, {sold} sold is impossible.',
+    'Arxivlangan taomga bonus belgilab bo‘lmaydi.':
+        'A bonus cannot be set on an archived dish.',
+    'Bonus qoidasi topilmadi.':
+        'The bonus rule was not found.',
+    'Faqat bugungi yozuvni o‘chirish mumkin.':
+        'Only today’s record can be deleted.',
+    'Kelajakdagi sana mumkin emas.':
+        'A future date is not allowed.',
+    'Qoida o‘chirildi.':
+        'The rule was deleted.',
+    'Saqlandi. Yangi qoida shu paytdan keyingi buyurtmalarga qo‘llanadi.':
+        'Saved. The new rule applies to orders from this moment on.',
+    'Taom topilmadi.':
+        'Dish not found.',
+    'Yozuv o‘chirildi va masalliq omborga qaytarildi.':
+        'The record was deleted and the ingredients went back to the warehouse.',
+    'Yozuv topilmadi.':
+        'Record not found.',
+    'Bu mahsulotda kirim-chiqim tarixi bor — o‘lchov birligini o‘zgartirib bo‘lmaydi. Yangi nom bilan yangi mahsulot oching.':
+        'This product has a movement history, so its unit cannot be changed. Create a new product under a new name instead.',
+    '«{name}» {recipes} retseptida ishlatilyapti — avval retseptdan olib tashlang.':
+        '“{name}” is used in the {recipes} recipe — remove it from there first.',
     'Xodim topilmadi.': 'Employee not found.',
     'Kategoriya topilmadi.': 'Category not found.',
     'Bu qator hisobda yo‘q.': 'That line is not on this bill.',

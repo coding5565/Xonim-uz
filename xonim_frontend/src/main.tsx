@@ -37,6 +37,8 @@ const WaitersPage = lazy(() => import('./pages/WaitersPage'))
 const PrepPage = lazy(() => import('./pages/PrepPage'))
 const PartnersPage = lazy(() => import('./pages/PartnersPage'))
 const PartnerPage = lazy(() => import('./pages/PartnerPage'))
+const BonusesPage = lazy(() => import('./pages/BonusesPage'))
+const StaffMealsPage = lazy(() => import('./pages/StaffMealsPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 
 /** Resolves the session before any protected page renders. */
@@ -119,6 +121,10 @@ createRoot(document.getElementById('app')!).render(
                   hisobot va pul o'sha yerda individual qilinadi. */}
               <Route path="/hamkorlar" element={<Allow roles={sales}><PartnersPage /></Allow>} />
               <Route path="/hamkorlar/:partnerId" element={<Allow roles={sales}><PartnerPage /></Allow>} />
+              {/* Bonuslar va hodimlar ovqati — ikkalasida ham ovqat chiqadi,
+                  pul kelmaydi. Kassir ham ko'radi: yozuvni u kiritadi. */}
+              <Route path="/bonuslar" element={<Allow roles={sales}><BonusesPage /></Allow>} />
+              <Route path="/hodimlar-ovqati" element={<Allow roles={sales}><StaffMealsPage /></Allow>} />
               <Route path="/settings" element={<Allow roles={staffed}><SettingsPage /></Allow>} />
             </Route>
           </Route>

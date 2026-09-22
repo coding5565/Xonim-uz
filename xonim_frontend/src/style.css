@@ -1341,3 +1341,11 @@ button.mark.tap:disabled{opacity:.5;cursor:default}
   .report-line>span:last-child{grid-column:1/3;text-align:left}
   .price-row{grid-template-columns:minmax(0,1fr) 104px}
 }
+
+/* Hodimlar ovqatida taom bosiladigan katak bo'lib turadi: ro'yxatdan
+   tanlashdan ko'ra tezroq va menyu ko'rinishiga o'xshaydi. */
+.meal-tile{text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:5px;align-items:flex-start}
+.meal-tile:hover{border-color:var(--green);background:#f3f8f4}
+.theme-dark .meal-tile:hover{background:#1b2a24}
+.meal-grid{margin:0 21px 21px}
+@media(max-width:700px){.meal-grid{margin:0 15px 16px}}

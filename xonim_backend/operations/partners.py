@@ -53,7 +53,7 @@ from .models import (
     PartnerSettlement,
     ShiftClose,
 )
-from .money import ZERO, money
+from .money import ZERO, DateWindow, money
 from .services import (
     Conflict,
     audit,
@@ -693,18 +693,10 @@ class PartnerSettlementVoidView(APIView):
             deliveries_for(request.user.branch, pk=settlement.delivery_id).first()))
 
 
-class PartnerBoardFilters(serializers.Serializer):
-    start = serializers.DateField(required=False)
-    end = serializers.DateField(required=False)
-    partner = serializers.IntegerField(min_value=1, required=False)
+class PartnerBoardFilters(DateWindow):
+    """Sana oralig'i va ixtiyoriy hamkor filtri."""
 
-    def validate(self, attrs):
-        today = timezone.localdate()
-        attrs['end'] = attrs.get('end', today)
-        attrs['start'] = attrs.get('start', attrs['end'])
-        if attrs['start'] > attrs['end']:
-            raise serializers.ValidationError(_('Boshlanish sanasi tugash sanasidan keyin bo‘lishi mumkin emas.'))
-        return attrs
+    partner = serializers.IntegerField(min_value=1, required=False)
 
 
 class PartnerBoardView(APIView):

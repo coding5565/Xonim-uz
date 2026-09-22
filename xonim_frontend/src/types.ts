@@ -68,7 +68,21 @@ export interface Order {
   voided_by_name: string
 }
 export interface Expense { id: number; category: string; purpose: string; recipient: string; amount: string; payment_method: string; date: string; actor_name: string }
-export interface Ingredient { id: number; name: string; unit: string; quantity: string; minimum: string; unit_cost: string; stock_value: string }
+export interface Ingredient {
+  id: number
+  name: string
+  unit: string
+  quantity: string
+  minimum: string
+  unit_cost: string
+  stock_value: string
+  /** Ro'yxatdan olingan: tarixi qoladi, lekin ro'yxatda ko'rinmaydi. */
+  archived: boolean
+  /** Retseptda ishlatilyapti — o'chirib bo'lmaydi. */
+  in_use: boolean
+  /** Kirim-chiqim tarixi bor — o'chirish o'rniga arxivlanadi. */
+  has_history: boolean
+}
 export interface Movement { id: number; ingredient_name: string; unit: string; kind: string; quantity: string; unit_cost: string; cost_total: string; date: string; note: string }
 export interface Dashboard { revenue: string; expenses: string; net_cash: string; cost: string; gross_profit: string; gross_margin: string; paid_count: number; open_count: number; previous_revenue: string; by_method: MethodRevenue[]; low_stock: number; trend: {date: string; revenue: string; expenses: string}[]; period: {kind: 'days' | 'month'; start: string; end: string}; months: string[]; expense_categories: {category: string; total: string}[]; recent_orders: Order[]; as_of: string; basis: string }
 export interface SalesReport { filters:{start:string;end:string;group:'day'|'month';category:number|null;dish:number|null}; summary:{revenue:string;cost:string;gross_profit:string;gross_margin:string;orders:number;items:number;average_check:string;by_method:MethodRevenue[]}; trend:{date:string;revenue:string;orders:number;items:number}[]; categories:{category_id:number;category:string;quantity:number;revenue:string;cost:string;gross_profit:string;orders:number}[]; dishes:{dish_id:number;dish:string;category:string;quantity:number;revenue:string;cost:string;gross_profit:string;orders:number}[] }
@@ -242,6 +256,8 @@ export interface Finance {
     partner_cogs: string
     partner_profit: string
     partner_margin: string
+    /** Hodimlar yegan ovqat: tushumsiz tannarx. */
+    staff_meals: string
     /** Kassa va hamkor tushumi birga — `net_margin` ning maxraji. */
     total_revenue: string
     net_profit: string
@@ -288,6 +304,16 @@ export interface Finance {
   }
   /** Ofitsiant xizmat haqi: yig'ilgan, berilgan va qolgan. */
   service: { collected: string; paid: string; payments: number; owed: string; share: string }
+  /** Hodimlar ovqati: pul emas, lekin ombordan chiqqan taom. */
+  staff_meals: {
+    /** Foydadan chiqqan haqiqiy raqam. */
+    cost: string
+    /** Menyu bo'yicha qiymati — hech qanday jamiga kirmaydi. */
+    value: string
+    portions: number
+    records: number
+    share: string
+  }
   /** Hamkorlar: jo'natilgani, tushgani va qolgan qarz. */
   partners: {
     revenue: string
@@ -642,4 +668,69 @@ export interface PartnerBoard {
   partners: PartnerBoardRow[]
   deliveries: PartnerDelivery[]
   payment_methods: { method: string; label: string }[]
+}
+
+/* ── Aksiya bonusi: buyurtmada shu taom bo'lsa, ustiga tekin ─────────── */
+
+export interface BonusRule {
+  id: number
+  channel: SaleChannel
+  channel_label: string
+  dish: number
+  dish_name: string
+  menu_price: string
+  /** Nechta tekin ketishi. Mijoz nechta olganiga bog'liq emas. */
+  free_quantity: number
+  active: boolean
+  archived: boolean
+  updated_at: string | null
+}
+export interface BonusReport {
+  filters: { start: string; end: string }
+  summary: {
+    portions: number
+    /** Menyu narxidagi qiymat: qancha pullik sovg'a qilindi. */
+    value: string
+    /** Bizga aslida nechchiga tushgani — foydadan chiqqan raqam. */
+    cost: string
+    orders: number
+  }
+  dishes: { dish: number; name: string; portions: number; orders: number; value: string; cost: string }[]
+  rows: {
+    id: number
+    order: number
+    name: string
+    quantity: number
+    value: string
+    cost: string
+    channel: SaleChannel
+    channel_label: string
+    paid_at: string | null
+  }[]
+  rules: BonusRule[]
+}
+
+/* ── Hodimlar ovqati: pul yo'q, lekin ovqat bor ──────────────────────── */
+
+export interface StaffMeal {
+  id: number
+  dish: number
+  name: string
+  quantity: number
+  menu_price: string
+  /** Menyu narxidagi qiymat — hech qanday jamiga kirmaydi. */
+  value: string
+  /** Foydadan chiqqan haqiqiy raqam. */
+  cost_total: string
+  /** Kim yegani. Bo'sh bo'lmaydi. */
+  note: string
+  date: string
+  actor_name: string
+  created_at: string
+}
+export interface StaffMealBoard {
+  filters: { start: string; end: string }
+  summary: { portions: number; cost: string; value: string; records: number }
+  dishes: { dish: number; name: string; portions: number; cost: string }[]
+  rows: StaffMeal[]
 }

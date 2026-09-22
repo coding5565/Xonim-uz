@@ -105,6 +105,29 @@ def day_window(start, end=None):
     )
 
 
+class DateWindow(serializers.Serializer):
+    """«start» va «end» — berilmasa bugun. Teskari oraliq rad etiladi."""
+
+    start = serializers.DateField(required=False)
+    end = serializers.DateField(required=False)
+
+    def validate(self, attrs):
+        today = timezone.localdate()
+        attrs['end'] = attrs.get('end', today)
+        attrs['start'] = attrs.get('start', attrs['end'])
+        if attrs['start'] > attrs['end']:
+            raise serializers.ValidationError(
+                _('Boshlanish sanasi tugash sanasidan keyin bo‘lishi mumkin emas.'))
+        return attrs
+
+
+def period(params):
+    """So'rov parametrlaridan tekshirilgan sana oralig'ini beradi."""
+    window = DateWindow(data=params)
+    window.is_valid(raise_exception=True)
+    return window.validated_data
+
+
 def parse_month(value):
     """«YYYY-MM» matnini oyning birinchi kuniga aylantiradi.
 

@@ -134,7 +134,10 @@ def receipt_bytes(order, *, open_drawer=False):
     ticket.rule()
 
     for line in order.lines.all():
-        name = line.name + ('   (qo‘shimcha)' if line.batch_key else '')
+        # Bonus qatori chekda ko'rinib tursin: mijoz tekin nima olganini
+        # bilishi kerak, aks holda «0 so'm» tushunarsiz qator bo'lib qolardi.
+        name = line.name + (
+            '   (BONUS)' if line.bonus else '   (qo‘shimcha)' if line.batch_key else '')
         ticket.text(name)
         ticket.row(f'   {line.quantity} x {som_text(line.price)}',
                    som_text(Decimal(line.price) * line.quantity))
@@ -205,7 +208,9 @@ def prep_ticket_bytes(order, station, lines, *, addition=False):
     ticket.rule('=')
 
     for line in lines:
-        ticket.raw(SIZE_BIG).text(f'{line.quantity} x {line.name}').raw(SIZE_NORMAL)
+        ticket.raw(SIZE_BIG).text(
+            f'{line.quantity} x {line.name}' + (' (BONUS)' if line.bonus else ''),
+        ).raw(SIZE_NORMAL)
         if line.note:
             ticket.raw(BOLD_ON).text(f'   >> {line.note}').raw(BOLD_OFF)
         ticket.text()

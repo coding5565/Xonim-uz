@@ -22,6 +22,7 @@ from users.models import AuditEvent, Branch, User
 from .models import (
     AssistantChat,
     AssistantMessage,
+    BonusRule,
     DailyUsage,
     DishPrep,
     Expense,
@@ -37,6 +38,7 @@ from .models import (
     RecipeLine,
     SalaryPayment,
     ShiftClose,
+    StaffMeal,
     StockMovement,
     Table,
     Waiter,
@@ -5187,3 +5189,546 @@ class PartnerDeliveryTests(TestCase):
         self.assertEqual(data['profit']['total_revenue'], '276000.00')
         # Ko'prik yopiladi.
         self.assertEqual(Decimal(data['cash']['bridge']), Decimal(data['cash']['net']))
+
+
+class BonusRuleTests(TestCase):
+    """Aksiya bonusi: Uzumda «Bozor honim» buyurtma qilinsa, ustiga tekin.
+
+    Uchta qoida qo'riqlanadi: mijoz nechta olganidan qat'i nazar aynan
+    bittasi qo'shiladi, boshqa taom bonusni uyg'otmaydi, va tekin porsiya
+    tushumga hech qachon qo'shilmaydi — lekin tannarxdan ham qochib
+    qutulmaydi.
+    """
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.category = Category.objects.create(branch=self.branch, name='Taom')
+        self.bozor = Dish.objects.create(branch=self.branch, category=self.category, name='Bozor honim', price=Decimal('30000'))
+        self.orama = Dish.objects.create(branch=self.branch, category=self.category, name='Orama', price=Decimal('20000'))
+        self.qurtoba = Dish.objects.create(branch=self.branch, category=self.category, name='Qurtoba', price=Decimal('25000'))
+        # Bozor honimning retsepti bor: tekin porsiya ham ombordan yeydi.
+        self.flour = Ingredient.objects.create(
+            branch=self.branch, name='Un', unit='kg', quantity=Decimal('500'), unit_cost=Decimal('10000'))
+        recipe = Recipe.objects.create(branch=self.branch, dish=self.bozor, name='Bozor honim', yield_quantity=1)
+        RecipeLine.objects.create(
+            recipe=recipe, ingredient=self.flour, quantity=Decimal('1'), batch_cost=Decimal('10000'))
+
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+        self.rule = BonusRule.objects.create(
+            branch=self.branch, channel='uzum', dish=self.bozor, free_quantity=1)
+        # Tayyor porsiyasi yo'q taom sotilmaydi, shuning uchun har bir taomga
+        # bugungi partiya yoziladi. Chegarani sinaydigan testlar buni o'zi
+        # qayta belgilaydi.
+        for dish in (self.bozor, self.orama, self.qurtoba):
+            self.prep(dish, 500)
+
+    def prep(self, dish, quantity):
+        DishPrep.objects.filter(branch=self.branch, dish=dish, date=timezone.localdate()).delete()
+        return DishPrep.objects.create(
+            branch=self.branch, actor=self.owner,
+            dish=dish, quantity=quantity, date=timezone.localdate(), note='')
+
+    def order(self, lines, channel='uzum', method='uzum'):
+        return self.client.post('/api/v1/orders/', {
+            'key': str(uuid4()), 'table': '', 'waiter': '',
+            'channel': channel, 'payment_method': method,
+            'lines': lines,
+        }, format='json')
+
+    def line(self, dish, quantity, note=''):
+        return {'dish': dish.id, 'quantity': quantity, 'note': note}
+
+    def bonus_lines(self, order_id):
+        return list(OrderLine.objects.filter(order_id=order_id, bonus=True))
+
+    # --- Qoidaning o'zi ---
+
+    def test_one_bozor_honim_goes_out_as_two(self):
+        response = self.order([self.line(self.bozor, 1)])
+        self.assertEqual(response.status_code, 201, response.data)
+        free = self.bonus_lines(response.data['id'])
+        self.assertEqual(len(free), 1)
+        self.assertEqual(free[0].quantity, 1)
+        self.assertEqual(free[0].name, 'Bozor honim')
+        # Oshxonadan jami 2 porsiya chiqadi.
+        self.assertEqual(
+            sum(line.quantity for line in OrderLine.objects.filter(order_id=response.data['id'])), 2)
+
+    def test_ten_bozor_honim_go_out_as_eleven_not_twenty(self):
+        # Egasining aniq talabi: nechta olsa ham ustiga BITTA qo'shiladi.
+        response = self.order([self.line(self.bozor, 10)])
+        free = self.bonus_lines(response.data['id'])
+        self.assertEqual(len(free), 1)
+        self.assertEqual(free[0].quantity, 1)
+        self.assertEqual(
+            sum(line.quantity for line in OrderLine.objects.filter(order_id=response.data['id'])), 11)
+
+    def test_an_order_without_the_bonus_dish_gets_nothing_free(self):
+        response = self.order([self.line(self.qurtoba, 3)])
+        self.assertEqual(self.bonus_lines(response.data['id']), [])
+
+    def test_another_dish_never_triggers_the_bonus(self):
+        # Qurtoba nechta bo'lsa ham bonus bermaydi.
+        response = self.order([self.line(self.qurtoba, 10), self.line(self.orama, 10)])
+        self.assertEqual(self.bonus_lines(response.data['id']), [])
+
+    def test_the_bonus_fires_even_when_other_dishes_are_in_the_basket(self):
+        # «1 ta bozor honim va 3 ta orama» — bozor honim borligi yetarli.
+        response = self.order([self.line(self.bozor, 1), self.line(self.orama, 3)])
+        free = self.bonus_lines(response.data['id'])
+        self.assertEqual(len(free), 1)
+        self.assertEqual(free[0].dish_id, self.bozor.id)
+
+    def test_the_bonus_only_fires_on_the_channel_it_was_set_for(self):
+        response = self.order([self.line(self.bozor, 2)], channel='hall', method='cash')
+        self.assertEqual(self.bonus_lines(response.data['id']), [])
+
+    def test_a_switched_off_rule_gives_nothing(self):
+        self.rule.active = False
+        self.rule.save(update_fields=['active'])
+        response = self.order([self.line(self.bozor, 2)])
+        self.assertEqual(self.bonus_lines(response.data['id']), [])
+
+    # --- Pul ---
+
+    def test_the_free_portion_never_adds_to_the_bill(self):
+        response = self.order([self.line(self.bozor, 1)])
+        # Mijoz bittasining pulini to'laydi, ikkitasini oladi.
+        self.assertEqual(response.data['total'], '30000.00')
+        free = self.bonus_lines(response.data['id'])[0]
+        self.assertEqual(free.price, Decimal('0'))
+        # Menyu narxi esa saqlanadi: qancha pullik sovg'a qilingani shundan.
+        self.assertEqual(free.menu_price, Decimal('30000'))
+
+    def test_the_free_portion_never_adds_to_the_revenue(self):
+        self.order([self.line(self.bozor, 10)])
+        finance = self.client.get('/api/v1/finance/').data
+        self.assertEqual(finance['profit']['revenue'], '300000.00')
+
+    def test_the_free_portion_costs_us_its_ingredients(self):
+        self.order([self.line(self.bozor, 10)])
+        # 11 porsiya × 1 kg = 11 kg ombordan chiqadi, 10 emas.
+        self.flour.refresh_from_db()
+        self.assertEqual(self.flour.quantity, Decimal('489.000000'))
+        finance = self.client.get('/api/v1/finance/').data
+        # Tannarx ham 11 porsiyaniki: tekin ovqat bepul emas.
+        self.assertEqual(finance['profit']['cogs'], '110000.00')
+
+    def test_the_bonus_leaves_the_warehouse_gap_closed(self):
+        # Eng muhim tekshiruv: retsept tomoni va ombor tomoni teng qolsin.
+        self.order([self.line(self.bozor, 7)])
+        finance = self.client.get('/api/v1/finance/').data
+        self.assertEqual(finance['stock']['gap'], '0.00')
+
+    def test_refunding_an_order_brings_the_bonus_ingredients_back_too(self):
+        response = self.order([self.line(self.bozor, 3)])
+        self.flour.refresh_from_db()
+        self.assertEqual(self.flour.quantity, Decimal('496.000000'))
+        self.client.post(f'/api/v1/orders/{response.data["id"]}/refund/', {
+            'reason': 'Mijoz olmadi',
+        }, format='json')
+        self.flour.refresh_from_db()
+        # 4 porsiyaning hammasi qaytadi — bonusniki ham.
+        self.assertEqual(self.flour.quantity, Decimal('500.000000'))
+
+    # --- Tayyor taomlar ---
+
+    def test_the_kitchen_must_have_enough_prepared_for_the_free_portion_too(self):
+        # 10 ta tayyor bo'lsa, 10 ta sotib ustiga bittasini qo'shib bo'lmaydi:
+        # o'n birinchi porsiya yo'q joydan chiqmaydi.
+        self.prep(self.bozor, 10)
+        response = self.order([self.line(self.bozor, 10)])
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('prepared', response.data)
+
+    def test_eleven_prepared_portions_let_ten_be_sold_with_the_bonus(self):
+        self.prep(self.bozor, 11)
+        response = self.order([self.line(self.bozor, 10)])
+        self.assertEqual(response.status_code, 201, response.data)
+
+    # --- Ochiq hisob ---
+
+    def test_adding_the_bonus_dish_to_an_open_bill_gives_one_free_portion(self):
+        opened = self.order([self.line(self.orama, 1)], method='')
+        self.assertEqual(opened.status_code, 201)
+        response = self.client.post(f'/api/v1/orders/{opened.data["id"]}/lines/', {
+            'key': str(uuid4()), 'lines': [self.line(self.bozor, 2)],
+        }, format='json')
+        self.assertEqual(response.status_code, 200)
+        free = self.bonus_lines(opened.data['id'])
+        self.assertEqual(len(free), 1)
+        # Qo'shimcha taloni partiya kaliti bo'yicha yig'iladi — bonusda ham
+        # kalit bo'lishi shart, aks holda oshxona uni ko'rmasdi.
+        self.assertIsNotNone(free[0].batch_key)
+
+    def test_a_second_addition_does_not_give_a_second_bonus(self):
+        opened = self.order([self.line(self.bozor, 1)], method='')
+        self.client.post(f'/api/v1/orders/{opened.data["id"]}/lines/', {
+            'key': str(uuid4()), 'lines': [self.line(self.bozor, 5)],
+        }, format='json')
+        # Bitta hisobga bitta bonus: qo'shgan sayin yangisi tug'ilmaydi.
+        self.assertEqual(len(self.bonus_lines(opened.data['id'])), 1)
+
+    def test_a_retried_addition_writes_nothing_twice(self):
+        opened = self.order([self.line(self.orama, 1)], method='')
+        key = str(uuid4())
+        body = {'key': key, 'lines': [self.line(self.bozor, 2)]}
+        self.client.post(f'/api/v1/orders/{opened.data["id"]}/lines/', body, format='json')
+        self.client.post(f'/api/v1/orders/{opened.data["id"]}/lines/', body, format='json')
+        self.assertEqual(len(self.bonus_lines(opened.data['id'])), 1)
+        self.assertEqual(
+            OrderLine.objects.filter(order_id=opened.data['id'], dish=self.bozor, bonus=False).count(), 1)
+
+    # --- Qoidani boshqarish ---
+
+    def test_changing_the_rule_tomorrow_never_rewrites_a_sold_order(self):
+        response = self.order([self.line(self.bozor, 1)])
+        self.client.put('/api/v1/bonus-rules/', {
+            'channel': 'uzum', 'dish': self.bozor.id, 'free_quantity': 5, 'active': True,
+        }, format='json')
+        free = self.bonus_lines(response.data['id'])
+        self.assertEqual(free[0].quantity, 1)
+
+    def test_only_the_owner_may_change_the_rule(self):
+        self.client.force_authenticate(self.cashier)
+        response = self.client.put('/api/v1/bonus-rules/', {
+            'channel': 'uzum', 'dish': self.bozor.id, 'free_quantity': 2, 'active': True,
+        }, format='json')
+        self.assertEqual(response.status_code, 403)
+
+    def test_a_rule_cannot_point_at_an_archived_dish(self):
+        self.orama.archived = True
+        self.orama.save(update_fields=['archived'])
+        response = self.client.put('/api/v1/bonus-rules/', {
+            'channel': 'uzum', 'dish': self.orama.id, 'free_quantity': 1, 'active': True,
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+
+    # --- Hisobot ---
+
+    def test_the_bonus_report_counts_the_portions_and_what_they_cost(self):
+        self.order([self.line(self.bozor, 3)])
+        self.order([self.line(self.bozor, 1)])
+        response = self.client.get('/api/v1/bonuses/')
+        self.assertEqual(response.status_code, 200)
+        summary = response.data['summary']
+        # Ikkita buyurtma, har birida bittadan tekin porsiya.
+        self.assertEqual(summary['portions'], 2)
+        self.assertEqual(summary['orders'], 2)
+        # Qiymati menyu narxida, tannarxi retsept bo'yicha.
+        self.assertEqual(summary['value'], '60000.00')
+        self.assertEqual(summary['cost'], '20000.00')
+        self.assertEqual(response.data['dishes'][0]['name'], 'Bozor honim')
+        self.assertEqual(response.data['dishes'][0]['portions'], 2)
+
+    def test_the_cashier_can_read_the_bonus_report(self):
+        self.client.force_authenticate(self.cashier)
+        self.assertEqual(self.client.get('/api/v1/bonuses/').status_code, 200)
+
+    def test_the_bonus_shows_up_in_the_activity_log(self):
+        self.order([self.line(self.bozor, 1)])
+        self.assertTrue(AuditEvent.objects.filter(action='order.bonus').exists())
+
+
+class StaffMealTests(TestCase):
+    """Hodimlar ovqati: pul yo'q, lekin ovqat bor.
+
+    Yozuv hech kimning oyligiga tegmaydi — u faqat «oyiga qancha ketyapti»
+    degan savolga javob beradi. Lekin masalliq haqiqatda chiqadi, shuning
+    uchun ombor ham, foyda ham buni sezishi shart.
+    """
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.category = Category.objects.create(branch=self.branch, name='Taom')
+        self.somsa = Dish.objects.create(branch=self.branch, category=self.category, name='Somsa', price=Decimal('9000'))
+        self.flour = Ingredient.objects.create(
+            branch=self.branch, name='Un', unit='kg', quantity=Decimal('100'), unit_cost=Decimal('10000'))
+        recipe = Recipe.objects.create(branch=self.branch, dish=self.somsa, name='Somsa', yield_quantity=10)
+        RecipeLine.objects.create(
+            recipe=recipe, ingredient=self.flour, quantity=Decimal('1'), batch_cost=Decimal('10000'))
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+        self.today = timezone.localdate()
+
+    def eat(self, quantity=5, note='Oshpaz Aziz', client=None, key=None, day=None):
+        body = {'key': key or str(uuid4()), 'dish': self.somsa.id, 'quantity': quantity, 'note': note}
+        if day:
+            body['date'] = str(day)
+        return (client or self.client).post('/api/v1/staff-meals/', body, format='json')
+
+    # --- Yozuvning o'zi ---
+
+    def test_a_staff_meal_records_the_dish_and_who_ate_it(self):
+        response = self.eat(quantity=2, note='Oshpaz Aziz va Dilnoza uchun')
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['name'], 'Somsa')
+        self.assertEqual(response.data['quantity'], 2)
+        self.assertEqual(response.data['note'], 'Oshpaz Aziz va Dilnoza uchun')
+        # Menyu qiymati: sotilganda qancha bo'lardi.
+        self.assertEqual(response.data['value'], '18000.00')
+
+    def test_a_staff_meal_needs_to_say_who_ate_it(self):
+        response = self.client.post('/api/v1/staff-meals/', {
+            'key': str(uuid4()), 'dish': self.somsa.id, 'quantity': 1, 'note': '',
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('note', response.data)
+
+    def test_the_cashier_can_record_a_staff_meal(self):
+        self.assertEqual(self.eat(client=self._as(self.cashier)).status_code, 201)
+
+    def test_two_taps_record_one_staff_meal(self):
+        key = str(uuid4())
+        first = self.eat(key=key)
+        second = self.eat(key=key)
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(StaffMeal.objects.count(), 1)
+        # Masalliq ham bir marta ayriladi.
+        self.flour.refresh_from_db()
+        self.assertEqual(self.flour.quantity, Decimal('99.500000'))
+
+    def test_a_future_date_is_refused(self):
+        response = self.eat(day=self.today + timedelta(days=1))
+        self.assertEqual(response.status_code, 400)
+
+    # --- Ombor va foyda ---
+
+    def test_a_staff_meal_takes_the_ingredients_out_of_the_warehouse(self):
+        self.eat(quantity=5)
+        self.flour.refresh_from_db()
+        # 5 porsiya ÷ 10 chiqim × 1 kg = 0.5 kg.
+        self.assertEqual(self.flour.quantity, Decimal('99.500000'))
+        self.assertTrue(StockMovement.objects.filter(kind='staff_meal').exists())
+
+    def test_a_staff_meal_never_touches_the_revenue(self):
+        self.eat(quantity=5)
+        finance = self.client.get('/api/v1/finance/').data
+        self.assertEqual(finance['profit']['revenue'], '0.00')
+        # Sotuv tannarxi ham tegilmaydi: bu sotuv emas.
+        self.assertEqual(finance['profit']['cogs'], '0.00')
+
+    def test_a_staff_meal_lowers_the_profit_by_its_cost(self):
+        self.eat(quantity=5)
+        finance = self.client.get('/api/v1/finance/').data
+        self.assertEqual(finance['profit']['staff_meals'], '5000.00')
+        self.assertEqual(finance['profit']['net_profit'], '-5000.00')
+        self.assertEqual(finance['staff_meals']['portions'], 5)
+        # Menyu qiymati alohida turadi va hech qanday jamiga kirmaydi.
+        self.assertEqual(finance['staff_meals']['value'], '45000.00')
+
+    def test_the_warehouse_gap_stays_closed_after_a_staff_meal(self):
+        self.eat(quantity=5)
+        finance = self.client.get('/api/v1/finance/').data
+        self.assertEqual(finance['stock']['gap'], '0.00')
+
+    def test_the_price_is_frozen_so_a_menu_change_never_rewrites_last_month(self):
+        response = self.eat(quantity=2)
+        self.somsa.price = Decimal('20000')
+        self.somsa.save(update_fields=['price'])
+        meal = StaffMeal.objects.get(pk=response.data['id'])
+        self.assertEqual(meal.menu_price, Decimal('9000'))
+
+    # --- Tuzatish ---
+
+    def test_the_owner_can_delete_todays_record_and_the_ingredients_come_back(self):
+        response = self.eat(quantity=5)
+        self.client.delete(f'/api/v1/staff-meals/{response.data["id"]}/')
+        self.flour.refresh_from_db()
+        self.assertEqual(self.flour.quantity, Decimal('100.000000'))
+        self.assertEqual(StaffMeal.objects.count(), 0)
+
+    def test_a_cashier_cannot_delete_a_record(self):
+        response = self.eat()
+        deleted = self._as(self.cashier).delete(f'/api/v1/staff-meals/{response.data["id"]}/')
+        self.assertEqual(deleted.status_code, 403)
+
+    def test_an_older_record_cannot_be_deleted(self):
+        response = self.eat(day=self.today - timedelta(days=2))
+        deleted = self.client.delete(f'/api/v1/staff-meals/{response.data["id"]}/')
+        self.assertEqual(deleted.status_code, 409)
+
+    # --- Ko'rinishi ---
+
+    def test_the_list_shows_who_ate_what_and_what_it_cost(self):
+        self.eat(quantity=3, note='Aziz')
+        self.eat(quantity=2, note='Dilnoza')
+        response = self.client.get('/api/v1/staff-meals/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['summary']['portions'], 5)
+        self.assertEqual(response.data['summary']['cost'], '5000.00')
+        self.assertEqual(response.data['summary']['value'], '45000.00')
+        self.assertEqual(len(response.data['rows']), 2)
+        self.assertEqual({row['note'] for row in response.data['rows']}, {'Aziz', 'Dilnoza'})
+
+    def test_a_staff_meal_shows_in_the_activity_log(self):
+        self.eat(quantity=3, note='Aziz')
+        event = AuditEvent.objects.filter(action='staff.meal').first()
+        self.assertIsNotNone(event)
+        self.assertIn('Aziz', event.description)
+
+    def test_a_staff_meal_never_touches_anyones_salary(self):
+        employee = hire(self.branch, 'Aziz', '100000', position='Oshpaz')
+        self.eat(quantity=5, note='Aziz')
+        payroll = self.client.get('/api/v1/payroll/').data
+        row = next(item for item in payroll['employees'] if item['id'] == employee.id)
+        self.assertEqual(row['balance'], '0.00')
+
+    def _as(self, user):
+        client = APIClient()
+        client.force_authenticate(user)
+        return client
+
+
+class IngredientEditTests(TestCase):
+    """Ombordagi mahsulotni tahrirlash va ro'yxatdan chiqarish.
+
+    O'chirish ikki xil ishlaydi va qaysi biri bo'lishini tarix hal qiladi:
+    hech qachon ishlatilmagani butunlay o'chadi, tarixlisi esa arxivlanadi.
+    """
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.category = Category.objects.create(branch=self.branch, name='Taom')
+        self.dish = Dish.objects.create(branch=self.branch, category=self.category, name='Somsa', price=Decimal('9000'))
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+        self.flour = Ingredient.objects.create(
+            branch=self.branch, name='Un', unit='kg', quantity=Decimal('0'), unit_cost=Decimal('0'))
+
+    def receipt(self, ingredient=None):
+        response = self.client.post('/api/v1/stock/', {
+            'key': str(uuid4()), 'ingredient': (ingredient or self.flour).id,
+            'quantity': '10', 'kind': 'receipt', 'cost_total': '100000',
+            'note': 'Bozordan', 'date': str(timezone.localdate()),
+        }, format='json')
+        self.assertIn(response.status_code, (200, 201), response.data)
+        return response
+
+    # --- Nomini tahrirlash ---
+
+    def test_a_product_can_be_renamed(self):
+        response = self.client.patch(f'/api/v1/ingredients/{self.flour.id}/', {
+            'name': 'Oliy navli un',
+        }, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.flour.refresh_from_db()
+        self.assertEqual(self.flour.name, 'Oliy navli un')
+
+    def test_renaming_keeps_the_recipe_pointing_at_it(self):
+        recipe = Recipe.objects.create(branch=self.branch, dish=self.dish, name='Somsa', yield_quantity=10)
+        RecipeLine.objects.create(
+            recipe=recipe, ingredient=self.flour, quantity=Decimal('1'), batch_cost=Decimal('10000'))
+        self.client.patch(f'/api/v1/ingredients/{self.flour.id}/', {'name': 'Oliy un'}, format='json')
+        line = RecipeLine.objects.get()
+        self.assertEqual(line.ingredient_id, self.flour.id)
+        self.assertEqual(line.ingredient.name, 'Oliy un')
+
+    def test_a_rename_cannot_collide_with_another_product(self):
+        Ingredient.objects.create(branch=self.branch, name='Guruch', unit='kg')
+        response = self.client.patch(f'/api/v1/ingredients/{self.flour.id}/', {
+            'name': 'Guruch',
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+
+    def test_keeping_the_same_name_is_not_a_collision(self):
+        response = self.client.patch(f'/api/v1/ingredients/{self.flour.id}/', {
+            'name': 'Un', 'minimum': '5',
+        }, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+
+    def test_the_unit_cannot_change_once_there_is_history(self):
+        # «10 kg» bir kunda «10 dona» bo'lib qolsa, qoldiq ham, tannarx ham
+        # jim turib boshqa narsani anglatib ketardi.
+        self.receipt()
+        response = self.client.patch(f'/api/v1/ingredients/{self.flour.id}/', {
+            'unit': 'dona',
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('unit', response.data)
+
+    def test_the_unit_can_still_be_fixed_before_any_movement(self):
+        response = self.client.patch(f'/api/v1/ingredients/{self.flour.id}/', {
+            'unit': 'dona',
+        }, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+
+    def test_the_rename_reaches_the_activity_log(self):
+        self.client.patch(f'/api/v1/ingredients/{self.flour.id}/', {'name': 'Oliy un'}, format='json')
+        self.assertTrue(AuditEvent.objects.filter(action='stock.ingredient').exists())
+
+    # --- O'chirish ---
+
+    def test_a_product_that_was_never_used_is_deleted_outright(self):
+        response = self.client.delete(f'/api/v1/ingredients/{self.flour.id}/')
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(Ingredient.objects.filter(pk=self.flour.id).exists())
+
+    def test_a_product_with_history_is_archived_not_deleted(self):
+        self.receipt()
+        response = self.client.delete(f'/api/v1/ingredients/{self.flour.id}/')
+        self.assertEqual(response.status_code, 204)
+        self.flour.refresh_from_db()
+        self.assertTrue(self.flour.archived)
+        # Tarix joyida qoladi: o'tgan oyning hisoboti o'qilishi kerak.
+        self.assertTrue(StockMovement.objects.filter(ingredient=self.flour).exists())
+
+    def test_an_archived_product_drops_out_of_the_list(self):
+        self.receipt()
+        self.client.delete(f'/api/v1/ingredients/{self.flour.id}/')
+        rows = self.client.get('/api/v1/ingredients/').data['results']
+        self.assertEqual([row['name'] for row in rows], [])
+
+    def test_an_archived_product_can_still_be_looked_up_and_brought_back(self):
+        self.receipt()
+        self.client.delete(f'/api/v1/ingredients/{self.flour.id}/')
+        rows = self.client.get('/api/v1/ingredients/?archived=1').data['results']
+        self.assertEqual([row['name'] for row in rows], ['Un'])
+        response = self.client.patch(f'/api/v1/ingredients/{self.flour.id}/', {
+            'archived': False,
+        }, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.flour.refresh_from_db()
+        self.assertFalse(self.flour.archived)
+
+    def test_a_product_used_by_a_recipe_is_refused(self):
+        recipe = Recipe.objects.create(branch=self.branch, dish=self.dish, name='Somsa', yield_quantity=10)
+        RecipeLine.objects.create(
+            recipe=recipe, ingredient=self.flour, quantity=Decimal('1'), batch_cost=Decimal('10000'))
+        response = self.client.delete(f'/api/v1/ingredients/{self.flour.id}/')
+        self.assertEqual(response.status_code, 400)
+        # Xabar qaysi retsept ekanini aytadi, aks holda topish qiyin bo'lardi.
+        self.assertIn('Somsa', str(response.data))
+        self.assertTrue(Ingredient.objects.filter(pk=self.flour.id).exists())
+
+    def test_removing_it_from_the_recipe_first_lets_it_go(self):
+        recipe = Recipe.objects.create(branch=self.branch, dish=self.dish, name='Somsa', yield_quantity=10)
+        line = RecipeLine.objects.create(
+            recipe=recipe, ingredient=self.flour, quantity=Decimal('1'), batch_cost=Decimal('10000'))
+        line.delete()
+        self.assertEqual(self.client.delete(f'/api/v1/ingredients/{self.flour.id}/').status_code, 204)
+
+    def test_the_list_says_whether_a_product_can_be_deleted(self):
+        recipe = Recipe.objects.create(branch=self.branch, dish=self.dish, name='Somsa', yield_quantity=10)
+        RecipeLine.objects.create(
+            recipe=recipe, ingredient=self.flour, quantity=Decimal('1'), batch_cost=Decimal('10000'))
+        self.receipt()
+        row = self.client.get('/api/v1/ingredients/').data['results'][0]
+        # Ekran tugmani bosishdan OLDIN nima bo'lishini bilsin.
+        self.assertTrue(row['in_use'])
+        self.assertTrue(row['has_history'])
+
+    def test_an_archived_product_keeps_its_value_out_of_the_warehouse_total(self):
+        # Arxivlangan mahsulot ro'yxatdan chiqadi, lekin qoldig'i bo'lsa u
+        # hali ham omborda yotibdi — moliya uni ko'rsatishda davom etadi.
+        self.receipt()
+        self.client.delete(f'/api/v1/ingredients/{self.flour.id}/')
+        finance = self.client.get('/api/v1/finance/').data
+        self.assertEqual(finance['stock']['value'], '100000.00')

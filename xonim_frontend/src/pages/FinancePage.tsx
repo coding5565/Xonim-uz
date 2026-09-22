@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   AlertTriangle, ArrowRight, Banknote, Bike, ChefHat, Coins, Handshake, Package, PiggyBank, Receipt,
-  RefreshCw, Wallet,
+  RefreshCw, Soup, Wallet,
 } from 'lucide-react'
 import { api, money } from '../api'
 import { useI18n } from '../i18n'
@@ -81,6 +81,7 @@ export default function FinancePage() {
   }
 
   const { profit, coverage, cash, stock, partners, filters } = data
+  const meals = data.staff_meals
   const range = `start=${filters.start}&end=${filters.end}`
   const negative = Number(profit.net_profit) < 0
   const lowCoverage = Number(coverage.share) < 80
@@ -173,6 +174,19 @@ export default function FinancePage() {
                 <small>{t('Jo‘natilgan taomlarning xomashyosi — sotilmagani ham shu yerda')}</small>
               </div>
               <b>−{money(partners.cogs)}</b>
+              <ArrowRight size={15} />
+            </Link>
+          )}
+
+          {/* Hodimlar yegan ovqat: pul kelmagan, lekin masalliq sarflangan. */}
+          {!!Number(profit.staff_meals) && (
+            <Link to="/hodimlar-ovqati" className="chain-row minus">
+              <span className="chain-icon orange"><Soup size={18} /></span>
+              <div>
+                <strong>{t('Hodimlar ovqati')}</strong>
+                <small>{t('O‘z oshxonamizdan yeyilgan taomlarning xomashyosi')}</small>
+              </div>
+              <b>−{money(profit.staff_meals)}</b>
               <ArrowRight size={15} />
             </Link>
           )}
@@ -473,6 +487,15 @@ export default function FinancePage() {
             <Link to={`/payroll${filters.month ? `?month=${filters.month}` : ''}`} className="cash-row">
               <span>{t('Ish haqiga to‘langan')}</span><b>{money(data.salary.total)}</b><ArrowRight size={14} />
             </Link>
+            {/* Hodimlar ovqati oylikka kirmaydi: bu pul emas, sarflangan
+                masalliq. Shuning uchun ombor kartasida turadi. */}
+            {!!Number(meals.cost) && (
+              <Link to="/hodimlar-ovqati" className="cash-row">
+                <span>{t('Hodimlar yegan ovqat')}</span>
+                <b>{money(meals.cost)}</b>
+                <ArrowRight size={14} />
+              </Link>
+            )}
             {/* Ofitsiantlar puli alohida turadi: u xarajat emas, mijozdan
                 ularning nomiga yig'ilgan va berilishi kerak bo'lgan pul. */}
             {(!!Number(data.service.collected) || !!Number(data.service.owed)) && (

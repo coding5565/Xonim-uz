@@ -172,10 +172,23 @@ class IngredientSerializer(serializers.ModelSerializer):
     # Model xossasi bo'lgani uchun aniq e'lon qilinadi: aks holda DRF uni float
     # qilib yuboradi va boshqa pul maydonlaridan farq qilib qoladi.
     stock_value = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
+    # Ekranda «o'chirish» tugmasi nima qilishini oldindan aytib tursin:
+    # retseptdagi mahsulot umuman o'chirilmaydi, tarixlisi esa arxivlanadi.
+    in_use = serializers.SerializerMethodField()
+    has_history = serializers.SerializerMethodField()
+
+    def get_in_use(self, obj):
+        return obj.recipeline_set.exists()
+
+    def get_has_history(self, obj):
+        return obj.stockmovement_set.exists()
 
     class Meta:
         model = Ingredient
-        fields = ['id', 'name', 'unit', 'quantity', 'minimum', 'unit_cost', 'stock_value']
+        fields = [
+            'id', 'name', 'unit', 'quantity', 'minimum', 'unit_cost', 'stock_value',
+            'archived', 'in_use', 'has_history',
+        ]
         # Qoldiq faqat kirim va sarf orqali o'zgaradi; narxni esa qo'lda
         # kiritish mumkin va keyin har kirim uni o'rtacha tortilgan usulda
         # qayta hisoblaydi.
@@ -184,6 +197,20 @@ class IngredientSerializer(serializers.ModelSerializer):
             'minimum': {'min_value': 0},
             'unit_cost': {'min_value': 0, 'required': False},
         }
+
+    def validate_unit(self, value):
+        """O'lchov birligi tarix paydo bo'lgandan keyin o'zgartirilmaydi.
+
+        «5 kg» bir kunda «5 dona» bo'lib qolsa, qoldiq ham, tannarx ham,
+        retsept ulushi ham jim turib boshqa narsani anglatib ketardi.
+        """
+        item = self.instance
+        if item and item.unit != value and item.stockmovement_set.exists():
+            raise serializers.ValidationError(_(
+                'Bu mahsulotda kirim-chiqim tarixi bor — o‘lchov birligini o‘zgartirib bo‘lmaydi. '
+                'Yangi nom bilan yangi mahsulot oching.',
+            ))
+        return value
 
     def validate_name(self, value):
         # Tahrirlashda mahsulotning o'z nomi hisobga olinmaydi, aks holda

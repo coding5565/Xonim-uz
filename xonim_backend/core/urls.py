@@ -5,6 +5,7 @@ from rest_framework.routers import DefaultRouter
 
 from catalog.views import CategoryViewSet, DishViewSet, PublicMenuView
 from operations.assistant_chats import AssistantChatDetailView, AssistantChatListView
+from operations.bonuses import BonusReportView, BonusRuleView
 from operations.channel_fees import ChannelFeeView
 from operations.daily_usage import DailyUsageView, UsageComparisonView
 from operations.dish_prep import (
@@ -29,6 +30,7 @@ from operations.partners import (
 )
 from operations.print_queue import PrintAckView, PrintClaimView
 from operations.shift import ShiftHistoryView, ShiftView
+from operations.staff_meals import StaffMealRowView, StaffMealView
 from operations.stock_usage import StockUsageView
 from operations.telegram_bot import TelegramWebhookView
 from operations.views import (
@@ -136,6 +138,12 @@ urlpatterns = [
     path('api/v1/partner-board/', PartnerBoardView.as_view()),
     path('api/v1/reports/partners/', PartnerReportView.as_view()),
     path('api/v1/channel-fees/', ChannelFeeView.as_view()),
+    # Aksiya bonusi: qoidani superadmin belgilaydi, hisobotni kassir ham ko'radi.
+    path('api/v1/bonus-rules/', BonusRuleView.as_view()),
+    path('api/v1/bonuses/', BonusReportView.as_view()),
+    # Hodimlar ovqati: pul olinmaydi, lekin ovqat ombordan chiqadi.
+    path('api/v1/staff-meals/', StaffMealView.as_view()),
+    path('api/v1/staff-meals/<int:pk>/', StaffMealRowView.as_view()),
     path('api/v1/backup/', BackupView.as_view()),
     path('api/v1/telegram/webhook/', TelegramWebhookView.as_view()),
     path('api/v1/print/claim/', PrintClaimView.as_view()),

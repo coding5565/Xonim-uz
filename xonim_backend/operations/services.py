@@ -244,37 +244,14 @@ def restore_delivery_stock(user, delivery):
     Faqat hisobot berilmagan jo'natma bekor qilinadi, ya'ni ovqat hali
     sotilmagan. Shu sababli masalliqni qaytarish halol: u chiqmagan edi.
     """
-    moves = list(StockMovement.objects.filter(
-        branch=user.branch, kind='partner_sale', note__startswith=f'H#{delivery.id} hamkor · ',
-    ).select_related('ingredient'))
-    if not moves:
-        return 0
-    back = {}
-    for move in moves:
-        back[move.ingredient_id] = back.get(move.ingredient_id, Decimal('0')) + move.quantity
-    locked = {
-        item.id: item
-        for item in Ingredient.objects.select_for_update().filter(branch=user.branch, id__in=back).order_by('id')
-    }
-    rows = []
-    for ingredient_id, amount in back.items():
-        ingredient = locked[ingredient_id]
-        Ingredient.objects.filter(pk=ingredient_id).update(quantity=F('quantity') + amount)
-        key = uuid5(NAMESPACE_URL, f'xonim-partner-refund:{delivery.id}:{ingredient_id}')
-        StockMovement.objects.create(
-            branch=user.branch, ingredient=ingredient, actor=user, key=key,
-            request_hash=fingerprint({'partner_refund': delivery.id, 'ingredient': ingredient_id, 'quantity': str(amount)}),
-            kind='refund', quantity=amount, date=timezone.localdate(),
-            unit_cost=ingredient.unit_cost,
-            cost_total=(ingredient.unit_cost * amount).quantize(Decimal('0.01')),
-            note=f'H#{delivery.id} hamkor jo‘natmasi bekor qilindi',
-        )
-        rows.append((
-            'stock.refund',
-            f'H#{delivery.id} bekor qilindi · {ingredient.name} · +{quantity_text(amount)} {ingredient.unit}',
-        ))
-    audit_many(user, rows)
-    return len(rows)
+    return restore_stock_for(
+        user,
+        kind='partner_sale',
+        note_prefix=f'H#{delivery.id} hamkor · ',
+        key_prefix=f'xonim-partner-refund:{delivery.id}',
+        note=f'H#{delivery.id} hamkor jo‘natmasi bekor qilindi',
+        label=f'H#{delivery.id} bekor qilindi',
+    )
 
 
 def _autoprint(order):
@@ -340,11 +317,23 @@ def _record_order(user, data):
     if total > Decimal('999999999999.99'):
         raise ValidationError(_('Buyurtma summasi juda katta.'))
     paid = bool(data['payment_method'])
-    check_payment_channel(data.get('channel', 'hall'), data['payment_method'])
+    channel = data.get('channel', 'hall')
+    check_payment_channel(channel, data['payment_method'])
+    # Aksiya bonusi: shu kanalda shu taom bo'lsa, ustiga tekin qo'shiladi.
+    # Reja shu yerda tuziladi, chunki tekin porsiya ham oshxonadan chiqadi
+    # va tayyorligi boshqalari bilan birga tekshirilishi kerak — 10 ta
+    # tayyor bo'lsa, 10 ta sotib ustiga bittasini qo'shib bo'lmaydi.
+    from .bonuses import add_bonus_lines, bonus_plan
+    plan = bonus_plan(user.branch, channel, {line['dish'] for line in data['lines']})
     # Tayyor bo'lmagan taom buyurtmaga tushmaydi: oshxona talon kelgach
     # pishirmaydi, u faqat tayyoridan yig'adi.
     from .dish_prep import require_prepared
-    require_prepared(user.branch, {line['dish']: line['quantity'] for line in data['lines']})
+    wanted = {}
+    for line in data['lines']:
+        wanted[line['dish']] = wanted.get(line['dish'], 0) + line['quantity']
+    for dish_id, free in plan.items():
+        wanted[dish_id] = wanted.get(dish_id, 0) + free
+    require_prepared(user.branch, wanted)
 
     table = None
     table_text = data['table']
@@ -369,7 +358,6 @@ def _record_order(user, data):
         commission = waiter.commission
 
     recipes = _recipes_for_dishes(user.branch, dishes)
-    channel = data.get('channel', 'hall')
     order = Order.objects.create(
         branch=user.branch, cashier=user, key=data['key'], request_hash=fingerprint(data),
         table=table_text, table_ref=table, waiter=waiter_text, waiter_ref=waiter,
@@ -388,7 +376,12 @@ def _record_order(user, data):
         dish = dishes[line['dish']]
         recipe = recipes.get(dish.id)
         unit_cost = (recipe_cost(recipe) / recipe.yield_quantity).quantize(Decimal('0.01')) if recipe else Decimal('0')
-        OrderLine.objects.create(order=order, dish=dish, name=dish.name, price=dish.price, quantity=line['quantity'], note=line['note'], cost_per_unit=unit_cost, cost_total=unit_cost * line['quantity'])
+        OrderLine.objects.create(order=order, dish=dish, name=dish.name, price=dish.price, menu_price=dish.price, quantity=line['quantity'], note=line['note'], cost_per_unit=unit_cost, cost_total=unit_cost * line['quantity'])
+    # Bonus qatorlari oxirida yoziladi: hisob summasi ular yozilgunga qadar
+    # hisoblangan, ya'ni tekin porsiya tushumga hech qachon qo'shilmaydi.
+    free = add_bonus_lines(order, plan, dishes, lambda dish: _line_unit_cost(recipes.get(dish.id)))
+    if free:
+        audit(user, 'order.bonus', f'#{order.id} · {free} porsiya bonusga ketdi')
     if paid:
         consume_order_stock(user, order)
         _autoprint(order)
@@ -445,10 +438,24 @@ def _record_extra_lines(user, order_id, data):
     added = sum((dishes[line['dish']].price * line['quantity'] for line in data['lines']), Decimal('0'))
     if order.total + added > Decimal('999999999999.99'):
         raise ValidationError(_('Buyurtma summasi juda katta.'))
+    # Bonus ochiq hisobda ham ishlaydi, lekin bitta hisobga bitta marta:
+    # keyin yana qo'shilsa yangi tekin porsiya tug'ilmaydi.
+    from .bonuses import add_bonus_lines, already_bonused, bonus_plan
+    plan = {
+        dish_id: free
+        for dish_id, free in bonus_plan(
+            user.branch, order.channel, {line['dish'] for line in data['lines']}).items()
+        if dish_id not in already_bonused(order)
+    }
     # Qo'shimcha taom ham tayyor bo'lishi shart — hisob ochiq bo'lgani
     # oshxonada ovqat borligini anglatmaydi.
     from .dish_prep import require_prepared
-    require_prepared(user.branch, {line['dish']: line['quantity'] for line in data['lines']})
+    wanted = {}
+    for line in data['lines']:
+        wanted[line['dish']] = wanted.get(line['dish'], 0) + line['quantity']
+    for dish_id, extra in plan.items():
+        wanted[dish_id] = wanted.get(dish_id, 0) + extra
+    require_prepared(user.branch, wanted)
 
     recipes = _recipes_for_dishes(user.branch, dishes)
     now = timezone.now()
@@ -456,10 +463,17 @@ def _record_extra_lines(user, order_id, data):
         dish = dishes[line['dish']]
         unit_cost = _line_unit_cost(recipes.get(dish.id))
         OrderLine.objects.create(
-            order=order, dish=dish, name=dish.name, price=dish.price, quantity=line['quantity'],
+            order=order, dish=dish, name=dish.name, price=dish.price, menu_price=dish.price,
+            quantity=line['quantity'],
             note=line['note'], cost_per_unit=unit_cost, cost_total=unit_cost * line['quantity'],
             batch_key=data['key'], added_at=now,
         )
+    free = add_bonus_lines(
+        order, plan, dishes, lambda dish: _line_unit_cost(recipes.get(dish.id)),
+        batch_key=data['key'], added_at=now,
+    )
+    if free:
+        audit(user, 'order.bonus', f'#{order.id} · {free} porsiya bonusga ketdi')
 
     order.total = order.total + added
     fields = refresh_service_charge(order, ['total'])
@@ -592,12 +606,19 @@ def refund_order(user, order_id, reason):
 
 
 @transaction.atomic
-def restore_order_stock(user, order):
-    """Qaytarilgan buyurtma masalliqlarini omborga qaytaradi."""
-    # Prefiks ataylab ajratuvchi bilan: «#1 buyurtma» qidiruvi «#12 buyurtma»
-    # qatorlarini ham tutib olmasligi kerak.
+def restore_stock_for(user, *, kind, note_prefix, key_prefix, note, label):
+    """Berilgan yozuvning ombor harakatlarini teskarisiga qaytaradi.
+
+    `note_prefix` ataylab ajratuvchi bilan tugaydi: «#1 buyurtma · »
+    qidiruvi «#12 buyurtma · » qatorlarini tutib olmasligi kerak.
+
+    Qaytarish «kirim» EMAS, alohida `refund` turi bilan yoziladi: xarid
+    bo'lmagan, shuning uchun u xarajat hisobiga tushmasligi kerak. Qiymati
+    esa yoziladi, aks holda «sotilgan tannarx» qaytarilgandan keyin ham
+    kamaymay qolardi.
+    """
     moves = list(StockMovement.objects.filter(
-        branch=user.branch, kind='sale_consumption', note__startswith=f'#{order.id} buyurtma · ',
+        branch=user.branch, kind=kind, note__startswith=note_prefix,
     ).select_related('ingredient'))
     if not moves:
         return 0
@@ -610,27 +631,39 @@ def restore_order_stock(user, order):
     }
     rows = []
     for ingredient_id, amount in back.items():
-        ingredient = locked[ingredient_id]
+        ingredient = locked.get(ingredient_id)
+        if not ingredient:
+            # Masalliq o'chirilgan: qaytaradigan joy yo'q.
+            continue
         Ingredient.objects.filter(pk=ingredient_id).update(quantity=F('quantity') + amount)
-        key = uuid5(NAMESPACE_URL, f'xonim-refund-stock:{order.id}:{ingredient_id}')
-        # Alohida tur: qaytarish XARID emas. Ilgari u «kirim» bo'lib yozilardi
-        # va ombor tarixida yangi partiya kabi ko'rinardi. Qiymati ham
-        # yoziladi, aks holda «sotilgan tannarx» qaytarilgandan keyin ham
-        # kamaymay qolardi.
+        key = uuid5(NAMESPACE_URL, f'{key_prefix}:{ingredient_id}')
         StockMovement.objects.create(
             branch=user.branch, ingredient=ingredient, actor=user, key=key,
-            request_hash=fingerprint({'refund': order.id, 'ingredient': ingredient_id, 'quantity': str(amount)}),
+            request_hash=fingerprint({'undo': key_prefix, 'ingredient': ingredient_id, 'quantity': str(amount)}),
             kind='refund', quantity=amount, date=timezone.localdate(),
             unit_cost=ingredient.unit_cost,
             cost_total=(ingredient.unit_cost * amount).quantize(Decimal('0.01')),
-            note=f'#{order.id} buyurtma qaytarildi',
+            note=note,
         )
         rows.append((
             'stock.refund',
-            f'#{order.id} qaytarildi · {ingredient.name} · +{quantity_text(amount)} {ingredient.unit}',
+            f'{label} · {ingredient.name} · +{quantity_text(amount)} {ingredient.unit}',
         ))
     audit_many(user, rows)
     return len(rows)
+
+
+@transaction.atomic
+def restore_order_stock(user, order):
+    """Qaytarilgan buyurtma masalliqlarini omborga qaytaradi."""
+    return restore_stock_for(
+        user,
+        kind='sale_consumption',
+        note_prefix=f'#{order.id} buyurtma · ',
+        key_prefix=f'xonim-refund-stock:{order.id}',
+        note=f'#{order.id} buyurtma qaytarildi',
+        label=f'#{order.id} qaytarildi',
+    )
 
 
 @transaction.atomic
