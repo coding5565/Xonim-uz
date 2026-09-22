@@ -56,6 +56,11 @@ from .money import (
 from .reports import discount_cuts
 
 SALARY_CATEGORY = 'Ish haqi'
+# Masalliq xaridi ikki xil joyga yozilishi mumkin: omborga kirim va xarajat.
+# Ikkalasi ham pul oqimidan chiqadi, ya'ni bitta xarid ikki marta sanalishi
+# mumkin. Tizim buni o'zi ajrata olmaydi — kirim masalliq bo'yicha, xarajat
+# esa erkin matn bilan yoziladi — shuning uchun faqat ogohlantiradi.
+PRODUCE_CATEGORY = 'Masalliq'
 TREND_MONTHS = 12
 
 
@@ -316,6 +321,9 @@ def build_finance(branch, start, end, today):
     salary_periods = SalaryPayment.objects.filter(
         branch=branch, paid_on__gte=start, paid_on__lte=end,
     ).order_by().values_list('period', flat=True).distinct()
+    produce_spend = spend.filter(category__iexact=PRODUCE_CATEGORY).aggregate(
+        total=Coalesce(Sum('amount'), Decimal('0')), count=Count('id'),
+    )
     stock_value = sum((item.stock_value for item in Ingredient.objects.filter(branch=branch)), Decimal('0'))
     consumed = moves['sold'] + waste - moves['returned']
 
@@ -394,6 +402,11 @@ def build_finance(branch, start, end, today):
             'consumed': money(consumed),
             'gap': money(cogs - consumed),
             'gap_share': percent(abs(cogs - consumed), consumed) if consumed else '',
+            # «Masalliq» xarajati ombor kirimi bilan yonma-yon turadi: ikkalasi
+            # ham nolga teng bo'lmasa, bitta xarid ikki marta yozilgan bo'lishi
+            # mumkin va buni faqat egasi bilib ayta oladi.
+            'produce_expense': money(produce_spend['total']),
+            'produce_count': produce_spend['count'],
         },
         'trend': monthly_trend(branch, today),
         'basis': (

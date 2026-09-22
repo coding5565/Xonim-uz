@@ -276,7 +276,16 @@ export interface Finance {
   }
   /** Ofitsiant xizmat haqi: yig'ilgan, berilgan va qolgan. */
   service: { collected: string; paid: string; payments: number; owed: string; share: string }
-  stock: { value: string; purchases: string; consumed: string; gap: string; gap_share: string }
+  stock: {
+    value: string
+    purchases: string
+    consumed: string
+    gap: string
+    gap_share: string
+    /** «Masalliq» deb yozilgan xarajat — ombor kirimi bilan ikki marta sanalgan bo'lishi mumkin. */
+    produce_expense: string
+    produce_count: number
+  }
   trend: {
     period: string
     label: string

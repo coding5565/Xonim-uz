@@ -406,6 +406,18 @@ export default function FinancePage() {
               </Link>
             )}
           </div>
+          {/* Ikki marta sanash xavfi: masalliq ham omborga kirim, ham xarajat
+              bo'lib yozilgan bo'lsa, pul oqimidan ikki marta chiqadi. */}
+          {!!Number(data.stock.produce_expense) && !!Number(stock.purchases) && (
+            <p className="alert">
+              {tn(
+                '«Masalliq» deb yozilgan {count} ta xarajat bor ({amount} so‘m), ombor kirimi esa {stock} so‘m. Agar bitta xarid ikkalasiga ham yozilgan bo‘lsa, pul ikki marta sanalgan.',
+                Number(data.stock.produce_count),
+                { amount: money(data.stock.produce_expense), stock: money(stock.purchases) },
+              )}{' '}
+              <Link to={`/expenses?${range}&category=Masalliq`} className="text-link">{t('Tekshiring')}</Link>.
+            </p>
+          )}
           {!!Number(data.salary.manual_total) && (
             <p className="alert">
               {tn(

@@ -16,10 +16,11 @@ interface ExpenseForm {
   date: string
 }
 
-const categories = ['Kommunal', 'Ijara', 'Transport', 'Ta’mirlash', 'Tozalash', 'Boshqa']
+// Masalliq birinchi turadi: restoran xarajatining katta qismi shu.
+const categories = ['Masalliq', 'Kommunal', 'Ijara', 'Transport', 'Ta’mirlash', 'Tozalash', 'Boshqa']
 
 const emptyForm = (): ExpenseForm => ({
-  category: 'Kommunal', purpose: '', recipient: '', amount: '', payment_method: 'cash', date: today(),
+  category: 'Masalliq', purpose: '', recipient: '', amount: '', payment_method: 'cash', date: today(),
 })
 
 export default function ExpensesPage() {
@@ -294,6 +295,14 @@ export default function ExpensesPage() {
                 />
               </label>
             </div>
+            {/* Omborga kirim qilingan masalliq allaqachon pul oqimida turadi.
+                Shu xaridni yana xarajat qilib yozish — pulni ikki marta
+                sanash degani, shuning uchun ogohlantirish shu yerda turadi. */}
+            {form.category === 'Masalliq' && (
+              <p className="alert">
+                {t('Bu masalliqni omborga kirim qilgan bo‘lsangiz, uni yana bu yerda yozmang — pul ikki marta hisoblanadi. Ombordagi kirim allaqachon pul oqimiga tushgan.')}
+              </p>
+            )}
             <label>
               {t('Nimaga ishlatildi?')}
               <textarea
