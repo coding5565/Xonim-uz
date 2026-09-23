@@ -107,6 +107,9 @@ PRINT_MODE = os.environ.get('PRINT_MODE', 'direct')
 PRINT_AGENT_TOKEN = os.environ.get('PRINT_AGENT_TOKEN', '')
 # Agent topshiriqni olib javob bermasa, shuncha soniyadan keyin u navbatga qaytadi.
 PRINT_LEASE_SECONDS = int(os.environ.get('PRINT_LEASE_SECONDS', '120'))
+# Chop etish agentining .exe fayli va manifesti shu yerda turadi.
+# Agentlar soatiga bir marta shu yerdan yangi versiyani so'raydi.
+AGENT_DIR = os.environ.get('AGENT_DIR', BASE_DIR / 'agent')
 # Zaxira nusxa. Token va chat sozlanmasa nusxa baribir olinadi, lekin
 # faqat serverda qoladi — yuborishning ishlamasligi zaxirani to'xtatmaydi.
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')

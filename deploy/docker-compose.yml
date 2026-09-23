@@ -41,6 +41,7 @@ services:
       DJANGO_STATIC_ROOT: /var/lib/xonim/static
       DJANGO_MEDIA_ROOT: /var/lib/xonim/media
       BACKUP_DIR: /var/lib/xonim/backups
+      AGENT_DIR: /var/lib/xonim/agent
       POSTGRES_HOST: db
       POSTGRES_PORT: '5432'
     depends_on:
@@ -51,6 +52,8 @@ services:
       - media_files:/var/lib/xonim/media
       # Zaxira nusxalar konteyner qayta qurilganda yo'qolmasin.
       - backup_files:/var/lib/xonim/backups
+      # Agentning .exe fayli: konteyner qayta qurilganda yo'qolmasin.
+      - agent_files:/var/lib/xonim/agent
     networks:
       # Baza va nginx bilan gaplashish uchun.
       - internal
@@ -90,6 +93,7 @@ volumes:
   static_files:
   media_files:
   backup_files:
+  agent_files:
 
 networks:
   web:

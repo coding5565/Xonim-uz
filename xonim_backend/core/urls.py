@@ -5,6 +5,7 @@ from rest_framework.routers import DefaultRouter
 
 from catalog.views import CategoryViewSet, DishViewSet, PublicMenuView
 from core.version import VersionView
+from operations.agent_release import AgentDownloadView, AgentVersionView
 from operations.assistant_chats import AssistantChatDetailView, AssistantChatListView
 from operations.bonuses import BonusReportView, BonusRuleView
 from operations.channel_fees import ChannelFeeView
@@ -151,6 +152,8 @@ urlpatterns = [
     path('api/v1/telegram/webhook/', TelegramWebhookView.as_view()),
     path('api/v1/print/claim/', PrintClaimView.as_view()),
     path('api/v1/print/ack/', PrintAckView.as_view()),
+    path('api/v1/print/agent/version/', AgentVersionView.as_view()),
+    path('api/v1/print/agent/download/', AgentDownloadView.as_view()),
     path('api/v1/assistant/chat/', AssistantChatView.as_view()),
     path('api/v1/assistant/chats/', AssistantChatListView.as_view()),
     path('api/v1/assistant/chats/<int:pk>/', AssistantChatDetailView.as_view()),
