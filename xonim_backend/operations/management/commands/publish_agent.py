@@ -4,7 +4,7 @@ Yig'ilgan .exe serverga ko'chiriladi, so'ng shu buyruq chaqiriladi.
 Shundan keyin restorandagi agentlar soat ichida o'zlarini yangilaydi —
 hech kimning borib o'rnatishi shart emas.
 
-    python manage.py publish_agent /tmp/xonim-agent.exe --version 1.1
+    python manage.py publish_agent /tmp/xonim-agent.exe --release 1.1
 """
 from pathlib import Path
 
@@ -18,7 +18,8 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('path', help='Yig‘ilgan .exe fayl')
-        parser.add_argument('--version', required=True, help='Masalan: 1.1')
+        # `--version` nomini Django o'zi band qilgan, shuning uchun `--release`.
+        parser.add_argument('--release', required=True, help='Masalan: 1.1')
         parser.add_argument('--notes', default='', help='Nima o‘zgardi')
 
     def handle(self, *args, **options):
@@ -28,7 +29,7 @@ class Command(BaseCommand):
         if source.suffix.lower() != '.exe':
             raise CommandError('Faqat .exe chiqariladi.')
 
-        manifest = publish(source, options['version'], options['notes'])
+        manifest = publish(source, options['release'], options['notes'])
         self.stdout.write(self.style.SUCCESS(f'Versiya {manifest["version"]} chiqarildi'))
         self.stdout.write(f'  fayl:   {manifest["file"]}')
         self.stdout.write(f'  hajmi:  {manifest["size"] / 1024 / 1024:.1f} MB')
