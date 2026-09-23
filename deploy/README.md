@@ -46,6 +46,69 @@ Migratsiya va `collectstatic` konteyner ko'tarilganda o'zi bajariladi
 (`entrypoint.sh`). Migratsiya yiqilsa ilova ko'tarilmaydi — bu ataylab:
 yarim ko'chirilgan baza ustida ishlagan ilova ma'lumotni buzadi.
 
+**Bu buyruq o'zgarmaydi.** Versiya avtomatik yangilanadi — quyiga qarang.
+
+## Versiya va «nimalar qo'shildi»
+
+CRM ichida, yuqori o'ng burchakda ishlab turgan versiya ko'rinadi. Ustiga
+bosilsa «Yangilanishlar» sahifasi ochiladi va o'sha versiyada nima
+o'zgargani yozilib turadi.
+
+Buning ostida ikkita ALOHIDA narsa bor va ularni aralashtirmaslik kerak:
+
+| | Nima | Kim yozadi |
+|---|---|---|
+| **Muhr** | commit izi (`a1b2c3d`) va sanasi | hech kim — `git archive` o'zi yozadi |
+| **Izohlar** | versiya raqami va o'zgarishlar ro'yxati | dasturchi, kod bilan bitta commitda |
+
+### Muhr qanday ishlaydi
+
+Serverga kod `git archive` orqali boradi, ya'ni u yerda `.git` **yo'q** —
+na tarix, na teg. Shuning uchun commit izi arxiv yasalayotgan paytda
+fayl ichiga yoziladi (`.gitattributes` dagi `export-subst`):
+
+```
+xonim_backend/core/build_stamp.py     <- backend tasviri ko'radi
+xonim_frontend/src/build-stamp.ts     <- frontend tasviri ko'radi
+```
+
+Ikkita fayl, chunki har bir Docker tasviri faqat o'z papkasini
+ko'chiradi. Ikkalasi ham bo'lgani foydali: ular farq qilsa, demak
+brauzerdagi sahifa eskirgan va CRM buni o'zi aytadi.
+
+**Do'st hech narsa qilmaydi.** Yuqoridagi buyruqni ishlatsa, muhr o'zi
+joylashadi. Uni unutib bo'lmaydi.
+
+> `%(describe:tags)` ataylab ISHLATILMAYDI. O'lchab ko'rilgan: u arxivdagi
+> faqat BIRINCHI faylda almashadi, ikkinchisida `%(describe:tags)` bo'lib
+> literal qolib ketadi va ekranda o'shanday ko'rinardi. `%s` (commit
+> sarlavhasi) ham ishlatilmaydi: ichida qo'shtirnoq bo'lsa faylni
+> sintaksis xatosiga aylantiradi. Buni test qulflab turadi.
+
+### Chiqish oldidan dasturchi nima qiladi
+
+1. `xonim_backend/core/releases.py` faylining BOSHIGA yangi yozuv
+   qo'shadi: `version`, `released`, uch tilli `title`, va har bir
+   o'zgarish uchun `kind` (`yangi` / `tuzatish` / `yaxshi`), `roles`
+   (kimga ko'rsatiladi) va `uz` / `ru` / `en` matni.
+2. Shu o'zgarishni kod bilan **bitta commitda** yuboradi.
+3. `git push`.
+
+Xolos. Teg qo'yish shart emas, versiya faylini alohida yangilash ham
+shart emas.
+
+**Unutilsa nima bo'ladi.** Izoh yozilmasa ham muhr baribir o'zgaradi,
+ya'ni versiya yangilangani ko'rinib turadi — faqat «bu versiya uchun
+izoh yozilmagan» deb yozadi. Yolg'on raqam hech qachon chiqmaydi.
+
+**Eski versiyaga qaytarilsa.** `releases.py` kod bilan birga yuradi,
+shuning uchun eski versiya qaytarilganda kelajakdagi izohlar ham
+o'z-o'zidan yo'qoladi. Alohida tekshiruv kerak emas.
+
+**Lokal ishlab chiqishda** muhr bo'sh bo'ladi (`git archive` yasalmagan),
+va CRM «Ishlab chiqish nusxasi» deb ko'rsatadi — `$Format:%h$` degan
+matn ekranga hech qachon chiqmaydi.
+
 ## Domen almashtirish
 
 Haqiqiy domen olinganda A-yozuvni shu serverga yo'naltiring, so'ng `.env`

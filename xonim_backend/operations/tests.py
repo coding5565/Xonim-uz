@@ -1,6 +1,6 @@
 import base64
 import re
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
@@ -17,6 +17,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient
 
 from catalog.models import Category, Dish, Station, StockKind
+from core.releases import RELEASES
 from users.models import AuditEvent, Branch, User
 
 from .models import (
@@ -5732,3 +5733,170 @@ class IngredientEditTests(TestCase):
         self.client.delete(f'/api/v1/ingredients/{self.flour.id}/')
         finance = self.client.get('/api/v1/finance/').data
         self.assertEqual(finance['stock']['value'], '100000.00')
+
+
+class VersionTests(TestCase):
+    """Versiya va «nimalar qo'shildi» ro'yxati.
+
+    Ikkita alohida narsa qo'riqlanadi: commit izini git avtomatik yozadi
+    va uni unutib bo'lmaydi, izohlarni esa odam yozadi va ular uch tilda
+    bo'lishi shart.
+    """
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.cook = User.objects.create_user('cook', password='test-only-long-password', role='kitchen', branch=self.branch)
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+
+    def as_user(self, user):
+        client = APIClient()
+        client.force_authenticate(user)
+        return client
+
+    # --- Nima ko'rinadi ---
+
+    def test_the_endpoint_names_the_version_that_is_running(self):
+        response = self.client.get('/api/v1/version/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['version'], RELEASES[0]['version'])
+        self.assertTrue(response.data['releases'])
+        self.assertEqual(response.data['releases'][0]['version'], RELEASES[0]['version'])
+
+    def test_every_role_can_read_the_version(self):
+        for user in (self.owner, self.cashier, self.cook):
+            response = self.as_user(user).get('/api/v1/version/')
+            self.assertEqual(response.status_code, 200, user.role)
+
+    def test_a_guest_cannot_read_the_version(self):
+        self.assertEqual(APIClient().get('/api/v1/version/').status_code, 403)
+
+    def test_the_cashier_does_not_see_owner_only_changes(self):
+        owner_rows = self.client.get('/api/v1/version/').data['releases']
+        cashier_rows = self.as_user(self.cashier).get('/api/v1/version/').data['releases']
+        owner_texts = {change['text'] for row in owner_rows for change in row['changes']}
+        cashier_texts = {change['text'] for row in cashier_rows for change in row['changes']}
+        # Kassir ko'rgan hamma narsani ega ham ko'radi, teskarisi emas.
+        self.assertTrue(cashier_texts < owner_texts)
+
+    def test_a_release_with_nothing_for_this_role_drops_out_entirely(self):
+        # Sarlavhasi bor, ichi bo'sh yozuv chalg'itadi.
+        for row in self.as_user(self.cook).get('/api/v1/version/').data['releases']:
+            self.assertTrue(row['changes'], row['version'])
+
+    def test_the_notes_follow_the_language_of_the_request(self):
+        russian = self.client.get('/api/v1/version/', HTTP_ACCEPT_LANGUAGE='ru').data
+        uzbek = self.client.get('/api/v1/version/', HTTP_ACCEPT_LANGUAGE='uz').data
+        self.assertEqual(russian['releases'][0]['title'], RELEASES[0]['title']['ru'])
+        self.assertEqual(uzbek['releases'][0]['title'], RELEASES[0]['title']['uz'])
+        self.assertNotEqual(russian['releases'][0]['title'], uzbek['releases'][0]['title'])
+
+    # --- Muhr ---
+
+    def test_an_unstamped_build_never_shows_the_placeholder_on_screen(self):
+        # Lokal ishlab chiqishda git hech narsa yozmagan. `$Format:%h$` ni
+        # ekranga chiqarish yolg'on bo'lardi, shuning uchun bo'sh qaytadi.
+        with patch('core.version.COMMIT', '$Format:%h$'):
+            build = self.client.get('/api/v1/version/').data['build']
+        self.assertFalse(build['stamped'])
+        self.assertEqual(build['commit'], '')
+        self.assertEqual(build['committed_at'], '')
+
+    def test_a_stamped_build_reports_the_commit_it_came_from(self):
+        with patch('core.version.COMMIT', 'a1b2c3d'), \
+                patch('core.version.COMMITTED_AT', '2026-09-22T21:15:00+05:00'):
+            build = self.client.get('/api/v1/version/').data['build']
+        self.assertTrue(build['stamped'])
+        self.assertEqual(build['commit'], 'a1b2c3d')
+        self.assertEqual(build['committed_at'], '2026-09-22T21:15:00+05:00')
+
+    def test_the_stamp_file_is_valid_python_before_git_touches_it(self):
+        # Fayl ish katalogida ham import bo'lishi shart: o'rin-egallar
+        # qo'shtirnoq ichida turgani uchun u har doim to'g'ri Python.
+        from core import build_stamp
+        self.assertIsInstance(build_stamp.COMMIT, str)
+        self.assertIsInstance(build_stamp.COMMITTED_AT, str)
+
+    # --- Muhr yo'lda yo'qolib qolmasligi uchun ---
+
+    def test_both_stamp_files_are_listed_in_gitattributes(self):
+        """Muhr faylini qo'shib, ro'yxatga yozishni unutish jim turib buzadi.
+
+        U holda `git archive` unga hech narsa yozmaydi va ekranda
+        `$Format:%h$` degan matn paydo bo'ladi — serverda. Shuning uchun
+        ro'yxat shu yerda tekshiriladi.
+        """
+        root = Path(settings.BASE_DIR).parent
+        rules = (root / '.gitattributes').read_text(encoding='utf-8')
+        for path in ('xonim_backend/core/build_stamp.py', 'xonim_frontend/src/build-stamp.ts'):
+            self.assertIn(path, rules, path)
+            line = next(row for row in rules.splitlines() if row.startswith(path))
+            self.assertIn('export-subst', line, path)
+
+    def test_the_stamp_files_only_use_placeholders_that_survive_git_archive(self):
+        """`%(describe:tags)` va `%s` ataylab ishlatilmaydi.
+
+        O'lchab ko'rilgan: `%(describe:tags)` arxivdagi FAQAT BIRINCHI
+        faylda almashadi — ikkinchisida `%(describe:tags)` bo'lib literal
+        qolib ketadi va ekranda o'shanday ko'rinadi. `%s` esa sarlavhada
+        qo'shtirnoq bo'lsa satrni yorib, faylni sintaksis xatosiga
+        aylantiradi. Ikkalasi ham jim turib buzadi, shuning uchun bu yerda
+        qulflab qo'yilgan.
+        """
+        root = Path(settings.BASE_DIR).parent
+        for path in ('xonim_backend/core/build_stamp.py', 'xonim_frontend/src/build-stamp.ts'):
+            text = (root / path).read_text(encoding='utf-8')
+            # Faqat haqiqiy o'zlashtirish qatorlari: izohdagi misol
+            # tekshiruvni chalg'itmasligi kerak.
+            found = set(re.findall(r"=\s*'\$Format:([^$]+)\$'", text))
+            self.assertTrue(found, path)
+            self.assertLessEqual(found, {'%h', '%cI'}, f'{path}: {found}')
+
+    # --- Izohlarning shakli ---
+
+    def test_every_release_note_exists_in_all_three_languages(self):
+        """Ruscha gapiradigan kassir ham nima o'zgarganini bilishi kerak.
+
+        Bu kafolat `_()` orqali emas, yozuvning SHAKLI orqali ushlanadi:
+        izohlar har chiqishda qaytadan yoziladigan uzun matn va ularni UI
+        yorliqlari lug'atiga tiqish uni o'qib bo'lmaydigan qilardi.
+        """
+        for release in RELEASES:
+            for code in ('uz', 'ru', 'en'):
+                self.assertTrue(release['title'].get(code), f"{release['version']} title {code}")
+                for index, change in enumerate(release['changes']):
+                    self.assertTrue(change.get(code), f"{release['version']} #{index} {code}")
+
+    def test_every_change_says_who_it_matters_to(self):
+        for release in RELEASES:
+            for index, change in enumerate(release['changes']):
+                roles = change.get('roles')
+                self.assertTrue(roles, f"{release['version']} #{index}")
+                self.assertLessEqual(set(roles), {'owner', 'cashier', 'kitchen'}, roles)
+                self.assertIn(change.get('kind'), ('yangi', 'tuzatish', 'yaxshi'), change.get('kind'))
+
+    def test_versions_are_unique(self):
+        versions = [release['version'] for release in RELEASES]
+        self.assertEqual(len(versions), len(set(versions)), versions)
+
+    def test_releases_are_newest_first(self):
+        dates = [release['released'] for release in RELEASES]
+        self.assertEqual(dates, sorted(dates, reverse=True), dates)
+
+    def test_every_release_has_a_readable_date(self):
+        for release in RELEASES:
+            # `date.fromisoformat` noto'g'ri sanada xato ko'taradi.
+            self.assertTrue(date.fromisoformat(release['released']))
+
+    def test_the_notes_never_leak_a_raw_commit_subject(self):
+        # «feat: partners — food sent to schools» degan qator restoran
+        # egasiga hech narsa aytmaydi. Izoh odam tilida yozilishi kerak.
+        for release in RELEASES:
+            for change in release['changes']:
+                for code in ('uz', 'ru', 'en'):
+                    self.assertFalse(
+                        change[code].startswith(('feat:', 'fix:', 'chore:', 'refactor:')),
+                        change[code][:60],
+                    )

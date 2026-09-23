@@ -734,3 +734,31 @@ export interface StaffMealBoard {
   dishes: { dish: number; name: string; portions: number; cost: string }[]
   rows: StaffMeal[]
 }
+
+/* ── Versiya va «nimalar qo'shildi» ──────────────────────────────────── */
+
+export interface ReleaseChange {
+  /** yangi · tuzatish · yaxshi */
+  kind: string
+  text: string
+}
+export interface Release {
+  version: string
+  released: string
+  title: string
+  changes: ReleaseChange[]
+}
+export interface VersionInfo {
+  /** O'qiladigan versiya raqami — qo'lda yoziladigan ro'yxatdan. */
+  version: string
+  build: {
+    /** Qisqa commit izi. Lokal ishlab chiqishda bo'sh. */
+    commit: string
+    /** ISO 8601, commit qilingan joy ofseti bilan. Lokal ishda bo'sh. */
+    committed_at: string
+    /** `git archive` muhr qo'yganmi. */
+    stamped: boolean
+  }
+  /** Foydalanuvchi roliga tegishli o'zgarishi bor versiyalar, yangisidan. */
+  releases: Release[]
+}

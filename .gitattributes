@@ -13,3 +13,25 @@ Dockerfile*     text eol=lf
 
 # PowerShell Windows'da ishlaydi va o'z ko'rinishida qolsin.
 *.ps1           text eol=crlf
+
+# Versiya muhri: `git archive` shu ikki faylga commit izini YOZIB QO'YADI.
+#
+# Serverga kod `git archive | ssh ... tar -x` bilan boradi, ya'ni u yerda
+# `.git` YO'Q — na tarix, na teg, na commit raqami. Shuning uchun iz
+# arxiv yasalayotgan paytda fayl ichiga muhrlanadi. Bu yagona yo'l va u
+# do'stimning buyrug'ini o'zgartirmaydi: u nimani ishlatgan bo'lsa, shuni
+# ishlataveradi.
+#
+# IKKI FAYL, chunki har bir Docker tasviri faqat o'z papkasini ko'radi:
+# `Dockerfile.backend` da `COPY xonim_backend/`, `Dockerfile.web` da esa
+# `COPY xonim_frontend/`. Bittasi bo'lsa ikkinchi tasvir uni topolmasdi.
+#
+# FAQAT `%h` va `%cI` ishlatiladi. Sinab ko'rilgan va rad etilgani:
+#   · `%(describe:tags)` — arxivdagi FAQAT BIRINCHI faylda almashadi,
+#     ikkinchisida `%(describe:tags)` bo'lib literal qolib ketadi va
+#     ekranda o'shanday ko'rinardi. Shuning uchun o'qiladigan versiya
+#     raqami tegdan emas, `core/releases.py` dan olinadi.
+#   · `%s` (commit sarlavhasi) — ichida qo'shtirnoq bo'lsa satrni yorib
+#     yuboradi va fayl sintaksis xatosiga aylanadi.
+xonim_backend/core/build_stamp.py    export-subst
+xonim_frontend/src/build-stamp.ts    export-subst

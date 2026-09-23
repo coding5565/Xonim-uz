@@ -4,6 +4,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from catalog.views import CategoryViewSet, DishViewSet, PublicMenuView
+from core.version import VersionView
 from operations.assistant_chats import AssistantChatDetailView, AssistantChatListView
 from operations.bonuses import BonusReportView, BonusRuleView
 from operations.channel_fees import ChannelFeeView
@@ -87,6 +88,8 @@ urlpatterns = [
     path('api/v1/auth/csrf/', CsrfView.as_view()),
     path('api/v1/auth/login/', LoginView.as_view()),
     path('api/v1/auth/me/', MeView.as_view()),
+    # Qaysi versiya ishlayapti va unda nima o'zgargani. Hamma rolga ochiq.
+    path('api/v1/version/', VersionView.as_view()),
     path('api/v1/auth/logout/', LogoutView.as_view()),
     path('api/v1/auth/password/', PasswordChangeView.as_view()),
     path('api/v1/audit/', AuditView.as_view()),

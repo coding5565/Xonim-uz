@@ -39,6 +39,7 @@ const PartnersPage = lazy(() => import('./pages/PartnersPage'))
 const PartnerPage = lazy(() => import('./pages/PartnerPage'))
 const BonusesPage = lazy(() => import('./pages/BonusesPage'))
 const StaffMealsPage = lazy(() => import('./pages/StaffMealsPage'))
+const ReleasesPage = lazy(() => import('./pages/ReleasesPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 
 /** Resolves the session before any protected page renders. */
@@ -126,6 +127,9 @@ createRoot(document.getElementById('app')!).render(
               <Route path="/bonuslar" element={<Allow roles={sales}><BonusesPage /></Allow>} />
               <Route path="/hodimlar-ovqati" element={<Allow roles={sales}><StaffMealsPage /></Allow>} />
               <Route path="/settings" element={<Allow roles={staffed}><SettingsPage /></Allow>} />
+              {/* Yangilanishlar hamma rolga ochiq: oshxona xodimi ham nima
+                  o'zgarganini bilishi mumkin. */}
+              <Route path="/yangilanishlar" element={<Allow roles={staffed}><ReleasesPage /></Allow>} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -1349,3 +1349,53 @@ button.mark.tap:disabled{opacity:.5;cursor:default}
 .theme-dark .meal-tile:hover{background:#1b2a24}
 .meal-grid{margin:0 21px 21px}
 @media(max-width:700px){.meal-grid{margin:0 15px 16px}}
+
+/* Versiya belgisi endi bosiladigan havola: ustiga bosilsa nima
+   o'zgargani ochiladi. Ko'rinishi o'zgarmaydi — faqat qo'l kursori va
+   eskirgan holat uchun ogohlantiruvchi rang qo'shiladi. */
+.local-badge{cursor:pointer;text-decoration:none}
+.local-badge:hover{background:#e4efe8}
+.local-badge.stale{background:#fdf3ea;color:#a36a30}
+.local-badge.stale>span{background:#d08b3c}
+.theme-dark .local-badge:hover{background:#23352d}
+.theme-dark .local-badge.stale{background:#2e2318;color:#e0b077}
+
+/* Yon menyudagi nuqta: «oxirgi qaraganingizdan beri yangilandi».
+   Ataylab kichkina va jimgina — modal oyna kassirni mijoz oldida
+   to'xtatib qo'yardi. */
+.nav-dot{margin-left:auto;width:7px;height:7px;border-radius:50%;background:#d08b3c;flex-shrink:0}
+
+/* Hozirgi versiya: raqam chapda, qurilma izi o'ngda. */
+.release-now{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap;
+  padding:20px 23px;margin-bottom:18px}
+.release-now .eyebrow{margin-bottom:6px}
+.release-now strong{display:block;font:800 30px 'Manrope',sans-serif;letter-spacing:-1px;color:#22463a}
+.release-now p{margin-top:6px;font-size:13px;color:#7f8d85;line-height:1.6;max-width:52ch}
+.release-build{text-align:right;font-size:12px;color:#93a09a;display:flex;flex-direction:column;gap:3px}
+.release-build span{font-weight:600;color:#4e6559}
+.release-build code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:#8d9a92}
+
+.release-list{display:flex;flex-direction:column;gap:14px}
+.release.current{border-color:#bcd7c7}
+.release-changes{list-style:none;margin:0;padding:0 23px 21px;display:flex;flex-direction:column;gap:13px}
+.release-changes li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:start}
+.release-kind{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:650;
+  padding:5px 9px;border-radius:999px;white-space:nowrap;background:#eef5f0;color:#3f7157}
+.release-changes li.tuzatish .release-kind{background:#fdf1ed;color:#a8492f}
+.release-changes li.yaxshi .release-kind{background:#eef2fb;color:#4a6398}
+.release-changes p{font-size:13.5px;line-height:1.75;color:#3c4f46;overflow-wrap:anywhere}
+
+.theme-dark .release-now strong{color:#d7e9de}
+.theme-dark .release-now p{color:#8fa79a}
+.theme-dark .release-build span{color:#b8c9be}
+.theme-dark .release.current{border-color:#3a5a48}
+.theme-dark .release-kind{background:#1d2c26;color:#a9dcc0}
+.theme-dark .release-changes li.tuzatish .release-kind{background:#2a1d19;color:#d19c8a}
+.theme-dark .release-changes li.yaxshi .release-kind{background:#1c2334;color:#a8bce6}
+.theme-dark .release-changes p{color:#c8dcd0}
+
+@media(max-width:700px){
+  .release-build{text-align:left}
+  .release-changes{padding:0 15px 16px}
+  .release-changes li{grid-template-columns:minmax(0,1fr)}
+}

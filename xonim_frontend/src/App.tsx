@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
-  ArrowUpRight, BarChart3, Banknote, Bot, ChefHat, ChevronRight, Command, ConciergeBell, CookingPot, Gift, Handshake, History, LayoutDashboard, LogOut, Menu, PiggyBank,
+  ArrowUpRight, BarChart3, Banknote, Bot, ChefHat, ChevronRight, Command, ConciergeBell, CookingPot, Gift, Handshake, History, Rocket, LayoutDashboard, LogOut, Menu, PiggyBank,
   LayoutGrid, Moon, Package, PanelLeftClose, ReceiptText, Settings2, ShoppingBag, Soup, Store, Sun, Users, UtensilsCrossed, Wallet,
 } from 'lucide-react'
 import { api } from './api'
+import { COMMIT as BUNDLE_COMMIT, stamped as bundleStamped } from './build-stamp'
+import { isUnseen } from './version'
 import { SHOW_KITCHEN_SCREEN } from './config'
 import { session, useSession } from './session'
 import { LANGUAGES, useI18n, type Lang } from './i18n'
-import type { User } from './types'
+import type { User, VersionInfo } from './types'
 
 type Role = User['role']
 
@@ -47,6 +49,9 @@ const navItems: NavItem[] = [
   // Kassir ham ochadi: davomatni u belgilaydi va pulni ko'pincha u beradi.
   { path: '/payroll', name: 'Ish haqi', icon: Banknote, roles: ['owner', 'cashier'] },
   { path: '/activity', name: 'Harakatlar', icon: History, roles: ['owner'] },
+  // Yangilanishlar hamma rolga ochiq va eng pastda turadi: kunlik ish
+  // emas, lekin yangilik chiqqanda yonida nuqta paydo bo'ladi.
+  { path: '/yangilanishlar', name: 'Yangilanishlar', icon: Rocket, roles: ['owner', 'cashier', 'kitchen'] },
 ]
 
 function roleName(role: Role | undefined) {
@@ -63,11 +68,26 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(false)
   const [error, setError] = useState('')
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('xonim-theme') === 'dark')
+  const [version, setVersion] = useState<VersionInfo>()
+  // Yon menyudagi nuqta: oxirgi qaraganidan beri yangilanish bo'lganmi.
+  const [unseen, setUnseen] = useState(false)
 
   useEffect(() => {
     document.documentElement.classList.toggle('theme-dark', darkMode)
     localStorage.setItem('xonim-theme', darkMode ? 'dark' : 'light')
   }, [darkMode])
+
+  // Versiya bir marta o'qiladi va topbarda turadi. Yiqilsa jim qoladi:
+  // versiya ko'rinmagani uchun butun ish maydonini to'xtatib bo'lmaydi.
+  useEffect(() => {
+    if (!user) return
+    api<VersionInfo>('version/')
+      .then(info => {
+        setVersion(info)
+        setUnseen(isUnseen(info.version))
+      })
+      .catch(() => setVersion(undefined))
+  }, [user])
 
   // Oshxona ekrani qog'oz talon foydasiga o'chirilgan, lekin oshxona rolida
   // boshqa sahifa yo'q: bayroqqa qarab uni ham yashirsak, yon menyu bo'm-bo'sh
@@ -81,6 +101,17 @@ export default function App() {
   const isCurrent = (path: string) =>
     location.pathname === path || (path !== '/' && location.pathname.startsWith(`${path}/`))
   const title = t(nav.find(item => isCurrent(item.path))?.name || 'Sozlamalar')
+
+  // Brauzerdagi sahifa serverdagi koddan eski bo'lishi mumkin: ochiq
+  // turgan oyna o'z-o'zidan yangilanmaydi. Ikkala muhr ham bor va farq
+  // qilsa — aynan shu hol.
+  const staleBundle = !!version?.build.stamped && bundleStamped
+    && version.build.commit !== BUNDLE_COMMIT
+  const buildTitle = staleBundle
+    ? t('Sahifangiz eskirgan — yangilang')
+    : version?.build.stamped
+      ? `${version.build.commit} · ${version.build.committed_at.slice(0, 10)}`
+      : t('Ishlab chiqish nusxasi')
 
   function closeMobileNav() {
     if (window.matchMedia('(max-width: 950px)').matches) setCollapsed(false)
@@ -125,6 +156,9 @@ export default function App() {
                 <Icon size={20} />
                 <span>{t(item.name)}</span>
                 {item.badge && <span className="nav-badge">{item.badge}</span>}
+                {item.path === '/yangilanishlar' && unseen && (
+                  <span className="nav-dot" aria-label={t('Yangi o‘zgarishlar bor')} />
+                )}
               </Link>
             )
           })}
@@ -158,7 +192,19 @@ export default function App() {
             <strong>{title}</strong>
           </div>
           <div className="topbar-right">
-            <span className="local-badge"><span />{t('Localhost · Sinov versiyasi')}</span>
+            {/* Ilgari bu yerda «Localhost · Sinov versiyasi» deb yozib
+                qo'yilgan edi va haqiqiy serverda u yolg'on bo'lardi.
+                Endi bu yerda ishlab turgan versiya turadi va bosilsa
+                nima o'zgargani ochiladi. */}
+            <Link
+              to="/yangilanishlar"
+              className={`local-badge${staleBundle ? ' stale' : ''}`}
+              title={buildTitle}
+              onClick={() => setUnseen(false)}
+            >
+              <span />
+              {version ? t('Versiya {version}', { version: version.version }) : t('Versiya')}
+            </Link>
             <span className="top-date">
               {new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long' }).format(new Date())}
             </span>
