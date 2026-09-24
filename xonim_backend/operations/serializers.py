@@ -9,10 +9,12 @@ from .models import (
     SALE_CHANNEL_LABELS,
     SALE_CHANNELS,
     SALE_PAYMENT_CHOICES,
+    SALE_PAYMENT_LABELS,
     Expense,
     Ingredient,
     Order,
     OrderLine,
+    OrderPayment,
     Recipe,
     RecipeLine,
     StockMovement,
@@ -87,6 +89,12 @@ class OrderInput(serializers.Serializer):
     channel = serializers.ChoiceField(choices=[key for key, _ in SALE_CHANNELS], default='hall')
     lines = LineInput(many=True, allow_empty=False)
     payment_method = serializers.ChoiceField(choices=SALE_PAYMENT_CHOICES + [''], default='')
+    # Hisob bo'lib to'langanda: ikkinchi usul va undan qancha kelgani.
+    # Bo'sh qoldirilsa hammasi asosiy usul bilan to'langan hisoblanadi.
+    split_method = serializers.ChoiceField(
+        choices=SALE_PAYMENT_CHOICES + [''], required=False, default='')
+    split_amount = serializers.DecimalField(
+        max_digits=14, decimal_places=2, required=False, allow_null=True, default=None)
 
     def validate_lines(self, lines):
         if len(lines) > 100 or len({line['dish'] for line in lines}) != len(lines):
@@ -115,6 +123,19 @@ class OrderLineSerializer(serializers.ModelSerializer):
         return obj.batch_key is not None
 
 
+class OrderPaymentSerializer(serializers.ModelSerializer):
+    """Hisobning bir qismi qaysi usul bilan to'langani."""
+
+    label = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OrderPayment
+        fields = ['method', 'label', 'amount', 'sales', 'service']
+
+    def get_label(self, obj):
+        return _(SALE_PAYMENT_LABELS.get(obj.method, obj.method))
+
+
 class OrderSerializer(serializers.ModelSerializer):
     lines = OrderLineSerializer(many=True, read_only=True)
     cashier_name = serializers.CharField(source='cashier.first_name', read_only=True)
@@ -125,9 +146,11 @@ class OrderSerializer(serializers.ModelSerializer):
     voided_by_name = serializers.CharField(source='voided_by.first_name', read_only=True, default='')
     print_problems = serializers.SerializerMethodField()
 
+    payments = OrderPaymentSerializer(many=True, read_only=True)
+
     class Meta:
         model = Order
-        fields = ['id', 'table', 'waiter', 'waiter_ref', 'waiter_commission', 'waiter_fee', 'channel', 'channel_label', 'status', 'status_label', 'total', 'service_charge', 'payable', 'discount', 'discount_reason', 'payment_method', 'created_at', 'paid_at', 'preparation_status', 'started_at', 'ready_at', 'served_at', 'cashier_name', 'lines', 'print_problems', 'void_reason', 'voided_at', 'voided_by_name']
+        fields = ['id', 'table', 'waiter', 'waiter_ref', 'waiter_commission', 'waiter_fee', 'channel', 'channel_label', 'status', 'status_label', 'total', 'service_charge', 'payable', 'discount', 'discount_reason', 'payment_method', 'payments', 'created_at', 'paid_at', 'preparation_status', 'started_at', 'ready_at', 'served_at', 'cashier_name', 'lines', 'print_problems', 'void_reason', 'voided_at', 'voided_by_name']
 
     def get_channel_label(self, obj):
         return SALE_CHANNEL_LABELS.get(obj.channel, obj.channel)

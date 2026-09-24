@@ -1399,3 +1399,12 @@ button.mark.tap:disabled{opacity:.5;cursor:default}
   .release-changes{padding:0 15px 16px}
   .release-changes li{grid-template-columns:minmax(0,1fr)}
 }
+
+/* Bo'lib to'lash: hisobning bir qismi boshqa usul bilan kelganda kassir
+   shu yerga faqat O'SHA qismni yozadi. Ataylab kichkina va pastda —
+   kundalik hisob bitta usul bilan to'lanadi va katak bo'sh qoladi. */
+.split-pay{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end;margin-bottom:6px}
+.split-pay label{margin-bottom:0;font-size:12.5px}
+.split-pay input{text-align:right;font-variant-numeric:tabular-nums}
+.split-pay select{min-width:118px}
+@media(max-width:520px){.split-pay{grid-template-columns:minmax(0,1fr)}}

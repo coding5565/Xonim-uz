@@ -5933,3 +5933,207 @@ class VersionTests(TestCase):
                         change[code].startswith(('feat:', 'fix:', 'chore:', 'refactor:')),
                         change[code][:60],
                     )
+
+
+class SplitPaymentTests(TestCase):
+    """Bitta hisob ikki usul bilan to'langanda pul to'g'ri tarqalishi.
+
+    Eng muhimi kassadagi naqd: 130 000 so'mlik hisobning 30 mingi naqd
+    bo'lsa, kun yakunida aynan 30 ming kutilishi kerak — 130 ming ham,
+    nol ham emas.
+    """
+
+    def setUp(self):
+        self.branch = Branch.objects.create(name='One', slug='one')
+        self.owner = User.objects.create_user('owner', password='test-only-long-password', role='owner', branch=self.branch)
+        self.cashier = User.objects.create_user('cashier', password='test-only-long-password', role='cashier', branch=self.branch)
+        self.category = Category.objects.create(branch=self.branch, name='Taom')
+        self.dish = Dish.objects.create(
+            branch=self.branch, category=self.category, name='Osh', price=Decimal('65000'),
+            stock_kind=StockKind.GOODS)
+        self.client = APIClient()
+        self.client.force_authenticate(self.cashier)
+        self.today = timezone.localdate()
+
+    def sell(self, quantity=2, method='cash', split_method='', split_amount=None,
+             channel='hall', waiter_id=None):
+        body = {
+            'key': str(uuid4()), 'table': '', 'waiter': '', 'channel': channel,
+            'payment_method': method,
+            'lines': [{'dish': self.dish.id, 'quantity': quantity, 'note': ''}],
+        }
+        if split_method:
+            body['split_method'] = split_method
+        if split_amount is not None:
+            body['split_amount'] = str(split_amount)
+        if waiter_id:
+            body['waiter_id'] = waiter_id
+        return self.client.post('/api/v1/orders/', body, format='json')
+
+    def drawer(self):
+        return self.client.get('/api/v1/shift/').data
+
+    # --- Egasining misoli ---
+
+    def test_a_130k_bill_can_be_paid_100k_by_card_and_30k_in_cash(self):
+        response = self.sell(quantity=2, method='card', split_method='cash', split_amount='30000')
+        self.assertEqual(response.status_code, 201, response.data)
+        rows = {row['method']: row for row in response.data['payments']}
+        self.assertEqual(sorted(rows), ['card', 'cash'])
+        self.assertEqual(rows['cash']['amount'], '30000.00')
+        self.assertEqual(rows['card']['amount'], '100000.00')
+
+    def test_the_drawer_expects_only_the_cash_part(self):
+        self.sell(quantity=2, method='card', split_method='cash', split_amount='30000')
+        day = self.drawer()
+        # Kassada 30 ming yotishi kerak, 130 ming emas.
+        self.assertEqual(day['expected_cash'], '30000.00')
+        self.assertEqual(day['revenue'], '130000.00')
+
+    def test_it_works_the_other_way_round_too(self):
+        # Asosiy pul naqd, kartadan bir qismi.
+        self.sell(quantity=2, method='cash', split_method='card', split_amount='30000')
+        self.assertEqual(self.drawer()['expected_cash'], '100000.00')
+
+    def test_leaving_the_second_amount_empty_keeps_the_old_behaviour(self):
+        self.sell(quantity=2, method='cash')
+        day = self.drawer()
+        self.assertEqual(day['expected_cash'], '130000.00')
+        order = Order.objects.get()
+        self.assertEqual(order.payments.count(), 1)
+
+    # --- Kesimlar ---
+
+    def test_the_day_breakdown_shows_both_methods(self):
+        self.sell(quantity=2, method='card', split_method='cash', split_amount='30000')
+        rows = {row['method']: row for row in self.drawer()['breakdown']}
+        self.assertEqual(rows['cash']['amount'], '30000.00')
+        self.assertEqual(rows['card']['amount'], '100000.00')
+        # Qatorlar yig'indisi hisobga teng bo'lib qolishi kerak.
+        total = sum(Decimal(row['amount']) for row in rows.values())
+        self.assertEqual(total, Decimal('130000.00'))
+
+    def test_finance_splits_the_revenue_between_the_two_methods(self):
+        self.sell(quantity=2, method='card', split_method='cash', split_amount='30000')
+        self.client.force_authenticate(self.owner)
+        rows = {row['method']: row for row in self.client.get('/api/v1/finance/').data['methods']}
+        self.assertEqual(rows['cash']['revenue'], '30000.00')
+        self.assertEqual(rows['card']['revenue'], '100000.00')
+
+    def test_the_sales_report_finds_the_check_under_either_method(self):
+        self.sell(quantity=2, method='card', split_method='cash', split_amount='30000')
+        for method in ('cash', 'card'):
+            response = self.client.get(f'/api/v1/sales/board/?method={method}')
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.data['summary']['orders'], 1, method)
+
+    def test_a_split_check_is_counted_once_not_twice(self):
+        self.sell(quantity=2, method='card', split_method='cash', split_amount='30000')
+        day = self.drawer()
+        self.assertEqual(day['orders'], 1)
+        self.assertEqual(day['revenue'], '130000.00')
+
+    # --- Xizmat haqi bo'lganda ---
+
+    def test_the_service_charge_is_shared_between_the_parts(self):
+        waiter = Waiter.objects.create(branch=self.branch, name='Aziz', commission=Decimal('10'))
+        response = self.sell(quantity=2, method='card', split_method='cash',
+                             split_amount='30000', waiter_id=waiter.id)
+        self.assertEqual(response.status_code, 201, response.data)
+        # 130 000 taom + 13 000 xizmat haqi = 143 000 to'lanadi.
+        self.assertEqual(response.data['payable'], '143000.00')
+        rows = {row['method']: row for row in response.data['payments']}
+        self.assertEqual(rows['cash']['amount'], '30000.00')
+        self.assertEqual(rows['card']['amount'], '113000.00')
+        # Har bir qatorda amount = sales + service.
+        for row in rows.values():
+            self.assertEqual(
+                Decimal(row['amount']), Decimal(row['sales']) + Decimal(row['service']), row)
+        # Yig'indilar hisobning o'z maydonlariga teng bo'lib qolsin.
+        self.assertEqual(sum(Decimal(r['sales']) for r in rows.values()), Decimal('130000.00'))
+        self.assertEqual(sum(Decimal(r['service']) for r in rows.values()), Decimal('13000.00'))
+
+    # --- Rad etiladigan hollar ---
+
+    def test_the_second_amount_cannot_reach_the_whole_bill(self):
+        response = self.sell(quantity=2, method='cash', split_method='card', split_amount='130000')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('split_amount', response.data)
+
+    def test_the_second_amount_cannot_exceed_the_bill(self):
+        response = self.sell(quantity=2, method='cash', split_method='card', split_amount='200000')
+        self.assertEqual(response.status_code, 400)
+
+    def test_the_second_method_cannot_equal_the_first(self):
+        response = self.sell(quantity=2, method='cash', split_method='cash', split_amount='30000')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('split_method', response.data)
+
+    def test_a_delivery_order_cannot_be_split(self):
+        # Uzum puli mijozdan emas, platformadan keladi va bitta o'tkazma
+        # bo'lib tushadi.
+        response = self.sell(quantity=2, method='uzum', split_method='cash',
+                             split_amount='30000', channel='uzum')
+        self.assertEqual(response.status_code, 400)
+
+    def test_a_zero_second_amount_is_refused_when_a_method_was_chosen(self):
+        response = self.sell(quantity=2, method='cash', split_method='card', split_amount='0')
+        self.assertEqual(response.status_code, 400)
+
+    # --- Ochiq hisobni yopish ---
+
+    def test_an_open_bill_can_be_closed_with_a_split(self):
+        opened = self.sell(quantity=2, method='')
+        self.assertEqual(opened.status_code, 201)
+        response = self.client.post(f'/api/v1/orders/{opened.data["id"]}/pay/', {
+            'payment_method': 'card', 'split_method': 'cash', 'split_amount': '30000',
+        }, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        rows = {row['method']: row['amount'] for row in response.data['payments']}
+        self.assertEqual(rows, {'cash': '30000.00', 'card': '100000.00'})
+        self.assertEqual(self.drawer()['expected_cash'], '30000.00')
+
+    def test_a_refused_split_leaves_the_bill_open(self):
+        # Tekshiruv yozuvdan OLDIN bo'ladi: hisob «to'langan» bo'lib qolib,
+        # pul qatorlari yozilmay qolsa kassadagi naqd jim turib buzilardi.
+        opened = self.sell(quantity=2, method='')
+        response = self.client.post(f'/api/v1/orders/{opened.data["id"]}/pay/', {
+            'payment_method': 'cash', 'split_method': 'cash', 'split_amount': '30000',
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+        order = Order.objects.get(pk=opened.data['id'])
+        self.assertEqual(order.status, 'open')
+        self.assertEqual(order.payments.count(), 0)
+
+    # --- Qaytarish ---
+
+    def test_a_refunded_split_check_leaves_the_drawer(self):
+        response = self.sell(quantity=2, method='card', split_method='cash', split_amount='30000')
+        self.assertEqual(self.drawer()['expected_cash'], '30000.00')
+        owner = APIClient()
+        owner.force_authenticate(self.owner)
+        refunded = owner.post(f'/api/v1/orders/{response.data["id"]}/refund/', {
+            'reason': 'Mijoz qaytardi',
+        }, format='json')
+        self.assertEqual(refunded.status_code, 200, refunded.data)
+        # Qaytarilgan hisob kutilgan naqddan chiqadi.
+        self.assertEqual(self.drawer()['expected_cash'], '0.00')
+
+    # --- Yozuvning o'zi ---
+
+    def test_the_payment_rows_always_add_up_to_the_bill(self):
+        for split in ('1', '30000', '129999', '0.01', '65000.50'):
+            response = self.sell(quantity=2, method='cash', split_method='card', split_amount=split)
+            self.assertEqual(response.status_code, 201, (split, response.data))
+            order = Order.objects.get(pk=response.data['id'])
+            total = sum(row.amount for row in order.payments.all())
+            self.assertEqual(total, order.payable, split)
+
+    def test_the_activity_log_names_both_methods(self):
+        opened = self.sell(quantity=2, method='')
+        self.client.post(f'/api/v1/orders/{opened.data["id"]}/pay/', {
+            'payment_method': 'card', 'split_method': 'cash', 'split_amount': '30000',
+        }, format='json')
+        event = AuditEvent.objects.filter(action='order.pay').first()
+        self.assertIsNotNone(event)
+        self.assertIn('+', event.description)

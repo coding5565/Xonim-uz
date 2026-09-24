@@ -111,6 +111,18 @@ RU = {
         'По этому продукту есть история прихода и расхода — единицу измерения изменить нельзя. Заведите новый продукт с другим названием.',
     '«{name}» {recipes} retseptida ishlatilyapti — avval retseptdan olib tashlang.':
         '«{name}» используется в рецепте {recipes} — сначала уберите его оттуда.',
+    'Bu usul bilan bo‘lib to‘lab bo‘lmaydi.':
+        'Этим способом разделить оплату нельзя.',
+    'Ikkinchi to‘lov usulini tanlang.':
+        'Выберите второй способ оплаты.',
+    'Ikkinchi usul birinchisidan boshqa bo‘lishi kerak.':
+        'Второй способ должен отличаться от первого.',
+    'Ikkinchi usuldagi summa hisobdan kichik bo‘lishi kerak. Hammasi shu usul bilan bo‘lsa, uni asosiy qilib tanlang.':
+        'Сумма по второму способу должна быть меньше счёта. Если всё оплачено этим способом, выберите его основным.',
+    'Ikkinchi usuldagi summa noldan katta bo‘lsin.':
+        'Сумма по второму способу должна быть больше нуля.',
+    'Yetkazib berish buyurtmasi bo‘lib to‘lanmaydi — pul platformadan keladi.':
+        'Заказ доставки нельзя оплатить частями — деньги приходят от платформы.',
     'Xodim topilmadi.': 'Сотрудник не найден.',
     'Kategoriya topilmadi.': 'Категория не найдена.',
     'Bu qator hisobda yo‘q.': 'Этой строки нет в счёте.',
@@ -409,6 +421,18 @@ EN = {
         'This product has a movement history, so its unit cannot be changed. Create a new product under a new name instead.',
     '«{name}» {recipes} retseptida ishlatilyapti — avval retseptdan olib tashlang.':
         '“{name}” is used in the {recipes} recipe — remove it from there first.',
+    'Bu usul bilan bo‘lib to‘lab bo‘lmaydi.':
+        'A payment cannot be split with this method.',
+    'Ikkinchi to‘lov usulini tanlang.':
+        'Choose the second payment method.',
+    'Ikkinchi usul birinchisidan boshqa bo‘lishi kerak.':
+        'The second method has to differ from the first.',
+    'Ikkinchi usuldagi summa hisobdan kichik bo‘lishi kerak. Hammasi shu usul bilan bo‘lsa, uni asosiy qilib tanlang.':
+        'The amount on the second method has to be less than the bill. If everything was paid that way, make it the main method.',
+    'Ikkinchi usuldagi summa noldan katta bo‘lsin.':
+        'The amount on the second method has to be above zero.',
+    'Yetkazib berish buyurtmasi bo‘lib to‘lanmaydi — pul platformadan keladi.':
+        'A delivery order cannot be split — the money comes from the platform.',
     'Xodim topilmadi.': 'Employee not found.',
     'Kategoriya topilmadi.': 'Category not found.',
     'Bu qator hisobda yo‘q.': 'That line is not on this bill.',

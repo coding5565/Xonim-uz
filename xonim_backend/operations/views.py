@@ -36,6 +36,7 @@ from .models import (
     WaiterPayment,
 )
 from .money import money, parse_month, platform_fee
+from .payments import method_totals
 from .printing import PrinterError, print_receipt
 from .reports import (
     ReportFilters,
@@ -95,7 +96,16 @@ class PayView(APIView):
     def post(self, request, pk):
         field = serializers.ChoiceField(choices=SALE_PAYMENT_CHOICES)
         method = field.run_validation(request.data.get('payment_method'))
-        return Response(OrderSerializer(safely(pay_order, request.user, pk, method)).data)
+        # Bo'lib to'lash: ikkinchi usul va undan kelgan summa. Ikkalasi
+        # ham ixtiyoriy — odatdagi hisob bitta usul bilan to'lanadi.
+        second = serializers.ChoiceField(
+            choices=SALE_PAYMENT_CHOICES + [''], required=False, default='',
+        ).run_validation(request.data.get('split_method', ''))
+        amount = serializers.DecimalField(
+            max_digits=14, decimal_places=2, required=False, allow_null=True, default=None,
+        ).run_validation(request.data.get('split_amount'))
+        return Response(OrderSerializer(
+            safely(pay_order, request.user, pk, method, second, amount)).data)
 
 
 class TableViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin,
@@ -526,11 +536,14 @@ class DashboardView(APIView):
         # model's default ordering, which Django would otherwise add to GROUP BY and split the totals.
         revenue_by_day = {row['day']: row['total'] for row in paid.annotate(day=TruncDate('paid_at')).values('day').annotate(total=Sum('total')).order_by()}
         expenses_by_day = {row['date']: row['total'] for row in expenses.values('date').annotate(total=Sum('amount')).order_by()}
+        # Usul kesimi TO'LOV qatorlaridan: bo'lingan hisob ikkala usulga
+        # o'z ulushi bilan tushadi, buyurtmaning bitta yorlig'iga emas.
         by_method = [
-            {'method': row['payment_method'],
-             'label': SALE_PAYMENT_LABELS.get(row['payment_method'], row['payment_method'] or '—'),
-             'revenue': money(row['total'])}
-            for row in paid.values('payment_method').annotate(total=Sum('total')).order_by('-total')
+            {'method': method,
+             'label': SALE_PAYMENT_LABELS.get(method, method or '—'),
+             'revenue': money(row['sales'])}
+            for method, row in sorted(
+                method_totals(paid).items(), key=lambda item: -item[1]['sales'])
         ]
         trend = []
         cursor = start
@@ -557,8 +570,10 @@ class SalesSummaryView(APIView):
 
         # Grouped so a new payment method shows up here without touching this view.
         by_method = [
-            {'method': row['payment_method'], 'label': SALE_PAYMENT_LABELS.get(row['payment_method'], row['payment_method']), 'revenue': money(row['total'])}
-            for row in today_paid.values('payment_method').annotate(total=Sum('total')).order_by('-total')
+            {'method': method, 'label': SALE_PAYMENT_LABELS.get(method, method),
+             'revenue': money(row['sales'])}
+            for method, row in sorted(
+                method_totals(today_paid).items(), key=lambda item: -item[1]['sales'])
         ]
         # Kanal kesimi kassirga ham kerak: Uzum va Yandex savdosi alohida
         # kiritiladi, demak kun davomida qanchaligini ham alohida ko'rishi kerak.

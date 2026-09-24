@@ -17,7 +17,6 @@ from .models import (
     DEFAULT_PLATFORM_COMMISSION,
     DELIVERY_CHANNELS,
     ORDER_STATUS_LABELS,
-    SALE_PAYMENT_LABELS,
     ChannelFee,
     Expense,
     Ingredient,
@@ -29,6 +28,7 @@ from .models import (
     Table,
     Waiter,
 )
+from .payments import check_split, payment_text, record_payments
 from .printing import print_prep_tickets, print_receipt_quietly, print_void_ticket
 
 
@@ -383,6 +383,9 @@ def _record_order(user, data):
     if free:
         audit(user, 'order.bonus', f'#{order.id} · {free} porsiya bonusga ketdi')
     if paid:
+        # Pul qatorlari shu yerda tug'iladi: bo'lib to'langan bo'lsa
+        # ikkita, oddiy holatda bitta. Hamma hisobot shulardan yig'adi.
+        record_payments(order, data['payment_method'], data.get('split_method', ''), data.get('split_amount'))
         consume_order_stock(user, order)
         _autoprint(order)
     audit(user, 'order.create', f'#{order.id} · {table.label if table else (table_text or "olib ketish")} · {total} so‘m · {len(data["lines"])} qator')
@@ -759,7 +762,7 @@ def check_payment_channel(channel, method):
         raise ValidationError(_('Yetkazib berish buyurtmasi faqat o‘sha platforma orqali to‘lanadi.'))
 
 @transaction.atomic
-def pay_order(user, order_id, method):
+def pay_order(user, order_id, method, split_method='', split_amount=None):
     order = Order.objects.select_for_update().filter(branch=user.branch, id=order_id).first()
     if not order:
         raise ValidationError(_('Buyurtma topilmadi.'))
@@ -768,13 +771,18 @@ def pay_order(user, order_id, method):
             raise Conflict(_('Buyurtma boshqa usul bilan to‘langan.'))
         return order
     check_payment_channel(order.channel, method)
+    # Bo'linish yozuvdan OLDIN tekshiriladi: hisob «to'langan» bo'lib
+    # qolib, keyin pul qatorlari yozilmay qolsa, kassadagi naqd hisobdan
+    # jim turib ajralib ketardi.
+    check_split(order, method, split_method, split_amount)
     consume_order_stock(user, order)
     changed = Order.objects.filter(pk=order.pk, status='open').update(status='paid', payment_method=method, paid_at=timezone.now())
     if not changed:
         raise Conflict()
     order.refresh_from_db()
+    record_payments(order, method, split_method, split_amount)
     _autoprint(order)
-    audit(user, 'order.pay', f'#{order.id} · {SALE_PAYMENT_LABELS.get(method, method)} · {order.total} so‘m')
+    audit(user, 'order.pay', f'#{order.id} · {payment_text(order)} · {order.total} so‘m')
     return order
 
 

@@ -61,6 +61,7 @@ from .money import (
     platform_fee,
     short_label,
 )
+from .payments import method_totals
 from .reports import discount_cuts
 
 SALARY_CATEGORY = 'Ish haqi'
@@ -336,9 +337,12 @@ def build_finance(branch, start, end, today):
     # Har bir to'lov turi doim ro'yxatda turadi, savdosi bo'lmagani ham nol
     # bo'lib: yo'q qator «tekshirilmagan» degani emasligi ko'rinib tursin va
     # egasi qaysi yo'l umuman ishlatilmayotganini bilsin.
+    # Tushum ham to'lov qatorlaridan: bo'lingan hisobning tushumi ikkala
+    # usulga nisbatan tarqaladi va «kartadan qancha tushum keldi» degan
+    # savol javobsiz qolmaydi.
     method_rows = {
-        row['payment_method']: row
-        for row in paid.values('payment_method').annotate(total=Sum('total'), count=Count('id'))
+        method: {'total': row['sales'], 'count': row['count']}
+        for method, row in method_totals(paid).items()
     }
     methods = sorted(({
         'method': method,

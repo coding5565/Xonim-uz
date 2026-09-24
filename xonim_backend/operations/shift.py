@@ -29,7 +29,8 @@ from .models import (
     ShiftClose,
     WaiterPayment,
 )
-from .money import day_window, money, platform_fee, takings
+from .money import day_window, money, platform_fee
+from .payments import method_totals
 from .services import audit, safely
 
 # Shu summadan katta farq e'tibor talab qiladi.
@@ -48,17 +49,15 @@ def day_figures(branch, day):
         service=Coalesce(Sum('service_charge'), Decimal('0')),
         orders=Count('id'),
     )
-    # Nom ataylab «amount»: `total=Sum('total')` maydonni yopib qo'yadi va
-    # ushlanma ifodasidagi F('total') agregatga tushib ketardi.
-    by_method = {
-        row['payment_method']: row
-        for row in paid.values('payment_method')
-        .annotate(
-            fee=platform_fee(), amount=takings(), count=Count('id'),
-            sales=Coalesce(Sum('total'), Decimal('0')),
-            tips=Coalesce(Sum('service_charge'), Decimal('0')),
-        )
-        .order_by('-amount')
+    # Pul TO'LOV qatorlaridan yig'iladi, buyurtmadan emas: bitta hisob
+    # 100 ming karta va 30 ming naqd bo'lib to'langan bo'lishi mumkin va
+    # naqdi aynan 30 ming bo'lib sanalishi kerak.
+    by_method = method_totals(paid)
+    # Platforma ushlanmasi buyurtma bo'yicha qoladi: Uzum va Yandex
+    # bo'linmaydi, ya'ni ularda hisob ham, to'lov ham bitta.
+    fees = {
+        row['payment_method']: row['fee']
+        for row in paid.values('payment_method').annotate(fee=platform_fee())
     }
     cash_in = by_method.get('cash', {}).get('amount') or Decimal('0')
     # Maktab kechqurun naqd olib kelsa, u pul kassada yotadi. Hisobga
@@ -94,7 +93,7 @@ def day_figures(branch, day):
         # Uzum va Yandex savdo summasining bir qismini o'zida ushlab qoladi:
         # hisobga to'liq summa emas, qolgani tushadi. Kassir kun oxirida
         # platformadan qancha kutishini aniq bilishi kerak.
-        fee = row.get('fee') or Decimal('0')
+        fee = fees.get(method) or Decimal('0')
         breakdown.append({
             'method': method,
             'label': label,
@@ -105,7 +104,7 @@ def day_figures(branch, day):
             # qatorlarni qo'shganda jami tushumdan katta chiqib qolardi.
             'amount': money(amount),
             'sales': money(row.get('sales') or Decimal('0')),
-            'service': money(row.get('tips') or Decimal('0')),
+            'service': money(row.get('service') or Decimal('0')),
             'count': row.get('count', 0),
             # Faqat naqd kassada qoladi.
             'in_drawer': method == 'cash',

@@ -53,6 +53,8 @@ export interface Order {
   discount: string
   discount_reason: string
   payment_method: string
+  /** Hisob qaysi usullar bilan to'langani. Bo'linmagan hisobda bitta qator. */
+  payments?: { method: string; label: string; amount: string; sales: string; service: string }[]
   created_at: string
   paid_at: string | null
   cashier_name: string

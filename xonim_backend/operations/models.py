@@ -313,6 +313,52 @@ class StaffMeal(models.Model):
         indexes = [models.Index(fields=['branch', 'date'], name='staff_meal_branch_date_idx')]
 
 
+class OrderPayment(models.Model):
+    """Hisobning bir qismi qaysi usul bilan to'langani.
+
+    130 000 so'mlik hisobning 100 mingi kartadan, 30 mingi naqd bo'lishi
+    mumkin. Ilgari buyurtmada bitta `payment_method` bor edi va bunday
+    to'lovni yozishning iloji yo'q edi: kassir birini tanlashga majbur
+    bo'lardi va kassadagi naqd hisobdan ajralib ketardi.
+
+    NEGA ALOHIDA JADVAL, buyurtmaga ikkita qo'shimcha maydon emas. Pul
+    oltita joyda to'lov usuli bo'yicha bo'linadi: kun yakuni, moliya,
+    savdo hisobotlari, boshqaruv paneli. Ikkita maydon bo'lganda har
+    birida «asosiysidan ayir, ikkinchisiga qo'sh» arifmetikasini bir xil
+    takrorlash kerak bo'lardi, va bitta joydagi xato jim turib kassadagi
+    hisobni buzardi. Alohida jadvalda har bir hisob oddiy yig'indiga
+    aylanadi va tabiatan to'g'ri bo'ladi.
+
+    `sales` va `service` YOZUV PAYTIDA muzlatiladi. Sabab: hisobotlar
+    tushumni (`sales`) xizmat haqidan (`service`) ajratib ko'rsatadi —
+    xizmat haqi kassada yotsa ham restoranning puli emas. Bo'lingan
+    to'lovda bu ulushni har safar qaytadan hisoblash kerak bo'lardi va
+    yaxlitlash har hisobotda boshqacha chiqishi mumkin edi. Bir marta
+    hisoblanib yozilgani esa hamma joyda bir xil bo'ladi.
+
+    Har doim `amount == sales + service`.
+    """
+
+    order = models.ForeignKey(Order, related_name='payments', on_delete=models.PROTECT)
+    method = models.CharField(max_length=10, choices=SALE_PAYMENT_METHODS)
+    # Shu usul bilan kassaga tushgan summa.
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    # Shu summaning tushum ulushi va ofitsiant xizmat haqi ulushi.
+    sales = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    service = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-amount', 'id']
+        constraints = [
+            # Bir hisobda bir usul bir marta: ikkita «naqd» qatori
+            # «qanchasi naqd» degan savolni javobsiz qoldirardi.
+            models.UniqueConstraint(fields=['order', 'method'], name='order_payment_one_row_per_method'),
+            models.CheckConstraint(condition=Q(amount__gt=0), name='order_payment_positive'),
+        ]
+        indexes = [models.Index(fields=['order'], name='order_payment_order_idx')]
+
+
 class Expense(models.Model):
     branch = models.ForeignKey(Branch, on_delete=models.PROTECT)
     actor = models.ForeignKey(User, on_delete=models.PROTECT)

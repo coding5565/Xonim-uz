@@ -76,6 +76,9 @@ export default function TablesPage() {
   const [selected, setSelected] = useState<Table>()
   const [bill, setBill] = useState<Order>()
   const [method, setMethod] = useState('')
+  // Bo'lib to'lash: hisobning bir qismi boshqa usul bilan kelishi mumkin.
+  const [splitMethod, setSplitMethod] = useState('')
+  const [splitAmount, setSplitAmount] = useState('')
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -130,13 +133,34 @@ export default function TablesPage() {
 
   async function pay(chosen: string) {
     if (!bill || busy) return
+    const payable = Number(bill.payable)
+    const second = Math.max(0, Number(splitAmount) || 0)
+    // Hisobga teng yoki undan katta bo'lsa bu bo'linish emas — kassir
+    // usulni almashtirgani ma'qul.
+    if (second >= payable) {
+      setError(t('Bu summa hisobdan kichik bo‘lishi kerak. Hammasi shu usul bilan bo‘lsa, uni asosiy qilib tanlang.'))
+      return
+    }
+    const other = methods.find(item => item.method !== chosen
+      && item.method === (splitMethod || (chosen === 'cash' ? 'card' : 'cash')))
+      || methods.find(item => item.method !== chosen)
     setBusy(true)
     setMethod(chosen)
     setError('')
     try {
-      await api(`orders/${bill.id}/pay/`, { method: 'POST', body: JSON.stringify({ payment_method: chosen }) })
+      await api(`orders/${bill.id}/pay/`, {
+        method: 'POST',
+        body: JSON.stringify({
+          payment_method: chosen,
+          // Bo'sh qoldirilsa server bo'linishni umuman ko'rmaydi.
+          split_method: second > 0 && other ? other.method : '',
+          split_amount: second > 0 && other ? String(second) : null,
+        }),
+      })
       setSelected(undefined)
       setBill(undefined)
+      setSplitAmount('')
+      setSplitMethod('')
       await load()
     } catch (exception) {
       setError((exception as Error).message)
@@ -388,6 +412,45 @@ export default function TablesPage() {
             </button>
 
             <p className="nav-caption">{t('TO‘LOVNI QAYD ETISH')}</p>
+            {/* Hisobning bir qismi boshqa usul bilan kelsa, kassir shu
+                yerga faqat O'SHA qismni yozadi va so'ng asosiy usulni
+                bosadi. Bo'sh qolsa — odatdagi bitta usulli to'lov. */}
+            <div className="split-pay">
+              <label>
+                {t('Boshqa usuldan, so‘m')}
+                <input
+                  value={splitAmount}
+                  onChange={event => setSplitAmount(event.target.value)}
+                  type="number"
+                  min="0"
+                  max={bill.payable}
+                  step="any"
+                  inputMode="decimal"
+                  placeholder="0"
+                  disabled={busy}
+                />
+              </label>
+              {methods.length > 1 && (
+                <label>
+                  {t('Usul')}
+                  <select
+                    value={splitMethod}
+                    onChange={event => setSplitMethod(event.target.value)}
+                    disabled={busy}
+                  >
+                    <option value="">{t('o‘zi tanlansin')}</option>
+                    {methods.map(item => (
+                      <option key={item.method} value={item.method}>{t(item.label)}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
+            {Number(splitAmount) > 0 && (
+              <p className="data-note">
+                {t('Qolgani esa quyidagi tugmadan tanlangan usul bilan hisoblanadi.')}
+              </p>
+            )}
             <div className="pay-grid">
               {methods.map(item => (
                 <button

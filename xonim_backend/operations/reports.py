@@ -15,6 +15,7 @@ from core.i18n import _
 
 from .models import SALE_CHANNEL_LABELS, SALE_PAYMENT_CHOICES, SALE_PAYMENT_LABELS, Order, OrderLine
 from .money import CENT, money, percent
+from .payments import method_totals
 
 
 def discount_cuts(lines):
@@ -339,7 +340,10 @@ def build_sales_board(user, filters):
     if filters.get('dish'):
         lines = lines.filter(dish_id=filters['dish'])
     if filters.get('method'):
-        lines = lines.filter(order__payment_method=filters['method'])
+        # Bo'lingan hisobda ikkita usul bor, shuning uchun filtr «shu usul
+        # ISHLATILGAN cheklar» degani. `distinct` shart: ikkita to'lov
+        # qatori qatorni ikki marta tortib kelardi.
+        lines = lines.filter(order__payments__method=filters['method']).distinct()
 
     totals = lines.aggregate(revenue=revenue_sum, items=Sum('quantity'), orders=Count('order_id', distinct=True))
     # Chegirma qatorlarga taqsimlanib, har bir kesimdan ayiriladi.
@@ -378,11 +382,21 @@ def build_sales_board(user, filters):
         for row in grouped('order__cashier_id', 'order__cashier__first_name', 'order__cashier__username',
                            cut='cashier', key='order__cashier_id')
     ]
+    # Usul kesimi qatorlardan emas, TO'LOVlardan yig'iladi: bo'lingan
+    # hisobning puli ikkala usulga nisbatan tarqalgan va uni taom qatori
+    # darajasida qayta bo'lishning ma'nosi yo'q — hech kim «qancha somsa
+    # puli kartadan keldi» deb so'ramaydi.
+    #
+    # Chegirma bu yerda ayirilmaydi: to'lov qatori mijoz HAQIQATDA
+    # to'lagan summani ushlab turadi, ya'ni chegirma unda allaqachon
+    # hisobga olingan.
     methods = [
-        {'method': row['order__payment_method'],
-         'label': SALE_PAYMENT_LABELS.get(row['order__payment_method'], row['order__payment_method'] or '—'),
-         'orders': row['orders'], 'revenue': cash(row['revenue'])}
-        for row in grouped('order__payment_method', cut='method', key='order__payment_method')
+        {'method': method,
+         'label': SALE_PAYMENT_LABELS.get(method, method or '—'),
+         'orders': row['count'], 'revenue': cash(row['sales'])}
+        for method, row in sorted(
+            method_totals(Order.objects.filter(id__in=lines.values('order_id'))).items(),
+            key=lambda item: -item[1]['sales'])
     ]
     # Kanal kesimi: buyurtma qayerdan kelgani — zal, olib ketish, Uzum, Yandex.
     channels = [
@@ -417,7 +431,7 @@ def build_sales_board(user, filters):
     if filters.get('method'):
         # Cheklar ro'yxati alohida so'rov: taom filtri bo'lmasa qatorlar
         # kesimi unga qo'llanmaydi va butun kun ochilib ketardi.
-        checks = checks.filter(payment_method=filters['method'])
+        checks = checks.filter(payments__method=filters['method']).distinct()
     if filters.get('category') or filters.get('dish'):
         checks = checks.filter(id__in=lines.values('order_id'))
 

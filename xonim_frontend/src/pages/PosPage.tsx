@@ -60,6 +60,10 @@ export default function PosPage() {
   const [payment, setPayment] = useState('cash')
   const [result, setResult] = useState<Order>()
   const [cashGiven, setCashGiven] = useState('')
+  // Bo'lib to'lash: ikkinchi usul va undan qancha kelgani. Bo'sh
+  // qolsa — odatdagi bitta usulli to'lov.
+  const [splitMethod, setSplitMethod] = useState('')
+  const [splitAmount, setSplitAmount] = useState('')
   const [cart, setCart] = useState<CartLine[]>([])
   const [key, setKey] = useState(() => crypto.randomUUID())
   // Natijasi noma'lum qolgan so'rov shu yerda saqlanadi: qayta bosilganda
@@ -206,12 +210,29 @@ export default function PosPage() {
     ? Math.round(total * Number(pickedWaiter.commission)) / 100
     : 0
   const payable = total + waiterFee
-  const change = Math.max(0, Number(cashGiven) - payable)
+
+  // Bo'lib to'lash: hisobning bir qismi boshqa usul bilan kelishi mumkin.
+  // Ikkinchi usul asosiysiga qarab o'zi tanlanadi — naqd bo'lsa karta,
+  // aks holda naqd — lekin kassir uni o'zgartira oladi.
+  const otherMethods = methods.filter(item => item.method !== payment)
+  const secondMethod = otherMethods.some(item => item.method === splitMethod)
+    ? splitMethod
+    : (otherMethods.find(item => item.method === (payment === 'cash' ? 'card' : 'cash'))
+      || otherMethods[0])?.method || ''
+  const splitValue = Math.max(0, Number(splitAmount) || 0)
+  // Hisobga teng yoki undan katta bo'lsa bu bo'linish emas: kassir
+  // usulni almashtirgani ma'qul. Forma uni qabul qilmaydi.
+  const splitTooBig = splitValue >= payable
+  const splitUsed = splitValue > 0 && !splitTooBig && !delivery
+  // Asosiy usulga qoladigan summa. Naqd bo'lsa qaytim shundan hisoblanadi,
+  // aks holda mijoz butun hisobdan qaytim olib ketardi.
+  const mainDue = splitUsed ? payable - splitValue : payable
+  const change = Math.max(0, Number(cashGiven) - mainDue)
   // Tayyor summa tugmalari. Hisobdan KICHIK qiymat foyda bermaydi: forma
   // uni qabul qilmaydi. Ilgari ro'yxat qotirilgan edi va 200 000 dan
   // qimmat chekda uchta tugmaning uchalasi ham ishlamasdi.
-  const cashPresets = [payable, ...[50000, 100000, 200000, 500000, 1000000]
-    .filter(amount => amount > payable).slice(0, 3)]
+  const cashPresets = [mainDue, ...[50000, 100000, 200000, 500000, 1000000]
+    .filter(amount => amount > mainDue).slice(0, 3)]
 
   // Sarlavhada kanal ko'rinib tursin: kassir qaysi joydan sotayotganini
   // ekranga qarab bilishi kerak, yozib qo'yilgandan keyin emas.
@@ -265,6 +286,9 @@ export default function PosPage() {
           waiter_id: !delivery && waiterId ? Number(waiterId) : null,
           channel,
           payment_method: method,
+          // Bo'sh qoldirilsa server bo'linishni umuman ko'rmaydi.
+          split_method: splitUsed ? secondMethod : '',
+          split_amount: splitUsed ? String(splitValue) : null,
           lines,
         }),
       })
@@ -277,6 +301,8 @@ export default function PosPage() {
       setPayModal(false)
       setSheet(false)
       setCashGiven('')
+      setSplitAmount('')
+      setSplitMethod('')
       setWaiterId('')
       // Qoldiq sotuvdan keyin kamayadi — keyingi buyurtmada yangisi ko'rinsin.
       refreshLive()
@@ -640,6 +666,59 @@ export default function PosPage() {
               </div>
             </>
           )}
+          {/* Bo'lib to'lash. Hisobning bir qismi boshqa usul bilan kelsa,
+              kassir shu yerga faqat O'SHA qismni yozadi. Bo'sh qolsa
+              hammasi asosiy usul bilan to'langan hisoblanadi — kundalik
+              holat aynan shu, shuning uchun katak kichkina va pastda. */}
+          {!delivery && !!otherMethods.length && (
+            <div className="split-pay">
+              <label>
+                {t('Shundan {method} orqali', {
+                  method: t(otherMethods.find(item => item.method === secondMethod)?.label || ''),
+                })}
+                <input
+                  value={splitAmount}
+                  onChange={event => setSplitAmount(event.target.value)}
+                  type="number"
+                  min="0"
+                  max={payable}
+                  step="any"
+                  inputMode="decimal"
+                  placeholder="0"
+                  disabled={locked}
+                />
+              </label>
+              {otherMethods.length > 1 && (
+                <label>
+                  {t('Usul')}
+                  <select
+                    value={secondMethod}
+                    onChange={event => setSplitMethod(event.target.value)}
+                    disabled={locked}
+                  >
+                    {otherMethods.map(item => (
+                      <option key={item.method} value={item.method}>{t(item.label)}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
+          )}
+          {splitTooBig && (
+            <p className="alert error">
+              {t('Bu summa hisobdan kichik bo‘lishi kerak. Hammasi shu usul bilan bo‘lsa, uni yuqoridan asosiy qilib tanlang.')}
+            </p>
+          )}
+          {splitUsed && (
+            <p className="data-note center">
+              {t('{main} — {mainMethod}, {second} — {secondMethod}', {
+                main: money(mainDue),
+                mainMethod: t(paymentLabel),
+                second: money(splitValue),
+                secondMethod: t(otherMethods.find(item => item.method === secondMethod)?.label || ''),
+              })}
+            </p>
+          )}
           {payment === 'cash' ? (
             <>
               <label>
@@ -648,8 +727,8 @@ export default function PosPage() {
                   value={cashGiven}
                   onChange={event => setCashGiven(event.target.value)}
                   type="number"
-                  min={payable}
-                  step="0.01"
+                  min={mainDue}
+                  step="any"
                   required
                 />
               </label>
@@ -668,7 +747,7 @@ export default function PosPage() {
             </p>
           )}
           {error && <p className="alert error">{error}</p>}
-          <button className="button primary full" disabled={busy}>
+          <button className="button primary full" disabled={busy || splitTooBig}>
             {busy ? t('Saqlanmoqda…') : t('To‘lovni tasdiqlash')}
           </button>
         </form>
