@@ -5856,6 +5856,39 @@ class VersionTests(TestCase):
 
     # --- Izohlarning shakli ---
 
+    def test_no_money_field_can_refuse_a_round_sum(self):
+        """`min` va `step` birga pul kiritishni to'sib qo'ymasligi kerak.
+
+        Brauzer `min` va `step` berilganda faqat `min + n*step` qiymatlarini
+        qabul qiladi. `min="1" step="1000"` bo'lsa 150 000 RAD ETILADI va
+        xodimga aynan balansidagi summani berib bo'lmaydi — eng ko'p
+        qilinadigan amal. Xatolik ekranda ham tushunarsiz ko'rinadi:
+        «eng yaqini 149001 va 150001».
+
+        Frontend testlari yo'q, shuning uchun qo'riqchi shu yerda: fayllar
+        o'qib chiqiladi. `step` ham strelkalarni, ham tekshiruvni
+        boshqaradi va HTML'da ularni ajratib bo'lmaydi, shuning uchun
+        pulda yagona to'g'ri qiymat — `any`.
+        """
+        root = Path(settings.BASE_DIR).parent / 'xonim_frontend' / 'src'
+        tag = re.compile(r'<input\b.*?/>', re.S)
+        attribute = re.compile(r'(\w+)="([^"]*)"')
+        # Dona sanoq, ombor miqdori va tiyin — bular to'g'ri qadamlar.
+        allowed = {'any', '0.01', '0.001', '1'}
+        offenders = []
+        for path in sorted(root.rglob('*.tsx')):
+            source = path.read_text(encoding='utf-8')
+            for match in tag.finditer(source):
+                attrs = dict(attribute.findall(match.group(0)))
+                if attrs.get('type') != 'number':
+                    continue
+                step = attrs.get('step')
+                if step is None or step in allowed:
+                    continue
+                line = source[:match.start()].count('\n') + 1
+                offenders.append(f'{path.name}:{line} step="{step}"')
+        self.assertEqual(offenders, [], 'pul maydonida noto‘g‘ri step')
+
     def test_every_release_note_exists_in_all_three_languages(self):
         """Ruscha gapiradigan kassir ham nima o'zgarganini bilishi kerak.
 

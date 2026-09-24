@@ -613,7 +613,7 @@ export default function PartnerPage() {
                 onChange={event => setSettleForm({ ...settleForm, amount: event.target.value })}
                 type="number"
                 min="1"
-                step="1000"
+                step="any"
                 max={settling?.remaining}
                 required
                 autoFocus
@@ -753,7 +753,7 @@ export default function PartnerPage() {
                   onChange={event => setPriceDraft(previous => ({ ...previous, [dish.id]: event.target.value }))}
                   type="number"
                   min="0"
-                  step="500"
+                  step="any"
                   inputMode="numeric"
                   placeholder="—"
                   aria-label={t('{name} uchun hamkor narxi', { name: dish.name })}

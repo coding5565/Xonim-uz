@@ -438,7 +438,7 @@ export default function StaffPage() {
                 onChange={event => updateCreate({ daily_wage: event.target.value })}
                 type="number"
                 min="0"
-                step="1000"
+                step="any"
                 placeholder="150000"
               />
             </label>
@@ -561,7 +561,7 @@ export default function StaffPage() {
                 onChange={event => updateEdit({ daily_wage: event.target.value })}
                 type="number"
                 min="0"
-                step="1000"
+                step="any"
                 required
               />
             </label>
@@ -633,7 +633,7 @@ export default function StaffPage() {
                 onChange={event => updatePay({ amount: event.target.value })}
                 type="number"
                 min="1"
-                step="1000"
+                step="any"
                 required
               />
             </label>

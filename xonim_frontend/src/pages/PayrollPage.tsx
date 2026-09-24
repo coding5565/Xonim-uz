@@ -445,7 +445,7 @@ export default function PayrollPage() {
                 onChange={event => setPayForm({ ...payForm, amount: event.target.value })}
                 type="number"
                 min="1"
-                step="1000"
+                step="any"
                 required
                 autoFocus
               />
