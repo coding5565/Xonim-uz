@@ -364,9 +364,18 @@ export default function BonusesPage() {
               onChange={event => setForm({ ...form, dish: Number(event.target.value) })}
               required
             >
-              {dishes.filter(dish => !dish.archived).map(dish => (
-                <option key={dish.id} value={dish.id}>{dish.name}</option>
-              ))}
+              {/* Arxivlangan taom ro'yxatda turmaydi, LEKIN tahrirlanayotgan
+                  qoida o'shanga tegishli bo'lsa — turadi. Aks holda brauzer
+                  ro'yxatda yo'q qiymatni ko'rsata olmay boshqa taomni
+                  chizar, ekran bir narsani ko'rsatib holat boshqasini
+                  ushlab turardi. */}
+              {dishes
+                .filter(dish => !dish.archived || dish.id === form.dish)
+                .map(dish => (
+                  <option key={dish.id} value={dish.id}>
+                    {dish.name}{dish.archived ? ` · ${t('arxivlangan')}` : ''}
+                  </option>
+                ))}
             </select>
           </label>
           <div className="form-row">

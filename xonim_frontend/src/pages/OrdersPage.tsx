@@ -53,6 +53,24 @@ export default function OrdersPage() {
   const methodLabel = (value: string) =>
     methods.find(item => item.method === value)?.label || t('To‘lov olinmagan')
 
+  // Yetkazib berish hisobi faqat o'z platformasi orqali to'lanadi; qolgan
+  // savdoda esa platforma turlari umuman ko'rinmaydi — ular alohida kanal.
+  const allowed = methods.filter(item => DELIVERY_METHODS.includes(selected?.channel || '')
+    ? item.method === selected?.channel
+    : !DELIVERY_METHODS.includes(item.method))
+  // Ekranda ko'ringan usul bilan serverga ketadigan usul AYNAN BITTA
+  // qiymatdan chiqadi.
+  //
+  // Ilgari ular ajralib ketardi: holat 'cash' bo'lib turar, Yandex
+  // hisobida esa ro'yxatda faqat 'yandex' bo'lardi. Brauzer ro'yxatda
+  // yo'q qiymatni ko'rsata olmay birinchisini — «Yandex» — chizardi,
+  // yuborilganda esa 'cash' ketardi. Server uni haqli ravishda rad etar,
+  // kassir esa ekranda «Yandex» turganini ko'rib turib sababini
+  // tushunmas, hisob ochiq qolib ketardi.
+  const chosen = allowed.some(item => item.method === method)
+    ? method
+    : (allowed[0]?.method || '')
+
   const visible = orders.filter(order =>
     (filter === 'all' || order.status === filter) &&
     `${order.id} ${order.table} ${order.waiter}`.toLowerCase().includes(query.toLowerCase()),
@@ -66,7 +84,7 @@ export default function OrdersPage() {
     try {
       setSelected(await api<Order>(`orders/${selected.id}/pay/`, {
         method: 'POST',
-        body: JSON.stringify({ payment_method: method }),
+        body: JSON.stringify({ payment_method: chosen }),
       }))
       await load()
     } catch (exception) {
@@ -217,18 +235,13 @@ export default function OrdersPage() {
               <form onSubmit={pay}>
                 <label>
                   {t('To‘lov usuli')}
-                  <select value={method} onChange={event => setMethod(event.target.value)}>
-                    {/* Yetkazib berish hisobi faqat o'z platformasi orqali
-                        to'lanadi; qolgan savdoda esa platforma turlari
-                        umuman ko'rinmaydi — ular alohida kanal. */}
-                    {methods
-                      .filter(item => DELIVERY_METHODS.includes(selected.channel)
-                        ? item.method === selected.channel
-                        : !DELIVERY_METHODS.includes(item.method))
-                      .map(item => <option key={item.method} value={item.method}>{t(item.label)}</option>)}
+                  <select value={chosen} onChange={event => setMethod(event.target.value)}>
+                    {allowed.map(item => (
+                      <option key={item.method} value={item.method}>{t(item.label)}</option>
+                    ))}
                   </select>
                 </label>
-                <button className="button primary full" disabled={busy}>
+                <button className="button primary full" disabled={busy || !chosen}>
                   {busy ? t('Saqlanmoqda…') : t('To‘lovni qayd etish')}
                 </button>
               </form>

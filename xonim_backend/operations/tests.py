@@ -5889,6 +5889,51 @@ class VersionTests(TestCase):
                 offenders.append(f'{path.name}:{line} step="{step}"')
         self.assertEqual(offenders, [], 'pul maydonida noto‘g‘ri step')
 
+    def test_no_dropdown_can_show_one_thing_and_send_another(self):
+        """Filtrlangan ro'yxat o'z tanlovini ham ichiga olishi shart.
+
+        Brauzer `<select>` da ro'yxatda YO'Q qiymatni ko'rsata olmaydi:
+        u birinchi variantni chizadi, holat esa eski qiymatda qoladi.
+        Natijada ekran bir narsani ko'rsatib, serverga boshqasi ketadi.
+
+        Aynan shu Yandex buyurtmasida yuz bergan edi: holat 'cash' bo'lib
+        turar, ro'yxat esa faqat 'yandex' ni ko'rsatardi. Kassir ekranda
+        «Yandex» turganini ko'rib to'lovni bosar, server 'cash' ni haqli
+        ravishda rad etar, hisob esa ochiq qolib ketardi.
+
+        Qoida: variantlar `.filter()` bilan chegaralangan bo'lsa, o'sha
+        filtr `value` dagi ifodani ham tekshirishi kerak — ya'ni joriy
+        tanlov ro'yxatdan tushib qolmasligi kafolatlangan bo'lsin.
+        """
+        root = Path(settings.BASE_DIR).parent / 'xonim_frontend' / 'src'
+        block = re.compile(r'<select\b.*?</select>', re.S)
+        offenders = []
+        for path in sorted(root.rglob('*.tsx')):
+            source = path.read_text(encoding='utf-8')
+            for match in block.finditer(source):
+                tag = match.group(0)
+                value = re.search(r'value=\{([^}]+)\}', tag)
+                if not value or '.filter(' not in tag:
+                    continue
+                # Filtr joriy TANLOVNI tilga oladimi.
+                #
+                # Nuqtali ifoda (`form.dish`) butunicha qidiriladi. Yalang'och
+                # nom (`method`) esa NUQTADAN KEYIN kelmasligi shart: filtrdagi
+                # `item.method` — bu boshqa narsa, variantning o'z maydoni, va
+                # u holatdagi `method` ni qoplamaydi. Aynan shu farq sezilmay
+                # qolgani uchun Yandex hisobi ochiq qolib ketgandi.
+                expression = value.group(1).strip()
+                body = tag.split('.filter(', 1)[1]
+                if '.' in expression:
+                    mentioned = expression in body
+                else:
+                    mentioned = re.search(rf'(?<!\.)\b{re.escape(expression)}\b', body) is not None
+                if mentioned:
+                    continue
+                line = source[:match.start()].count('\n') + 1
+                offenders.append(f'{path.name}:{line} value={{{value.group(1).strip()}}}')
+        self.assertEqual(offenders, [], 'ro‘yxat o‘z tanlovini tushirib qoldirishi mumkin')
+
     def test_every_release_note_exists_in_all_three_languages(self):
         """Ruscha gapiradigan kassir ham nima o'zgarganini bilishi kerak.
 
