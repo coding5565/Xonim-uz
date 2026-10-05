@@ -87,6 +87,23 @@ services:
       - traefik.http.routers.${PROJECT}.tls=true
       - traefik.http.routers.${PROJECT}.tls.certresolver=le
       - traefik.http.services.${PROJECT}.loadbalancer.server.port=80
+      # www.<domen> -> <domen>. Alohida router: www resolve bo'lmasa
+      # (masalan sslip.io), faqat shu router sertifikatsiz qoladi,
+      # asosiy domenning sertifikatiga ta'sir qilmaydi.
+      - traefik.http.routers.${PROJECT}-www.rule=Host(`www.${DOMAIN}`)
+      - traefik.http.routers.${PROJECT}-www.entrypoints=websecure
+      - traefik.http.routers.${PROJECT}-www.tls=true
+      - traefik.http.routers.${PROJECT}-www.tls.certresolver=le
+      - traefik.http.routers.${PROJECT}-www.middlewares=${PROJECT}-www
+      - traefik.http.middlewares.${PROJECT}-www.redirectregex.regex=^https?://www\.(.*)
+      - traefik.http.middlewares.${PROJECT}-www.redirectregex.replacement=https://$${1}
+      - traefik.http.middlewares.${PROJECT}-www.redirectregex.permanent=true
+      # Eski manzil (LEGACY_DOMAIN). Bo'sh bo'lsa DOMAIN takrorlanadi va
+      # bu router hech narsani o'zgartirmaydi.
+      - traefik.http.routers.${PROJECT}-legacy.rule=Host(`${LEGACY_DOMAIN:-${DOMAIN}}`)
+      - traefik.http.routers.${PROJECT}-legacy.entrypoints=websecure
+      - traefik.http.routers.${PROJECT}-legacy.tls=true
+      - traefik.http.routers.${PROJECT}-legacy.tls.certresolver=le
 
 volumes:
   db_data:

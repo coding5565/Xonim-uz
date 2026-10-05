@@ -421,7 +421,7 @@ class SetupWindow:
 
         self.fields = {}
         rows = [
-            ('url', 'Server manzili', 'https://37-140-216-170.sslip.io'),
+            ('url', 'Server manzili', 'https://xonimuz.uz'),
             ('token', 'Maxfiy so‘z (token)', ''),
             ('branch', 'Filial', 'xonim'),
             ('name', 'Shu kassaning nomi', 'kassa-1'),

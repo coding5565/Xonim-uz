@@ -3,7 +3,7 @@
 
 [server]
 ; CRM manzili. Oxiridagi chiziqcha shart emas.
-url = https://37-140-216-170.sslip.io
+url = https://xonimuz.uz
 ; Serverdagi .env dagi PRINT_AGENT_TOKEN bilan BIR XIL bolishi shart.
 token = PASTE_PRINT_AGENT_TOKEN
 ; Filial manzili (slug). Superadmin sahifasidagi menyu havolasida korinadi.
