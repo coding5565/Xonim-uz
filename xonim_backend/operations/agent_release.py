@@ -84,16 +84,19 @@ class AgentVersionView(APIView):
     def get(self, request):
         if not agent_allowed(request):
             return Response({'detail': 'Ruxsat yo‘q.'}, status=403)
+        # Agent eski manzilga ulangan bo'lsa, shu manzilga o'tadi.
+        server_url = getattr(settings, 'PUBLIC_URL', '')
         manifest = read_manifest()
         if not manifest:
             # Versiya chiqarilmagan — bu xato emas. Agent shunchaki
             # o'zidagini ishlatishda davom etadi.
-            return Response({'version': None})
+            return Response({'version': None, 'server_url': server_url})
         return Response({
             'version': manifest['version'],
             'size': manifest['size'],
             'sha256': manifest['sha256'],
             'notes': manifest.get('notes', ''),
+            'server_url': server_url,
         })
 
 

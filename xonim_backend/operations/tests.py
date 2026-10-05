@@ -6182,3 +6182,22 @@ class SplitPaymentTests(TestCase):
         event = AuditEvent.objects.filter(action='order.pay').first()
         self.assertIsNotNone(event)
         self.assertIn('+', event.description)
+
+
+@override_settings(PRINT_AGENT_TOKEN='agent-token', PUBLIC_URL='https://xonimuz.uz')
+class AgentServerUrlTests(TestCase):
+    """Domen almashganda agent yangi manzilni versiya so'rovidan biladi."""
+
+    def test_version_reports_public_url(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as empty, self.settings(AGENT_DIR=empty):
+            response = APIClient().get(
+                '/api/v1/print/agent/version/', HTTP_X_PRINT_AGENT_TOKEN='agent-token')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['server_url'], 'https://xonimuz.uz')
+
+    def test_wrong_token_gets_nothing(self):
+        response = APIClient().get(
+            '/api/v1/print/agent/version/', HTTP_X_PRINT_AGENT_TOKEN='wrong')
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn('server_url', response.data)

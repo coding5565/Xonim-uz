@@ -40,7 +40,7 @@ from ctypes import wintypes
 from pathlib import Path
 from tkinter import messagebox, ttk
 
-VERSION = '1.0'
+VERSION = '1.1'
 APP_NAME = 'XonimAgent'
 TASK_NAME = 'Xonim print agent'
 # Yangilanish shuncha vaqtda bir marta tekshiriladi.
@@ -378,6 +378,7 @@ class Worker(threading.Thread):
         except Exception as error:  # noqa: BLE001
             self.say('warn', f'Yangilanish tekshirilmadi: {str(error)[:60]}')
             return
+        self.follow_server(info.get('server_url'))
         latest = info.get('version')
         if not latest or latest == VERSION:
             self.say('info', f'Versiya {VERSION} — eng so‘nggisi')
@@ -392,6 +393,32 @@ class Worker(threading.Thread):
         apply_update(data)
         self.stop.set()
         os._exit(0)
+
+    def follow_server(self, target):
+        """Server boshqa manzilni asosiy deb aytsa, sozlamani shunga o'tkazadi.
+
+        Domen almashganda restoranga borib agent.ini ni tahrirlash shart
+        bo'lmasin. Yangi manzil avval shu token bilan tekshiriladi: javob
+        bermasa eskisida qolamiz — ishlab turgan aloqani buzmaymiz.
+        """
+        target = (target or '').strip().rstrip('/')
+        if not target.startswith('https://') or target == self.server.base:
+            return
+        candidate = Server(target, self.server.token)
+        try:
+            candidate.latest_version()
+        except Exception as error:  # noqa: BLE001
+            self.say('warn', f'Yangi manzil javob bermadi ({target}): {str(error)[:50]}')
+            return
+        self.config['server']['url'] = target
+        try:
+            with config_path().open('w', encoding='utf-8') as handle:
+                self.config.write(handle)
+        except OSError as error:
+            self.say('warn', f'Sozlama yozilmadi: {str(error)[:60]}')
+            return
+        self.server = candidate
+        self.say('ok', f'Server manzili yangilandi: {target}')
 
 
 # --------------------------------------------------------------------

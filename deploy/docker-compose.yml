@@ -98,12 +98,25 @@ services:
       - traefik.http.middlewares.${PROJECT}-www.redirectregex.regex=^https?://www\.(.*)
       - traefik.http.middlewares.${PROJECT}-www.redirectregex.replacement=https://$${1}
       - traefik.http.middlewares.${PROJECT}-www.redirectregex.permanent=true
-      # Eski manzil (LEGACY_DOMAIN). Bo'sh bo'lsa DOMAIN takrorlanadi va
-      # bu router hech narsani o'zgartirmaydi.
-      - traefik.http.routers.${PROJECT}-legacy.rule=Host(`${LEGACY_DOMAIN:-${DOMAIN}}`)
+      # Eski manzil (LEGACY_DOMAIN). Sahifalar yangi domenga yo'naltiriladi,
+      # /api/ esa shu yerda xizmat qilishda davom etadi: o'rnatilgan agentlar
+      # POST yuboradi, yo'naltirishda esa so'rov tanasi yo'qoladi. Agent
+      # yangi manzilni o'zi oladi (server_url), shundan keyin LEGACY_DOMAIN
+      # ni bo'shatish mumkin. Bo'sh bo'lsa hech qachon mos kelmaydigan
+      # `.invalid` nom qo'yiladi — DOMAIN bilan to'qnashib, cheksiz
+      # yo'naltirish halqasi yasamasin.
+      - traefik.http.routers.${PROJECT}-legacy.rule=Host(`${LEGACY_DOMAIN:-legacy.invalid}`) && !PathPrefix(`/api/`)
       - traefik.http.routers.${PROJECT}-legacy.entrypoints=websecure
       - traefik.http.routers.${PROJECT}-legacy.tls=true
       - traefik.http.routers.${PROJECT}-legacy.tls.certresolver=le
+      - traefik.http.routers.${PROJECT}-legacy.middlewares=${PROJECT}-legacy
+      - traefik.http.middlewares.${PROJECT}-legacy.redirectregex.regex=^https?://[^/]+/(.*)
+      - traefik.http.middlewares.${PROJECT}-legacy.redirectregex.replacement=https://${DOMAIN}/$${1}
+      - traefik.http.middlewares.${PROJECT}-legacy.redirectregex.permanent=false
+      - traefik.http.routers.${PROJECT}-legacy-api.rule=Host(`${LEGACY_DOMAIN:-legacy.invalid}`) && PathPrefix(`/api/`)
+      - traefik.http.routers.${PROJECT}-legacy-api.entrypoints=websecure
+      - traefik.http.routers.${PROJECT}-legacy-api.tls=true
+      - traefik.http.routers.${PROJECT}-legacy-api.tls.certresolver=le
 
 volumes:
   db_data:

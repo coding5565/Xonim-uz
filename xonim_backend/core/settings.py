@@ -110,6 +110,11 @@ PRINT_LEASE_SECONDS = int(os.environ.get('PRINT_LEASE_SECONDS', '120'))
 # Chop etish agentining .exe fayli va manifesti shu yerda turadi.
 # Agentlar soatiga bir marta shu yerdan yangi versiyani so'raydi.
 AGENT_DIR = os.environ.get('AGENT_DIR', BASE_DIR / 'agent')
+# Tizimning asosiy manzili. Agent uni versiya bilan birga oladi va
+# boshqa (eski) manzilga ulangan bo'lsa, sozlamasini o'zi shunga o'tkazadi.
+# Berilmasa DOMAIN dan yasaladi; ikkalasi ham bo'sh bo'lsa — ko'chirish yo'q.
+PUBLIC_URL = (os.environ.get('PUBLIC_URL')
+              or (f"https://{os.environ['DOMAIN']}" if os.environ.get('DOMAIN') else '')).rstrip('/')
 # Zaxira nusxa. Token va chat sozlanmasa nusxa baribir olinadi, lekin
 # faqat serverda qoladi — yuborishning ishlamasligi zaxirani to'xtatmaydi.
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
