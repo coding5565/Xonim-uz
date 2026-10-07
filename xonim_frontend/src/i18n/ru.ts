@@ -1517,4 +1517,5 @@ export const ru: Record<string, string> = {
   'Rasmlar': 'Фото',
   'Zaxira nusxa olindi': 'Резервная копия создана',
   'Zaxira nusxa olinmadi': 'Резервная копия не создана',
+  'Qidiruvni tozalash': 'Очистить поиск',
 }

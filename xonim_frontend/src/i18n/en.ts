@@ -1517,4 +1517,5 @@ export const en: Record<string, string> = {
   'Rasmlar': 'Photos',
   'Zaxira nusxa olindi': 'Backup created',
   'Zaxira nusxa olinmadi': 'Backup failed',
+  'Qidiruvni tozalash': 'Clear search',
 }
