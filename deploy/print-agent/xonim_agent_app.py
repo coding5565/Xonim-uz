@@ -41,7 +41,7 @@ from ctypes import wintypes
 from pathlib import Path
 from tkinter import messagebox, ttk
 
-VERSION = '1.5'
+VERSION = '1.6'
 APP_NAME = 'XonimAgent'
 TASK_NAME = 'Xonim print agent'
 # Yangilanish shuncha vaqtda bir marta tekshiriladi.
@@ -71,6 +71,21 @@ def config_path():
 def running_frozen():
     """PyInstaller yig'gan .exe ichidamizmi yoki oddiy .py sifatidami."""
     return getattr(sys, 'frozen', False)
+
+
+def resource_path(name):
+    """Dastur ichidagi fayl (masalan logotip) qayerda yotishini topadi.
+
+    PyInstaller yig'gan .exe ishga tushganda fayllarni vaqtinchalik
+    papkaga (`sys._MEIPASS`) ochadi; oddiy .py da esa ular skript
+    yonida turadi.
+    """
+    base = getattr(sys, '_MEIPASS', None) or str(Path(__file__).resolve().parent)
+    return Path(base) / name
+
+
+def icon_path():
+    return resource_path('xonim-logo.ico')
 
 
 # --------------------------------------------------------------------
@@ -417,6 +432,9 @@ def write_config(values):
         'token': values['token'],
         'branch': values['branch'],
         'name': values['name'],
+        # Kompyuter yoqilganda o'zi ishga tushsinmi. Yo'q bo'lsa ham
+        # agent ishlaydi — faqat qo'lda ochish kerak bo'ladi.
+        'autostart': 'yes' if values.get('autostart', True) else 'no',
     }
     config['printers'] = {
         'counter': values['counter'],
@@ -489,6 +507,33 @@ def register_autostart():
         return 'shortcut'
     LOG.error('Avtoishga tushirish sozlanmadi: %s', said[:160] or f'kod {code}')
     return ''
+
+
+def unregister_autostart():
+    """Avtoishga tushirishni o'chiradi: ham vazifa, ham yorliq.
+
+    Ikkalasini ham olib tashlaymiz, chunki avval qaysi biri qo'yilgani
+    noma'lum — huquqqa qarab biri yoki ikkinchisi ishlagan bo'lishi
+    mumkin. Bo'lmaganini o'chirishga urinish xato emas.
+    """
+    run_quiet(['schtasks', '/Delete', '/F', '/TN', TASK_NAME])
+    link = (Path(os.environ.get('APPDATA', '')) / 'Microsoft' / 'Windows'
+            / 'Start Menu' / 'Programs' / 'Startup' / 'Xonim chek printeri.lnk')
+    try:
+        link.unlink(missing_ok=True)
+    except OSError as error:
+        LOG.warning('Yorliq o‘chmadi: %s', error)
+    LOG.info('Avtoishga tushirish o‘chirildi')
+
+
+def apply_autostart(config):
+    """Sozlamaga qarab avtoishga tushirishni yoqadi yoki o'chiradi."""
+    wanted = (config['server'].get('autostart', 'yes') or 'yes').lower() != 'no'
+    if wanted:
+        register_autostart()
+    else:
+        unregister_autostart()
+    return wanted
 
 
 def install_self():
@@ -910,8 +955,23 @@ class Tray:
         self._thread.start()
 
     def _load_icon(self):
-        # Avval .exe ning o'z belgisini olishga urinamiz, bo'lmasa
-        # standart dastur belgisi — belgisiz trey ko'rinmaydi.
+        # Avval logotip faylidan aniq 16x16 belgi olamiz — trey belgisi
+        # kichik, shuning uchun o'sha o'lchamda yuklaymiz, aks holda u
+        # xira ko'rinadi. Fayl topilmasa .exe belgisi, u ham bo'lmasa
+        # standart belgi: belgisiz trey umuman ko'rinmaydi.
+        IMAGE_ICON, LR_LOADFROMFILE = 1, 0x10
+        self._u32.LoadImageW.restype = wintypes.HICON
+        self._u32.LoadImageW.argtypes = [
+            wintypes.HINSTANCE, wintypes.LPCWSTR, wintypes.UINT,
+            ctypes.c_int, ctypes.c_int, wintypes.UINT]
+        ico = icon_path()
+        if ico.exists():
+            try:
+                hicon = self._u32.LoadImageW(None, str(ico), IMAGE_ICON, 16, 16, LR_LOADFROMFILE)
+                if hicon:
+                    return hicon
+            except Exception:  # noqa: BLE001
+                pass
         self._shell.ExtractIconW.restype = wintypes.HICON
         self._shell.ExtractIconW.argtypes = [wintypes.HINSTANCE, wintypes.LPCWSTR, wintypes.UINT]
         try:
@@ -1002,6 +1062,17 @@ class Tray:
 PALETTE = {'bg': '#f3f5f4', 'card': '#ffffff', 'ink': '#1f3b30', 'muted': '#6d7f76'}
 
 
+def set_window_icon(root):
+    """Oyna va vazifalar panelidagi belgini logotipga almashtiradi."""
+    ico = icon_path()
+    if not ico.exists():
+        return
+    try:
+        root.iconbitmap(default=str(ico))
+    except Exception:  # noqa: BLE001 - belgi qo'yilmasa ham oyna ishlaydi
+        pass
+
+
 class SetupWindow:
     """Birinchi ishga tushirishdagi sozlama."""
 
@@ -1009,6 +1080,7 @@ class SetupWindow:
         self.result = None
         self.root = tk.Tk()
         self.root.title('Xonim — chek printerini sozlash')
+        set_window_icon(self.root)
         self.root.configure(bg=PALETTE['bg'])
         self.root.resizable(False, False)
 
@@ -1081,9 +1153,19 @@ class SetupWindow:
                  bg=PALETTE['bg'], fg=PALETTE['muted'], justify='left').grid(
             row=9, column=0, columnspan=2, sticky='w', pady=(8, 12))
 
+        # Avtoishga tushirish belgisi. Saqlangan qiymat o'qiladi; birinchi
+        # sozlashda — yoqilgan, chunki agent odatda doimo ishlab turishi kerak.
+        saved_auto = (existing['server'].get('autostart', 'yes') if existing else 'yes')
+        self.autostart = tk.BooleanVar(value=saved_auto.lower() != 'no')
+        tk.Checkbutton(frame, variable=self.autostart,
+                       text='Kompyuter yoqilganda o‘zi ishga tushsin',
+                       bg=PALETTE['bg'], fg=PALETTE['ink'], activebackground=PALETTE['bg'],
+                       selectcolor=PALETTE['card'], anchor='w').grid(
+            row=10, column=0, columnspan=2, sticky='w', pady=(0, 10))
+
         tk.Button(frame, text='Saqlash va ishga tushirish', command=self.save,
                   bg='#2f6f52', fg='white', relief='flat', padx=16, pady=7,
-                  font=('Segoe UI', 10, 'bold')).grid(row=10, column=0, columnspan=2, sticky='e')
+                  font=('Segoe UI', 10, 'bold')).grid(row=11, column=0, columnspan=2, sticky='e')
 
         # Oyna chizilib bo'lgach tarmoqni o'zi qidiradi: odam tugmani
         # bosishi shart emas, ro'yxat shundoq ham to'ladi.
@@ -1189,6 +1271,7 @@ class SetupWindow:
         if not values['kitchen']:
             values['kitchen'] = values['counter']
         values.setdefault('name', 'kassa-1')
+        values['autostart'] = self.autostart.get()
         self.result = values
         self.root.destroy()
 
@@ -1214,6 +1297,7 @@ class MainWindow:
 
         self.root = tk.Tk()
         self.root.title(f'Xonim — chek printeri · {VERSION}')
+        set_window_icon(self.root)
         self.root.configure(bg=PALETTE['bg'])
         self.root.geometry('660x460')
 
@@ -1436,7 +1520,7 @@ def main():
         # agentga aylanardi — natijada u fayl band bo'lib, keyingi
         # marta ustiga yangi versiya yozilmay qolardi.
         try:
-            register_autostart()
+            apply_autostart(config)
         except Exception:  # noqa: BLE001 - sabab jurnalda qoladi
             LOG.exception('Avtoishga tushirish sozlanmadi')
         if moved:

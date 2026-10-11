@@ -13,6 +13,9 @@ name = kassa-1
 ; Yangi talonni shuncha soniyada bir sorab turadi.
 poll_seconds = 2
 log = agent.log
+; Kompyuter yoqilganda ozi ishga tushsinmi (yes/no). "Sozlamalar"
+; oynasidagi belgi ham shu qatorni ozgartiradi.
+autostart = yes
 
 [printers]
 ; Chapda — tizimdagi bolim nomi, ongda — shu kompyuterdagi printer.
