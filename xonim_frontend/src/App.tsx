@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
-  ArrowUpRight, BarChart3, Banknote, Bot, ChefHat, ChevronRight, Command, ConciergeBell, CookingPot, Gift, Handshake, History, Rocket, LayoutDashboard, LogOut, Menu, PiggyBank,
+  ArrowUpRight, BarChart3, Banknote, Bot, Calculator, ChefHat, ChevronRight, Command, ConciergeBell, CookingPot, Gift, Handshake, History, Rocket, LayoutDashboard, LogOut, Menu, PiggyBank,
   LayoutGrid, Moon, Package, PanelLeftClose, ReceiptText, Settings2, ShoppingBag, Soup, Store, Sun, Users, UtensilsCrossed, Wallet,
 } from 'lucide-react'
 import { api } from './api'
@@ -20,11 +20,16 @@ interface NavItem {
   icon: typeof Menu
   roles: Role[]
   badge?: string
+  // Xonim'ning o'z sahifasi emas, shu saytdagi alohida ilova (masalan,
+  // /planner/ dagi kalkulyator). Router uni ocholmaydi — oddiy havola kerak.
+  external?: boolean
 }
 
 const navItems: NavItem[] = [
   { path: '/', name: 'Umumiy holat', icon: LayoutDashboard, roles: ['owner'] },
   { path: '/finance', name: 'Umumiy moliya', icon: PiggyBank, roles: ['owner'] },
+  // «Agar … bo'lsa-chi?» — moliyaga yonma-yon: o'sha raqamlardan reja tuziladi.
+  { path: '/planner/', name: 'Kalkulyator', icon: Calculator, roles: ['owner'], external: true },
   { path: '/sales', name: 'Sotuv', icon: Store, roles: ['owner', 'cashier'] },
   { path: '/pos', name: 'Kassa', icon: ShoppingBag, roles: ['owner', 'cashier'], badge: 'POS' },
   { path: '/orders', name: 'Buyurtmalar', icon: ReceiptText, roles: ['owner', 'cashier'] },
@@ -146,6 +151,14 @@ export default function App() {
         <nav>
           {nav.map(item => {
             const Icon = item.icon
+            if (item.external) {
+              return (
+                <a key={item.path} href={item.path} onClick={closeMobileNav}>
+                  <Icon size={20} />
+                  <span>{t(item.name)}</span>
+                </a>
+              )
+            }
             return (
               <Link
                 key={item.path}

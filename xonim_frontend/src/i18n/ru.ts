@@ -616,6 +616,7 @@ export const ru: Record<string, string> = {
   'JPG, PNG, WebP · 5 MB gacha': 'JPG, PNG, WebP · до 5 МБ',
   'Jurnal': 'Журнал',
   'Jurnal to‘liq saqlanadi — eski yozuvlar hech qachon tozalanmaydi.': 'Журнал хранится полностью — старые записи не удаляются.',
+  'Kalkulyator': 'Калькулятор',
   'Kam qoldi': 'Мало осталось',
   'Kam qolgan': 'Заканчивается',
   'kam qolgan': 'заканчивается',

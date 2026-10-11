@@ -106,3 +106,35 @@ jobs:
       - name: Yig‘ish
         working-directory: xonim_frontend
         run: npm run build
+
+  planner:
+    name: Kalkulyator — testlar, linter va yig‘ish
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: xonim_planner/package-lock.json
+
+      - name: Bog‘liqliklarni o‘rnatish
+        working-directory: xonim_planner
+        run: npm ci
+
+      - name: Linter
+        working-directory: xonim_planner
+        run: npm run lint
+
+      # Hisob dvigateli, tarjimalar va Xonim'dan kelgan faktlarni modelga
+      # aylantirish shu yerda tekshiriladi.
+      - name: Testlar
+        working-directory: xonim_planner
+        run: npm test
+
+      # Serverga aynan shu yig'ma chiqadi: /planner/ manzili ostida.
+      - name: Yig‘ish
+        working-directory: xonim_planner
+        run: npm run build:xonim

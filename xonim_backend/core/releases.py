@@ -30,6 +30,50 @@ kerak emas, egasiga esa hammasi kerak.
 # «hozirgi versiya» aynan shu ro'yxatning birinchi yozuvi.
 RELEASES = [
     {
+        'version': '1.5',
+        'released': '2026-10-01',
+        'title': {
+            'uz': 'Moliyaviy kalkulyator',
+            'ru': 'Финансовый калькулятор',
+            'en': 'Financial calculator',
+        },
+        'changes': [
+            {
+                'kind': 'yangi',
+                'roles': ['owner'],
+                'uz': 'Menyuda «Kalkulyator» bo‘limi paydo bo‘ldi. U «agar … bo‘lsa-chi?» '
+                      'degan savollarni hisoblaydi: yana bitta oshpaz olinsa, masalliq '
+                      'qimmatlasa yoki narx oshirilsa foyda qancha bo‘ladi, zarar '
+                      'ko‘rmaslik uchun kuniga nechta buyurtma kerak, maqsadli foydaga '
+                      'qanday yetiladi.',
+                'ru': 'В меню появился раздел «Калькулятор». Он отвечает на вопросы «а что, '
+                      'если…»: сколько будет прибыли, если нанять ещё одного повара, если '
+                      'подорожают продукты или вырастут цены, сколько заказов в день нужно, '
+                      'чтобы не уйти в минус, и как выйти на целевую прибыль.',
+                'en': 'A new “Calculator” section answers “what if…” questions: how profit '
+                      'changes if you hire another cook, if ingredients get dearer or prices '
+                      'go up, how many orders a day you need to break even, and how to reach '
+                      'a target profit.',
+            },
+            {
+                'kind': 'yangi',
+                'roles': ['owner'],
+                'uz': 'Raqamlar o‘zi olinadi: tanlangan oy bo‘yicha menyu, savdo, davomat '
+                      'bo‘yicha ish haqi va xarajatlar. Natija «Umumiy moliya»dagi sof foyda '
+                      'bilan solishtirib ko‘rsatiladi. Kalkulyatorni faqat superadmin ochadi, '
+                      'alohida parol kerak emas.',
+                'ru': 'Цифры подтягиваются сами: меню, продажи, зарплата по табелю и расходы '
+                      'за выбранный месяц. Результат сверяется с чистой прибылью в «Общих '
+                      'финансах». Калькулятор открывает только суперадмин, отдельный пароль '
+                      'не нужен.',
+                'en': 'The numbers come in by themselves: menu, sales, wages by attendance and '
+                      'expenses for the chosen month. The result is checked against the net '
+                      'profit in “Finance”. Only the superadmin can open it, with no separate '
+                      'password.',
+            },
+        ],
+    },
+    {
         'version': '1.4',
         'released': '2026-09-22',
         'title': {

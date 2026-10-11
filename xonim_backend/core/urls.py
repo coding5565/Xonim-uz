@@ -30,6 +30,7 @@ from operations.partners import (
     PartnerReportView,
     PartnerSettlementVoidView,
 )
+from operations.planner import PlannerView
 from operations.print_queue import PrintAckView, PrintClaimView
 from operations.shift import ShiftHistoryView, ShiftView
 from operations.staff_meals import StaffMealRowView, StaffMealView
@@ -130,6 +131,8 @@ urlpatterns = [
     path('api/v1/daily-usage/compare/', UsageComparisonView.as_view()),
     path('api/v1/dashboard/', DashboardView.as_view()),
     path('api/v1/finance/', FinanceView.as_view()),
+    # Moliyaviy kalkulyator (/planner/) uchun bir oylik faktlar.
+    path('api/v1/finance/planner/', PlannerView.as_view()),
     # Hamkorlar: maktab va universitetga taom jo'natish va hisob-kitob.
     path('api/v1/partners/', PartnerListView.as_view()),
     path('api/v1/partners/<int:pk>/', PartnerDetailView.as_view()),

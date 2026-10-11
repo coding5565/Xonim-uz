@@ -616,6 +616,7 @@ export const en: Record<string, string> = {
   'JPG, PNG, WebP · 5 MB gacha': 'JPG, PNG, WebP · up to 5 MB',
   'Jurnal': 'Log',
   'Jurnal to‘liq saqlanadi — eski yozuvlar hech qachon tozalanmaydi.': 'The log is kept in full — old records are never cleared.',
+  'Kalkulyator': 'Calculator',
   'Kam qoldi': 'Running low',
   'Kam qolgan': 'Low',
   'kam qolgan': 'running low',

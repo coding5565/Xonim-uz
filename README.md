@@ -56,6 +56,15 @@ Har bir amal jurnalga tushadi — kim, qachon, nima uchun. Yozuvni o'chirib
 bo'lmaydi. Kun yakuni: kassadagi naqd sanaladi va tizim hisobi bilan
 solishtiriladi.
 
+**Moliyaviy kalkulyator**
+«Agar … bo'lsa-chi?» savollari uchun: yana bitta oshpaz olinsa, masalliq
+qimmatlasa, narx oshirilsa foyda qancha bo'ladi; zarar ko'rmaslik uchun
+kuniga nechta buyurtma kerak; maqsadli foydaga qanday yetiladi. Superadmin
+menyusidagi «Kalkulyator» bo'limida ochiladi, alohida login yo'q. Boshlang'ich
+raqamlar tanlangan oy bo'yicha Xonim'ning o'zidan olinadi va «Umumiy moliya»
+bilan solishtirib ko'rsatiladi. Kod `xonim_planner/` papkasida — alohida
+ilova, server uni `/planner/` manzilida beradi.
+
 **Xodimlar, ofitsiantlar, QR menyu** ham bor.
 
 ---
@@ -97,6 +106,16 @@ npm run dev
 
 So'ng `http://127.0.0.1:5173`.
 
+Kalkulyator kerak bo'lsa — yana bitta terminal. Xonim'ning dev-serveri
+`/planner/` ni shunga uzatadi, ya'ni u `http://127.0.0.1:5173/planner/`
+manzilida, Xonim sessiyasi bilan ochiladi:
+
+```bash
+cd xonim_planner
+npm ci
+npm run dev:xonim
+```
+
 Windowsda ikkalasini birdan ishga tushirish uchun `start-local.ps1` bor.
 Mahalliy sinov login/paroli `.local-access.txt` faylida yaratiladi — u Git'ga
 kiritilmaydi.
@@ -118,6 +137,10 @@ DJANGO_DEBUG=0 python manage.py check --deploy --fail-level WARNING
 cd xonim_frontend && npm run typecheck      # TypeScript
 npm run lint                                # ESLint, ogohlantirish ham xato
 npm run build                               # yig'ish
+
+cd xonim_planner && npm test                # kalkulyator: dvigatel, tarjimalar, Xonim faktlari
+npm run lint
+npm run build:xonim                         # serverga chiqadigan /planner/ yig'masi
 ```
 
 Hammasi har push'da GitHub Actions'da ham ishlaydi, testlar PostgreSQL bilan.
