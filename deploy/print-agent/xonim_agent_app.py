@@ -40,7 +40,7 @@ from ctypes import wintypes
 from pathlib import Path
 from tkinter import messagebox, ttk
 
-VERSION = '1.2'
+VERSION = '1.3'
 APP_NAME = 'XonimAgent'
 TASK_NAME = 'Xonim print agent'
 # Yangilanish shuncha vaqtda bir marta tekshiriladi.
@@ -244,6 +244,22 @@ def read_config():
     return config
 
 
+def run_quiet(args):
+    """Buyruqni konsol oynasisiz bajaradi va javobini matn qilib qaytaradi.
+
+    `text=True` ishlatilmaydi: `schtasks` javobini Windows OEM
+    kodlashda beradi, Python esa uni tizim kodlashi bilan o'qishga
+    urinib yiqilardi. Xato alohida oqimda ko'tarilgani uchun u
+    sezilmasdi — jurnalga esa sababning o'rniga BO'SH qavs tushardi.
+    """
+    done = subprocess.run(
+        args, capture_output=True, check=False,
+        creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+    )
+    raw = (done.stdout or b'') + (done.stderr or b'')
+    return done.returncode, raw.decode('cp866', 'replace').strip()
+
+
 def register_autostart():
     """Kompyuter yoqilganda o'zi ishga tushsin.
 
@@ -251,39 +267,35 @@ def register_autostart():
     va printerga o'sha seansning huquqlari bilan murojaat qiladi —
     xizmat esa alohida seansda turib printerni ko'rmay qolishi mumkin.
     """
-    target = str(installed_exe())
-    done = subprocess.run(
+    target = installed_exe()
+    code, said = run_quiet(
         ['schtasks', '/Create', '/F', '/SC', 'ONLOGON', '/TN', TASK_NAME,
-         '/TR', f'"{target}"', '/RL', 'LIMITED'],
-        capture_output=True, text=True, check=False,
-        creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
-    )
-    if done.returncode == 0:
+         '/TR', f'"{target}"', '/RL', 'LIMITED'])
+    if code == 0:
         LOG.info('Avtoishga tushirish: Windows vazifasi yaratildi')
         return 'task'
 
     # Vazifa yaratilmadi — odatda huquq yetmaydi va `schtasks` jim
     # qoladi. Zaxira yo'l: «Avtoyuklash» papkasiga yorliq. Unga huquq
     # kerak emas va u xuddi shunday ishlaydi.
+    # Odatda sabab — huquq yetmasligi («Access is denied»): vazifa
+    # yaratish administrator huquqini talab qiladi. Yorliq esa talab
+    # qilmaydi va xuddi shunday ishlaydi, shuning uchun bu xato emas.
     LOG.warning('Windows vazifasi yaratilmadi (%s). Yorliq bilan urinamiz.',
-                (done.stderr or done.stdout or '').strip()[:120])
+                said[:120] or f'kod {code}')
     startup = Path(os.environ.get('APPDATA', '')) / 'Microsoft' / 'Windows' / 'Start Menu' / 'Programs' / 'Startup'
     if not startup.exists():
         LOG.error('Avtoishga tushirish sozlanmadi: papka topilmadi')
         return ''
     link = startup / 'Xonim chek printeri.lnk'
-    made = subprocess.run(
+    code, said = run_quiet(
         ['powershell', '-NoProfile', '-NonInteractive', '-Command',
          f"$s=(New-Object -ComObject WScript.Shell).CreateShortcut('{link}');"
-         f"$s.TargetPath='{target}';$s.WorkingDirectory='{target.parent}';$s.Save()"],
-        capture_output=True, text=True, check=False,
-        creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
-    )
-    if made.returncode == 0 and link.exists():
+         f"$s.TargetPath='{target}';$s.WorkingDirectory='{target.parent}';$s.Save()"])
+    if code == 0 and link.exists():
         LOG.info('Avtoishga tushirish: yorliq qo‘yildi')
         return 'shortcut'
-    LOG.error('Avtoishga tushirish sozlanmadi: %s',
-              (made.stderr or '').strip()[:160])
+    LOG.error('Avtoishga tushirish sozlanmadi: %s', said[:160] or f'kod {code}')
     return ''
 
 
@@ -317,6 +329,15 @@ def install_self():
     return True
 
 
+def version_tuple(text):
+    """'1.10' > '1.9' bo'lishi uchun raqamlab solishtiramiz."""
+    parts = []
+    for chunk in str(text or '').split('.'):
+        digits = ''.join(c for c in chunk if c.isdigit())
+        parts.append(int(digits) if digits else 0)
+    return tuple(parts)
+
+
 # Bitta nusxa qulfi. Handle global saqlanadi: u yopilsa qulf ham yo'qoladi.
 _LOCK = None
 
@@ -336,6 +357,19 @@ def already_running():
     _LOCK = kernel32.CreateMutexW(None, False, 'XonimPrintAgentSingleInstance')
     ERROR_ALREADY_EXISTS = 183
     return kernel32.GetLastError() == ERROR_ALREADY_EXISTS
+
+
+def release_lock():
+    """Qulfni bo'shatadi.
+
+    O'zini qayta ishga tushirishdan oldin shart: yangi nusxa qulfni
+    band ko'rsa, «allaqachon ishlayapti» deb o'zini yopadi va
+    natijada bitta ham agent qolmaydi.
+    """
+    global _LOCK
+    if _LOCK:
+        ctypes.WinDLL('kernel32').CloseHandle(wintypes.HANDLE(_LOCK))
+        _LOCK = None
 
 
 def apply_update(data):
@@ -377,6 +411,7 @@ class Worker(threading.Thread):
         self.server = Server(config['server']['url'], config['server']['token'])
         self.devices = dict(config['printers'])
         self.stations = sorted(self.devices)
+        self.devices_read = 0.0
         self.agent = config['server'].get('name', 'kassa')
         self.branch = config['server']['branch']
         self.stop = threading.Event()
@@ -399,6 +434,7 @@ class Worker(threading.Thread):
                 self.update_now.clear()
                 self.last_check = time.time()
                 self.check_update()
+            self.refresh_devices()
             try:
                 jobs = self.server.claim(self.agent, self.branch, self.stations)
                 if backoff != POLL_EVERY:
@@ -420,6 +456,26 @@ class Worker(threading.Thread):
                 continue
             for job in jobs:
                 self.print_one(job)
+
+    def refresh_devices(self):
+        """agent.ini qaytadan o'qiladi.
+
+        Printerlar nomi faqat ishga tushganda o'qilsa, faylni qo'lda
+        to'g'rilagan odam uchun hech narsa o'zgarmaydi: talon yana
+        avvalgi printerga ketadi. Shuning uchun har daqiqada bir marta
+        qaytadan o'qiymiz.
+        """
+        if time.time() - self.devices_read < 60:
+            return
+        self.devices_read = time.time()
+        fresh = read_config()
+        if not fresh:
+            return
+        devices = dict(fresh['printers'])
+        if devices and devices != self.devices:
+            self.devices = devices
+            self.stations = sorted(devices)
+            self.say('ok', 'Printer sozlamalari yangilandi')
 
     def print_one(self, job):
         device = self.devices.get(job['station'])
@@ -450,7 +506,7 @@ class Worker(threading.Thread):
             return
         self.follow_server(info.get('server_url'))
         latest = info.get('version')
-        if not latest or latest == VERSION:
+        if not latest or version_tuple(latest) <= version_tuple(VERSION):
             self.say('info', f'Versiya {VERSION} — eng so‘nggisi')
             return
         self.say('info', f'Yangi versiya topildi: {latest}. Yuklanmoqda…')
@@ -659,6 +715,7 @@ class MainWindow:
         if values:
             write_config(values)
             messagebox.showinfo('Xonim', 'Saqlandi. Dastur qayta ishga tushadi.')
+            release_lock()
             subprocess.Popen([str(installed_exe())],
                              creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
             os._exit(0)
@@ -705,10 +762,18 @@ def main():
     if running_frozen():
         try:
             moved = install_self()
+        except Exception:  # noqa: BLE001 - sabab jurnalda qoladi
+            LOG.exception('Ko‘chirish bajarilmadi')
+            moved = False
+        # Avtoishga tushirish — ALOHIDA. Ilgari ikkisi bitta `try` da
+        # edi: yorliq qo'yilmasa, `moved` ham False bo'lib qolardi va
+        # ish stolidagi nusxa o'rnatilganiga topshirmay, o'zi doimiy
+        # agentga aylanardi — natijada u fayl band bo'lib, keyingi
+        # marta ustiga yangi versiya yozilmay qolardi.
+        try:
             register_autostart()
         except Exception:  # noqa: BLE001 - sabab jurnalda qoladi
-            LOG.exception('O‘rnatish bajarilmadi')
-            moved = False
+            LOG.exception('Avtoishga tushirish sozlanmadi')
         if moved:
             subprocess.Popen([str(installed_exe())],
                              creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
