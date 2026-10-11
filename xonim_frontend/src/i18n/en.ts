@@ -1520,4 +1520,5 @@ export const en: Record<string, string> = {
   'Zaxira nusxa olinmadi': 'Backup failed',
   'Qidiruvni tozalash': 'Clear search',
   'Tavsiya etamiz': 'Our picks',
+  'Chek agenti bu kompyuterda ishlamayapti — cheklar chiqmaydi. Ish stolidagi «xonim-agent» dasturini oching.': 'The receipt agent is not running on this computer — receipts will not print. Open the «xonim-agent» program on the desktop.',
 }

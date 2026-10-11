@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   ArrowUpRight, BarChart3, Banknote, Bot, Calculator, ChefHat, ChevronRight, Command, ConciergeBell, CookingPot, Gift, Handshake, History, Rocket, LayoutDashboard, LogOut, Menu, PiggyBank,
-  LayoutGrid, Moon, Package, PanelLeftClose, ReceiptText, Settings2, ShoppingBag, Soup, Store, Sun, Users, UtensilsCrossed, Wallet,
+  LayoutGrid, Moon, Package, PanelLeftClose, ReceiptText, Settings2, ShoppingBag, Soup, Store, Sun, TriangleAlert, Users, UtensilsCrossed, Wallet,
 } from 'lucide-react'
 import { api } from './api'
 import { COMMIT as BUNDLE_COMMIT, stamped as bundleStamped } from './build-stamp'
@@ -10,7 +10,7 @@ import { isUnseen } from './version'
 import { SHOW_KITCHEN_SCREEN } from './config'
 import { session, useSession } from './session'
 import { LANGUAGES, useI18n, type Lang } from './i18n'
-import type { User, VersionInfo } from './types'
+import type { PrintAgentStatus, User, VersionInfo } from './types'
 
 type Role = User['role']
 
@@ -76,6 +76,9 @@ export default function App() {
   const [version, setVersion] = useState<VersionInfo>()
   // Yon menyudagi nuqta: oxirgi qaraganidan beri yangilanish bo'lganmi.
   const [unseen, setUnseen] = useState(false)
+  // Chek agenti shu kompyuterda ishlayaptimi. Server «agent» rejimida
+  // bo'lmasa bu tekshiruv umuman o'tkazilmaydi.
+  const [agentDown, setAgentDown] = useState(false)
 
   useEffect(() => {
     document.documentElement.classList.toggle('theme-dark', darkMode)
@@ -92,6 +95,21 @@ export default function App() {
         setUnseen(isUnseen(info.version))
       })
       .catch(() => setVersion(undefined))
+  }, [user])
+
+  // Chek agenti tekshiruvi. Faqat chek chiqaradigan rollar uchun
+  // (kassir, superadmin) va faqat server agent rejimida ishlaganda.
+  // 15 soniyada bir so'raladi: agent o'chsa kassir tez bilib olsin,
+  // lekin serverga ortiqcha yuk tushmasin.
+  useEffect(() => {
+    if (!user || (user.role !== 'owner' && user.role !== 'cashier')) return
+    let alive = true
+    const check = () => api<PrintAgentStatus>('print/agent/status/')
+      .then(status => { if (alive) setAgentDown(status.required && !status.online) })
+      .catch(() => { /* tarmoq xatosi — ogohlantirishni o'zgartirmaymiz */ })
+    check()
+    const timer = window.setInterval(check, 15000)
+    return () => { alive = false; window.clearInterval(timer) }
   }, [user])
 
   // Oshxona ekrani qog'oz talon foydasiga o'chirilgan, lekin oshxona rolida
@@ -245,6 +263,12 @@ export default function App() {
           </div>
         </header>
         {error && <p className="alert error">{error}</p>}
+        {agentDown && (
+          <p className="alert warn agent-down">
+            <TriangleAlert size={16} />
+            {t('Chek agenti bu kompyuterda ishlamayapti — cheklar chiqmaydi. Ish stolidagi «xonim-agent» dasturini oching.')}
+          </p>
+        )}
         <main className="main-content"><Outlet /></main>
         <footer className="app-footer">
           XONIM WORKSPACE <span>{t('Mahalliy sinov • ma’lumotlar ushbu kompyuterda saqlanadi')}</span>

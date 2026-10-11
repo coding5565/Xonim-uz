@@ -25,7 +25,9 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import PrintJob
+from rest_framework.permissions import IsAuthenticated
+
+from .models import Branch, PrintAgent, PrintJob
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +36,10 @@ BATCH = 10
 # Shuncha urinishdan keyin topshiriq «chiqmadi» deb belgilanadi va
 # navbatni tiqilib qolishdan saqlaydi.
 MAX_ATTEMPTS = 5
+# Agent shuncha soniyada bir ovoz bermasa, «o'chgan» deb hisoblanadi.
+# Agent har 2 soniyada so'raydi, shuning uchun 30 soniya — bir nechta
+# o'tkazib yuborilgan so'rovga ham joy qoldiradi, lekin tez sezadi.
+AGENT_OFFLINE_SECONDS = 30
 
 
 def queue_mode():
@@ -94,6 +100,20 @@ class PrintClaimView(APIView):
         data = ClaimInput(data=request.data)
         data.is_valid(raise_exception=True)
         fields = data.validated_data
+
+        # «Tirikman» belgisi: shu so'rovning o'zi agent ishlab turganini
+        # bildiradi. Topshiriq bo'lmasa ham yangilanadi, chunki agent
+        # baribir so'rab turadi.
+        branch = Branch.objects.filter(slug=fields['branch']).first()
+        if branch:
+            PrintAgent.objects.update_or_create(
+                branch=branch, name=fields['agent'],
+                defaults={
+                    'stations': ','.join(fields['stations'])[:60],
+                    'version': request.headers.get('X-Print-Agent-Version', '')[:20],
+                    'last_seen': timezone.now(),
+                },
+            )
 
         reclaim_expired()
         now = timezone.now()
@@ -161,3 +181,41 @@ class PrintAckView(APIView):
             logger.warning('Talon chiqmadi: #%s %s', job.id, job.error)
         job.save(update_fields=['status', 'attempts', 'error', 'agent', 'claimed_at', 'done_at'])
         return Response({'ok': True})
+
+
+class PrintAgentStatusView(APIView):
+    """Platforma uchun: shu filialda agent ishlayaptimi.
+
+    Kassir brauzerda ishlaydi, agent esa o'sha kompyuterda alohida
+    dastur. Brauzer mahalliy dasturni ko'ra olmaydi, shuning uchun
+    «ishlayaptimi» degan savolga faqat server javob bera oladi: agent
+    unga ovoz berib turadimi yoki yo'qmi.
+
+    `required` — umuman agent kerakmi (PRINT_MODE='agent' bo'lsagina).
+    To'g'ridan-to'g'ri rejimda printer kassaga ulangan, agent kerak
+    emas, shuning uchun ogohlantirish ham chiqmasligi kerak.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        branch = getattr(request.user, 'branch', None)
+        cutoff = timezone.now() - timezone.timedelta(seconds=AGENT_OFFLINE_SECONDS)
+        agents = []
+        online = False
+        if branch:
+            for agent in PrintAgent.objects.filter(branch=branch).order_by('name'):
+                is_online = agent.last_seen >= cutoff
+                online = online or is_online
+                agents.append({
+                    'name': agent.name,
+                    'stations': agent.stations,
+                    'version': agent.version,
+                    'online': is_online,
+                    'last_seen': agent.last_seen.isoformat(),
+                })
+        return Response({
+            'required': queue_mode(),
+            'online': online,
+            'agents': agents,
+        })

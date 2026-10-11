@@ -813,6 +813,34 @@ class PrintJob(models.Model):
         ]
 
 
+class PrintAgent(models.Model):
+    """Restorandagi chop etish agentining «tirikman» belgisi.
+
+    Agent har soniyada navbatni so'raydi. Shu so'rov paytida `last_seen`
+    yangilanadi. Platforma shu belgiga qarab «agent ishlayaptimi» deb
+    bilib oladi: belgi eskirgan bo'lsa — agent o'chgan yoki kompyuter
+    yopilgan, demak cheklar chiqmaydi va kassirni ogohlantirish kerak.
+
+    Nega PrintJob yetmaydi: topshiriq bo'lmasa, agent baribir so'rab
+    turadi-yu, lekin hech qanday qator yaratmaydi — «tirik» ekanini
+    boshqa joyda belgilash shart.
+    """
+
+    branch = models.ForeignKey(Branch, on_delete=models.CASCADE, related_name='print_agents')
+    # Kassaning nomi (kassa-1). Bitta filialda bir nechta kompyuter bo'lishi
+    # mumkin, har biri alohida belgi qoldiradi.
+    name = models.CharField(max_length=60)
+    # Agent qaysi printerlarga xizmat qiladi: vergul bilan (counter,kitchen).
+    stations = models.CharField(max_length=60, blank=True)
+    version = models.CharField(max_length=20, blank=True)
+    last_seen = models.DateTimeField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['branch', 'name'], name='uniq_print_agent'),
+        ]
+
+
 class Ingredient(models.Model):
     branch = models.ForeignKey(Branch, on_delete=models.PROTECT)
     name = models.CharField(max_length=100)

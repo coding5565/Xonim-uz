@@ -34,6 +34,7 @@ from .models import (
     PartnerDelivery,
     PartnerPrice,
     PartnerSettlement,
+    PrintAgent,
     PrintJob,
     Recipe,
     RecipeLine,
@@ -4513,6 +4514,37 @@ class PrintQueueTests(TestCase):
     @override_settings(PRINT_AGENT_TOKEN='')
     def test_without_a_token_the_queue_is_closed(self):
         self.assertEqual(self.claim(token='').status_code, 403)
+
+    def test_claiming_marks_the_agent_as_alive(self):
+        # Topshiriq bo'lmasa ham so'rovning o'zi «tirik» belgisini qoldiradi.
+        self.claim()
+        agent = PrintAgent.objects.get(branch=self.branch, name='kassa-1')
+        self.assertEqual(agent.stations, 'kitchen,counter')
+        self.assertTrue(agent.last_seen)
+
+    def test_the_platform_sees_the_agent_online_right_after_a_poll(self):
+        self.claim()
+        response = self.client.get('/api/v1/print/agent/status/')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['required'])
+        self.assertTrue(response.data['online'])
+        self.assertEqual(response.data['agents'][0]['name'], 'kassa-1')
+
+    def test_a_stale_heartbeat_reads_as_offline(self):
+        self.claim()
+        # Belgini o'tmishga suramiz — agent o'chgan holatni taqlid qiladi.
+        old = timezone.now() - timezone.timedelta(seconds=120)
+        PrintAgent.objects.filter(branch=self.branch).update(last_seen=old)
+        response = self.client.get('/api/v1/print/agent/status/')
+        self.assertFalse(response.data['online'])
+        self.assertFalse(response.data['agents'][0]['online'])
+
+    @override_settings(PRINT_MODE='direct')
+    def test_direct_mode_does_not_require_an_agent(self):
+        # To'g'ridan-to'g'ri rejimda printer kassaga ulangan: agent kerak
+        # emas, shuning uchun ogohlantirish ham chiqmasligi kerak.
+        response = self.client.get('/api/v1/print/agent/status/')
+        self.assertFalse(response.data['required'])
 
 
 class PaymentMethodBreakdownTests(TestCase):

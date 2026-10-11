@@ -1520,4 +1520,5 @@ export const ru: Record<string, string> = {
   'Zaxira nusxa olinmadi': 'Резервная копия не создана',
   'Qidiruvni tozalash': 'Очистить поиск',
   'Tavsiya etamiz': 'Рекомендуем',
+  'Chek agenti bu kompyuterda ishlamayapti — cheklar chiqmaydi. Ish stolidagi «xonim-agent» dasturini oching.': 'Агент чеков не работает на этом компьютере — чеки не печатаются. Откройте программу «xonim-agent» на рабочем столе.',
 }

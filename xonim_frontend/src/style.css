@@ -1408,3 +1408,8 @@ button.mark.tap:disabled{opacity:.5;cursor:default}
 .split-pay input{text-align:right;font-variant-numeric:tabular-nums}
 .split-pay select{min-width:118px}
 @media(max-width:520px){.split-pay{grid-template-columns:minmax(0,1fr)}}
+
+.alert.warn{background:#fdf6e7;color:#9a7324;border-color:#f0e0bb}
+.alert.agent-down{display:flex;align-items:center;gap:10px;font-weight:550}
+.alert.agent-down svg{flex-shrink:0}
+.theme-dark .alert.warn{background:#3a3016;border-color:#5c4a22;color:#e8c983}

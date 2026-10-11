@@ -31,7 +31,7 @@ from operations.partners import (
     PartnerSettlementVoidView,
 )
 from operations.planner import PlannerView
-from operations.print_queue import PrintAckView, PrintClaimView
+from operations.print_queue import PrintAckView, PrintAgentStatusView, PrintClaimView
 from operations.shift import ShiftHistoryView, ShiftView
 from operations.staff_meals import StaffMealRowView, StaffMealView
 from operations.stock_usage import StockUsageView
@@ -155,6 +155,8 @@ urlpatterns = [
     path('api/v1/telegram/webhook/', TelegramWebhookView.as_view()),
     path('api/v1/print/claim/', PrintClaimView.as_view()),
     path('api/v1/print/ack/', PrintAckView.as_view()),
+    # Platforma shu manzilni so'rab, agent ishlayotganini tekshiradi.
+    path('api/v1/print/agent/status/', PrintAgentStatusView.as_view()),
     path('api/v1/print/agent/version/', AgentVersionView.as_view()),
     path('api/v1/print/agent/download/', AgentDownloadView.as_view()),
     path('api/v1/assistant/chat/', AssistantChatView.as_view()),

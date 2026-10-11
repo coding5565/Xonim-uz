@@ -41,7 +41,7 @@ from ctypes import wintypes
 from pathlib import Path
 from tkinter import messagebox, ttk
 
-VERSION = '1.4'
+VERSION = '1.5'
 APP_NAME = 'XonimAgent'
 TASK_NAME = 'Xonim print agent'
 # Yangilanish shuncha vaqtda bir marta tekshiriladi.
@@ -284,14 +284,46 @@ def send_windows(data, queue_name):
         spooler.ClosePrinter(handle)
 
 
+# Tarmoq printeri ba'zan bitta urinishda javob bermaydi: Wi-Fi uzilib
+# ulanadi, printer boshqa talonni chop etayotgan bo'ladi yoki uyqu
+# rejimidan uyg'onadi. Shuning uchun darhol qayta urinamiz — bu server
+# urinishini sarflamaydi va kassir xatoni umuman ko'rmaydi.
+NET_RETRIES = 3
+NET_RETRY_WAIT = 0.6
+
+
 def send_network(data, target):
     host, _, port = target.partition(':')
-    try:
-        with socket.create_connection((host, int(port or 9100)), timeout=5) as link:
-            link.settimeout(10)
-            link.sendall(data)
-    except OSError as error:
-        raise PrinterError(f'Printerga ulanib bolmadi ({target}): {error}') from error
+    port = int(port or 9100)
+    last = None
+    for attempt in range(1, NET_RETRIES + 1):
+        try:
+            # Ulanish 3 soniyada bo'lmasa, printer uyqu yoki o'chiq —
+            # cheksiz kutmaymiz. Printer o'chiq bo'lsa bu talon serverga
+            # «chiqmadi» deb qaytadi va u yana navbatga tushadi, kassa
+            # taloni esa behuda bloklanib turmaydi.
+            with socket.create_connection((host, port), timeout=3) as link:
+                link.settimeout(15)
+                link.sendall(data)
+                # MUHIM: sendall baytlarni OS buferiga topshirgach qaytadi,
+                # printer ularni haqiqatan olganini bildirmaydi. Soketni
+                # darhol yopsak, oxirgi qism yo'lda qirqilib, chek yarim
+                # chiqardi yoki umuman chiqmasdi — aynan shu «ba'zan
+                # chiqmaydi» xatosi. Yozuvni yopib, printer ulanishni
+                # o'zi uzguncha kutamiz: shunda hamma bayt yetib boradi.
+                try:
+                    link.shutdown(socket.SHUT_WR)
+                    link.recv(64)
+                except OSError:
+                    # Printer hech narsa qaytarmasligi mumkin — muhimi,
+                    # shu paytgacha baytlar yetib bo'ladi.
+                    pass
+            return
+        except OSError as error:
+            last = error
+            if attempt < NET_RETRIES:
+                time.sleep(NET_RETRY_WAIT)
+    raise PrinterError(f'Printerga ulanib bo‘lmadi ({target}): {last}')
 
 
 def send(data, device):
@@ -337,6 +369,8 @@ class Server:
             headers={
                 'Content-Type': 'application/json',
                 'X-Print-Agent-Token': self.token,
+                # Server shu orqali qaysi versiya ishlayotganini biladi.
+                'X-Print-Agent-Version': VERSION,
             },
             method='POST' if payload is not None else 'GET',
         )
@@ -576,6 +610,46 @@ class Worker(threading.Thread):
         self.update_now = threading.Event()
         self.printed = 0
         self.last_check = 0.0
+        # Chop etilgan va xatoga uchragan talonlar tarixi. Oyna shuni
+        # ko'rsatadi va kerak bo'lsa qayta chop etadi. Qulf bilan, chunki
+        # ro'yxatni oyna oqimi o'qiydi, ishchi oqim yozadi.
+        self.history = []
+        self.history_lock = threading.Lock()
+        # Qayta chop etish so'rovlari. Oyna bu yerga qo'yadi, ishchi oqim
+        # oladi: chop etish HAR DOIM bitta oqimda bo'lsin, aks holda ikki
+        # talon bir printerga aralashib ketardi.
+        self.reprint_q = queue.Queue()
+
+    def remember(self, job, status, error=''):
+        """Talonni tarixga yozadi (yoki mavjudini yangilaydi)."""
+        payload = base64.b64decode(job['payload']) if 'payload' in job else job.get('bytes', b'')
+        record = {
+            'id': job['id'],
+            'station': job.get('station', ''),
+            'kind': job.get('kind', ''),
+            'bytes': payload,
+            'status': status,
+            'error': error[:120],
+            'at': time.strftime('%H:%M:%S'),
+        }
+        with self.history_lock:
+            for existing in self.history:
+                if existing['id'] == record['id']:
+                    existing.update(status=status, error=error[:120], at=record['at'])
+                    if payload:
+                        existing['bytes'] = payload
+                    return
+            self.history.append(record)
+            # Oxirgi 200 ta yetarli: tarix kassir uchun, arxiv emas.
+            if len(self.history) > 200:
+                del self.history[:-200]
+
+    def snapshot_history(self):
+        with self.history_lock:
+            return [dict(item) for item in reversed(self.history)]
+
+    def request_reprint(self, job_id):
+        self.reprint_q.put(job_id)
 
     def say(self, level, text):
         # Oynaga ham, faylga ham. Oyna kichraytirilgan bo'lsa nima
@@ -609,11 +683,39 @@ class Worker(threading.Thread):
                 self.stop.wait(backoff)
                 continue
 
+            self.do_reprints()
             if not jobs:
                 self.stop.wait(POLL_EVERY)
                 continue
             for job in jobs:
                 self.print_one(job)
+
+    def do_reprints(self):
+        """Oynadan so'ralgan qayta chop etishlarni bajaradi."""
+        while True:
+            try:
+                job_id = self.reprint_q.get_nowait()
+            except queue.Empty:
+                return
+            with self.history_lock:
+                record = next((dict(item) for item in self.history
+                               if item['id'] == job_id), None)
+            if not record or not record['bytes']:
+                continue
+            device = self.devices.get(record['station'])
+            if not device:
+                self.remember(record, 'failed', f'"{record["station"]}" sozlanmagan')
+                self.say('error', f'#{job_id} qayta chiqmadi: "{record["station"]}" sozlanmagan')
+                continue
+            try:
+                send(record['bytes'], device)
+            except Exception as error:  # noqa: BLE001
+                self.remember(record, 'failed', str(error))
+                self.say('error', f'#{job_id} qayta chiqmadi: {str(error)[:60]}')
+                continue
+            self.printed += 1
+            self.remember(record, 'done')
+            self.say('ok', f'Talon #{job_id} qayta chiqdi ({record["station"]})')
 
     def refresh_devices(self):
         """agent.ini qaytadan o'qiladi.
@@ -638,11 +740,13 @@ class Worker(threading.Thread):
     def print_one(self, job):
         device = self.devices.get(job['station'])
         if not device:
+            self.remember(job, 'failed', f'"{job["station"]}" sozlanmagan')
             self.server.ack(job['id'], False, f'"{job["station"]}" sozlanmagan')
             return
         try:
             send(base64.b64decode(job['payload']), device)
         except Exception as error:  # noqa: BLE001 - har qanday xato serverga xabar qilinadi
+            self.remember(job, 'failed', str(error))
             self.say('error', f'Talon #{job["id"]} chiqmadi: {str(error)[:60]}')
             try:
                 self.server.ack(job['id'], False, str(error))
@@ -650,6 +754,7 @@ class Worker(threading.Thread):
                 pass
             return
         self.printed += 1
+        self.remember(job, 'done')
         self.say('ok', f'Talon #{job["id"]} chiqdi ({job["station"]})')
         try:
             self.server.ack(job['id'], True)
@@ -703,6 +808,192 @@ class Worker(threading.Thread):
             return
         self.server = candidate
         self.say('ok', f'Server manzili yangilandi: {target}')
+
+
+# --------------------------------------------------------------------
+# Tizim treyi (soat yonidagi belgi)
+# --------------------------------------------------------------------
+# tkinter'da trey belgisi yo'q, shuning uchun Windows'ning o'z API'si
+# (Shell_NotifyIcon) ctypes orqali ishlatiladi — butun agent kabi,
+# tashqi kutubxonasiz. Belgi o'z oynasida, alohida oqimda yashaydi:
+# Windows unga xabarlarni (sichqoncha bosilishi) o'sha oyna orqali
+# yuboradi. Bosilganda natija navbatga qo'yiladi va tkinter uni o'z
+# oqimida oladi — oynani boshqa oqimdan chaqirib bo'lmaydi.
+
+WM_USER = 0x0400
+TRAY_CALLBACK = WM_USER + 20
+WM_LBUTTONUP = 0x0202
+WM_LBUTTONDBLCLK = 0x0203
+WM_RBUTTONUP = 0x0205
+WM_COMMAND = 0x0111
+WM_DESTROY = 0x0002
+NIM_ADD = 0x0
+NIM_DELETE = 0x2
+NIF_MESSAGE = 0x1
+NIF_ICON = 0x2
+NIF_TIP = 0x4
+IDI_APPLICATION = 32512
+ID_SHOW = 1001
+ID_QUIT = 1002
+
+
+class _NOTIFYICONDATA(ctypes.Structure):
+    _fields_ = [
+        ('cbSize', wintypes.DWORD),
+        ('hWnd', wintypes.HWND),
+        ('uID', wintypes.UINT),
+        ('uFlags', wintypes.UINT),
+        ('uCallbackMessage', wintypes.UINT),
+        ('hIcon', wintypes.HICON),
+        ('szTip', wintypes.WCHAR * 128),
+        ('dwState', wintypes.DWORD),
+        ('dwStateMask', wintypes.DWORD),
+        ('szInfo', wintypes.WCHAR * 256),
+        ('uTimeoutOrVersion', wintypes.UINT),
+        ('szInfoTitle', wintypes.WCHAR * 64),
+        ('dwInfoFlags', wintypes.DWORD),
+    ]
+
+
+# LRESULT va LPARAM 64-bitli Windowsda 64 bit. Oddiy c_int bo'lsa,
+# oyna identifikatori (katta ko'rsatkich) butun songa sig'may, ctypes
+# «int too long» bilan yiqilardi.
+LRESULT = ctypes.c_ssize_t
+WNDPROC = ctypes.WINFUNCTYPE(
+    LRESULT, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
+
+
+class _WNDCLASS(ctypes.Structure):
+    _fields_ = [
+        ('style', wintypes.UINT),
+        ('lpfnWndProc', WNDPROC),
+        ('cbClsExtra', ctypes.c_int),
+        ('cbWndExtra', ctypes.c_int),
+        ('hInstance', wintypes.HINSTANCE),
+        ('hIcon', wintypes.HICON),
+        ('hCursor', wintypes.HANDLE),
+        ('hbrBackground', wintypes.HBRUSH),
+        ('lpszMenuName', wintypes.LPCWSTR),
+        ('lpszClassName', wintypes.LPCWSTR),
+    ]
+
+
+class Tray:
+    """Soat yonidagi belgi: ikki marta bosilsa oyna ochiladi.
+
+    on_show / on_quit — tkinter oqimida bajarilishi kerak bo'lgan
+    ishlar; Tray ularni to'g'ridan-to'g'ri chaqirmaydi, chunki o'zi
+    boshqa oqimda turadi. Shuning uchun ular navbatga qo'yiladigan
+    oddiy chaqiruv bo'lishi kutiladi (MainWindow shunday beradi).
+    """
+
+    def __init__(self, on_show, on_quit, tip='Xonim chek printeri'):
+        self.on_show = on_show
+        self.on_quit = on_quit
+        self.tip = tip[:127]
+        self.hwnd = None
+        self._thread = None
+        # WNDPROC ga havola saqlanishi SHART: yo'qolsa, Windows uni
+        # chaqirganda dastur yiqiladi.
+        self._wndproc = WNDPROC(self._handle)
+        self._u32 = ctypes.WinDLL('user32')
+        self._shell = ctypes.WinDLL('shell32')
+        self._k32 = ctypes.WinDLL('kernel32')
+        # DefWindowProcW ga ko'rsatkich o'lchamidagi argumentlar ketadi;
+        # imzosiz ctypes ularni int deb o'ylab, 64-bitli qiymatda yiqiladi.
+        self._u32.DefWindowProcW.restype = LRESULT
+        self._u32.DefWindowProcW.argtypes = [
+            wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+
+    def start(self):
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def _load_icon(self):
+        # Avval .exe ning o'z belgisini olishga urinamiz, bo'lmasa
+        # standart dastur belgisi — belgisiz trey ko'rinmaydi.
+        self._shell.ExtractIconW.restype = wintypes.HICON
+        self._shell.ExtractIconW.argtypes = [wintypes.HINSTANCE, wintypes.LPCWSTR, wintypes.UINT]
+        try:
+            hicon = self._shell.ExtractIconW(None, str(installed_exe()), 0)
+            if hicon and hicon > 1:
+                return hicon
+        except Exception:  # noqa: BLE001
+            pass
+        self._u32.LoadIconW.restype = wintypes.HICON
+        self._u32.LoadIconW.argtypes = [wintypes.HINSTANCE, wintypes.LPCWSTR]
+        return self._u32.LoadIconW(None, wintypes.LPCWSTR(IDI_APPLICATION))
+
+    def _run(self):
+        hinst = self._k32.GetModuleHandleW(None)
+        cls = _WNDCLASS()
+        cls.lpfnWndProc = self._wndproc
+        cls.hInstance = hinst
+        cls.lpszClassName = 'XonimTrayWindow'
+        self._u32.RegisterClassW.argtypes = [ctypes.POINTER(_WNDCLASS)]
+        self._u32.RegisterClassW(ctypes.byref(cls))
+
+        self._u32.CreateWindowExW.restype = wintypes.HWND
+        self._u32.CreateWindowExW.argtypes = [
+            wintypes.DWORD, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD,
+            ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+            wintypes.HWND, wintypes.HMENU, wintypes.HINSTANCE, wintypes.LPVOID]
+        self.hwnd = self._u32.CreateWindowExW(
+            0, 'XonimTrayWindow', 'Xonim', 0, 0, 0, 0, 0, None, None, hinst, None)
+
+        self._icon = _NOTIFYICONDATA()
+        self._icon.cbSize = ctypes.sizeof(_NOTIFYICONDATA)
+        self._icon.hWnd = self.hwnd
+        self._icon.uID = 1
+        self._icon.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP
+        self._icon.uCallbackMessage = TRAY_CALLBACK
+        self._icon.hIcon = self._load_icon()
+        self._icon.szTip = self.tip
+        self._shell.Shell_NotifyIconW(NIM_ADD, ctypes.byref(self._icon))
+
+        # Xabarlar tsikli: Windows sichqoncha bosilishini shu yerga
+        # yuboradi. GetMessageW oyna yopilguncha bloklanadi.
+        msg = wintypes.MSG()
+        while self._u32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+            self._u32.TranslateMessage(ctypes.byref(msg))
+            self._u32.DispatchMessageW(ctypes.byref(msg))
+
+    def _handle(self, hwnd, msg, wparam, lparam):
+        if msg == TRAY_CALLBACK:
+            event = lparam & 0xFFFF
+            if event in (WM_LBUTTONUP, WM_LBUTTONDBLCLK):
+                self.on_show()
+            elif event == WM_RBUTTONUP:
+                self._menu()
+        elif msg == WM_COMMAND:
+            choice = wparam & 0xFFFF
+            if choice == ID_SHOW:
+                self.on_show()
+            elif choice == ID_QUIT:
+                self.on_quit()
+        elif msg == WM_DESTROY:
+            self._shell.Shell_NotifyIconW(NIM_DELETE, ctypes.byref(self._icon))
+        return self._u32.DefWindowProcW(hwnd, msg, wparam, lparam)
+
+    def _menu(self):
+        menu = self._u32.CreatePopupMenu()
+        self._u32.AppendMenuW(menu, 0, ID_SHOW, 'Ochish')
+        self._u32.AppendMenuW(menu, 0, ID_QUIT, 'Chiqish')
+        point = wintypes.POINT()
+        self._u32.GetCursorPos(ctypes.byref(point))
+        # TrackPopupMenu'dan oldin SetForegroundWindow shart, aks holda
+        # menyu tashqariga bosilganda yopilmay qoladi — Windows qoidasi.
+        self._u32.SetForegroundWindow(self.hwnd)
+        self._u32.TrackPopupMenu(menu, 0, point.x, point.y, 0, self.hwnd, None)
+        self._u32.PostMessageW(self.hwnd, 0, 0, 0)
+
+    def remove(self):
+        if self.hwnd:
+            try:
+                self._shell.Shell_NotifyIconW(NIM_DELETE, ctypes.byref(self._icon))
+            except Exception:  # noqa: BLE001
+                pass
+
 
 
 # --------------------------------------------------------------------
@@ -907,17 +1198,24 @@ class SetupWindow:
 
 
 class MainWindow:
-    """Ishlab turgan agentning oynasi: holat, jurnal va tugmalar."""
+    """Ishlab turgan agentning oynasi: holat, navbat va tugmalar."""
+
+    STATUS_LABEL = {'done': 'Chiqdi', 'failed': 'Xato', 'queued': 'Navbatda'}
 
     def __init__(self, config):
         self.config = config
         self.events = queue.Queue()
         self.worker = Worker(config, self.events)
+        # Treydan keladigan buyruqlar (ochish/chiqish). Trey boshqa oqimda
+        # turadi, oynani esa faqat shu oqimdan chaqirish mumkin, shuning
+        # uchun u shu navbat orqali gaplashadi.
+        self.tray_q = queue.Queue()
+        self.history_sig = None
 
         self.root = tk.Tk()
         self.root.title(f'Xonim — chek printeri · {VERSION}')
         self.root.configure(bg=PALETTE['bg'])
-        self.root.geometry('620x420')
+        self.root.geometry('660x460')
 
         top = tk.Frame(self.root, bg=PALETTE['bg'], padx=18, pady=14)
         top.pack(fill='x')
@@ -935,20 +1233,67 @@ class MainWindow:
         tk.Button(buttons, text='Sozlamalar', command=self.reconfigure,
                   relief='flat', padx=14, pady=6).pack(side='left')
 
-        body = tk.Frame(self.root, bg=PALETTE['bg'], padx=18, pady=12)
-        body.pack(fill='both', expand=True)
-        self.log = tk.Text(body, height=14, bg=PALETTE['card'], fg=PALETTE['ink'],
+        notebook = ttk.Notebook(self.root)
+        notebook.pack(fill='both', expand=True, padx=18, pady=12)
+
+        # 1-varaq: jurnal.
+        log_tab = tk.Frame(notebook, bg=PALETTE['bg'])
+        notebook.add(log_tab, text='  Holat  ')
+        self.log = tk.Text(log_tab, height=12, bg=PALETTE['card'], fg=PALETTE['ink'],
                            relief='flat', font=('Consolas', 9), wrap='word')
-        self.log.pack(fill='both', expand=True)
+        self.log.pack(fill='both', expand=True, padx=4, pady=4)
         self.log.configure(state='disabled')
 
-        # Oyna yopilganda dastur to'xtamaydi — u kichrayadi. Kassir
-        # tasodifan yopib qo'ysa cheklar chiqmay qolardi.
-        self.root.protocol('WM_DELETE_WINDOW', self.root.iconify)
+        # 2-varaq: chop etilgan talonlar navbati va qayta chop etish.
+        queue_tab = tk.Frame(notebook, bg=PALETTE['bg'])
+        notebook.add(queue_tab, text='  Chop navbati  ')
+        bar = tk.Frame(queue_tab, bg=PALETTE['bg'])
+        bar.pack(fill='x', padx=4, pady=(4, 0))
+        tk.Button(bar, text='Qayta chop etish', command=self.reprint_selected,
+                  relief='flat', bg='#2f6f52', fg='white', padx=12, pady=5).pack(side='left')
+        tk.Label(bar, text='Chiqmagan talonni tanlab, qayta chop eting.',
+                 bg=PALETTE['bg'], fg=PALETTE['muted']).pack(side='left', padx=10)
+
+        columns = ('at', 'id', 'station', 'status', 'error')
+        self.table = ttk.Treeview(queue_tab, columns=columns, show='headings', height=11)
+        for key, title, width in (('at', 'Vaqt', 70), ('id', '#', 60),
+                                  ('station', 'Printer', 90), ('status', 'Holat', 80),
+                                  ('error', 'Izoh', 260)):
+            self.table.heading(key, text=title)
+            self.table.column(key, width=width, anchor='w')
+        self.table.tag_configure('done', foreground='#1f7a4d')
+        self.table.tag_configure('failed', foreground='#b23030')
+        self.table.pack(fill='both', expand=True, padx=4, pady=4)
+
+        # Oyna yopilganda dastur to'xtamaydi — treyga yashiriladi. Kassir
+        # tasodifan yopib qo'ysa cheklar chiqmay qolardi. Treydan ikki
+        # marta bosib qaytariladi.
+        self.root.protocol('WM_DELETE_WINDOW', self.hide_to_tray)
+
+        self.tray = Tray(
+            on_show=lambda: self.tray_q.put('show'),
+            on_quit=lambda: self.tray_q.put('quit'),
+            tip=f'Xonim chek printeri · {config["server"].get("name", "kassa")}')
+        self.tray.start()
 
         self.worker.start()
         self.root.after(300, self.drain)
 
+    # ---- trey ----
+    def hide_to_tray(self):
+        self.root.withdraw()
+
+    def show_window(self):
+        self.root.deiconify()
+        self.root.lift()
+        self.root.focus_force()
+
+    def quit_fully(self):
+        self.worker.stop.set()
+        self.tray.remove()
+        os._exit(0)
+
+    # ---- jurnal ----
     def write(self, level, text):
         marks = {'ok': '  ', 'info': '  ', 'warn': '! ', 'error': 'X '}
         self.log.configure(state='normal')
@@ -965,12 +1310,53 @@ class MainWindow:
             self.write(level, text)
             if level in ('ok', 'error'):
                 self.status.config(text=text)
+        while True:
+            try:
+                command = self.tray_q.get_nowait()
+            except queue.Empty:
+                break
+            if command == 'show':
+                self.show_window()
+            elif command == 'quit':
+                self.quit_fully()
+        self.refresh_table()
         self.status_line()
         self.root.after(500, self.drain)
+
+    def refresh_table(self):
+        rows = self.worker.snapshot_history()
+        # Faqat o'zgarganda qayta chizamiz: aks holda har yarim soniyada
+        # tanlov yo'qolib, ro'yxat miltillab turardi.
+        sig = tuple((r['id'], r['status']) for r in rows)
+        if sig == self.history_sig:
+            return
+        self.history_sig = sig
+        chosen = set(self.table.selection())
+        self.table.delete(*self.table.get_children())
+        for row in rows:
+            iid = str(row['id'])
+            self.table.insert('', 'end', iid=iid, tags=(row['status'],), values=(
+                row['at'], f"#{row['id']}", row['station'],
+                self.STATUS_LABEL.get(row['status'], row['status']),
+                row['error'],
+            ))
+        keep = [iid for iid in chosen if self.table.exists(iid)]
+        if keep:
+            self.table.selection_set(keep)
 
     def status_line(self):
         if self.worker.printed:
             self.root.title(f'Xonim — chek printeri · {VERSION} · {self.worker.printed} ta talon')
+
+    # ---- amallar ----
+    def reprint_selected(self):
+        chosen = self.table.selection()
+        if not chosen:
+            messagebox.showinfo('Xonim', 'Avval ro‘yxatdan talonni tanlang.')
+            return
+        for iid in chosen:
+            self.worker.request_reprint(int(iid))
+        self.write('info', f'{len(chosen)} ta talon qayta chop etishga yuborildi…')
 
     def check_update(self):
         self.write('info', 'Yangilanish so‘raldi…')
@@ -993,6 +1379,7 @@ class MainWindow:
         if values:
             write_config(values)
             messagebox.showinfo('Xonim', 'Saqlandi. Dastur qayta ishga tushadi.')
+            self.tray.remove()
             release_lock()
             subprocess.Popen([str(installed_exe())],
                              creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))

@@ -764,3 +764,17 @@ export interface VersionInfo {
   /** Foydalanuvchi roliga tegishli o'zgarishi bor versiyalar, yangisidan. */
   releases: Release[]
 }
+
+export interface PrintAgentStatus {
+  /** Umuman agent kerakmi (server «agent» rejimida bo'lsagina). */
+  required: boolean
+  /** Shu filialda kamida bitta agent yaqinda ovoz berganmi. */
+  online: boolean
+  agents: {
+    name: string
+    stations: string
+    version: string
+    online: boolean
+    last_seen: string
+  }[]
+}
