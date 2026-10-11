@@ -40,7 +40,7 @@ from ctypes import wintypes
 from pathlib import Path
 from tkinter import messagebox, ttk
 
-VERSION = '1.1'
+VERSION = '1.2'
 APP_NAME = 'XonimAgent'
 TASK_NAME = 'Xonim print agent'
 # Yangilanish shuncha vaqtda bir marta tekshiriladi.
@@ -252,24 +252,90 @@ def register_autostart():
     xizmat esa alohida seansda turib printerni ko'rmay qolishi mumkin.
     """
     target = str(installed_exe())
-    subprocess.run(
+    done = subprocess.run(
         ['schtasks', '/Create', '/F', '/SC', 'ONLOGON', '/TN', TASK_NAME,
          '/TR', f'"{target}"', '/RL', 'LIMITED'],
         capture_output=True, text=True, check=False,
         creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
     )
+    if done.returncode == 0:
+        LOG.info('Avtoishga tushirish: Windows vazifasi yaratildi')
+        return 'task'
+
+    # Vazifa yaratilmadi — odatda huquq yetmaydi va `schtasks` jim
+    # qoladi. Zaxira yo'l: «Avtoyuklash» papkasiga yorliq. Unga huquq
+    # kerak emas va u xuddi shunday ishlaydi.
+    LOG.warning('Windows vazifasi yaratilmadi (%s). Yorliq bilan urinamiz.',
+                (done.stderr or done.stdout or '').strip()[:120])
+    startup = Path(os.environ.get('APPDATA', '')) / 'Microsoft' / 'Windows' / 'Start Menu' / 'Programs' / 'Startup'
+    if not startup.exists():
+        LOG.error('Avtoishga tushirish sozlanmadi: papka topilmadi')
+        return ''
+    link = startup / 'Xonim chek printeri.lnk'
+    made = subprocess.run(
+        ['powershell', '-NoProfile', '-NonInteractive', '-Command',
+         f"$s=(New-Object -ComObject WScript.Shell).CreateShortcut('{link}');"
+         f"$s.TargetPath='{target}';$s.WorkingDirectory='{target.parent}';$s.Save()"],
+        capture_output=True, text=True, check=False,
+        creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+    )
+    if made.returncode == 0 and link.exists():
+        LOG.info('Avtoishga tushirish: yorliq qo‘yildi')
+        return 'shortcut'
+    LOG.error('Avtoishga tushirish sozlanmadi: %s',
+              (made.stderr or '').strip()[:160])
+    return ''
 
 
 def install_self():
-    """O'zini doimiy papkaga ko'chiradi. Allaqachon o'sha yerda bo'lsa — hech narsa."""
+    """O'zini doimiy papkaga ko'chiradi.
+
+    Uch holatda hech narsa qilmaydi va bu UCHALASI ham xato emas:
+      · allaqachon o'sha papkadan ishlayapti;
+      · u yerda AYNAN shu fayl turibdi — nusxalashning ma'nosi yo'q;
+      · fayl band, chunki o'sha nusxa hozir ishlab turibdi.
+
+    Oxirgisi Windows'ning qoidasi: ishlab turgan .exe ustiga yozib
+    bo'lmaydi. Ilgari bu tutib olinmasdi va foydalanuvchi ish stolidagi
+    nusxani ikkinchi marta ochganda ekranga tushunarsiz traceback
+    chiqardi — aslida esa hammasi joyida edi, agent ishlayotgan edi.
+    """
     if not running_frozen():
         return False
     current = Path(sys.executable).resolve()
     target = installed_exe().resolve()
     if current == target:
         return False
-    target.write_bytes(current.read_bytes())
+    data = current.read_bytes()
+    if target.exists() and target.read_bytes() == data:
+        return False
+    try:
+        target.write_bytes(data)
+    except PermissionError:
+        LOG.info('O‘rnatilgan nusxa band — u ishlab turibdi, qayta yozilmadi')
+        return False
     return True
+
+
+# Bitta nusxa qulfi. Handle global saqlanadi: u yopilsa qulf ham yo'qoladi.
+_LOCK = None
+
+
+def already_running():
+    """Agent allaqachon ishlayaptimi.
+
+    Ikki nusxa bir vaqtda ishlasa, ikkalasi ham navbatdan topshiriq
+    oladi va bir xil chek ikki marta chiqishi mumkin — buni keyin
+    faqat qog'ozdan bilib bo'ladi.
+    """
+    global _LOCK
+    if not sys.platform.startswith('win'):
+        return False
+    kernel32 = ctypes.WinDLL('kernel32')
+    kernel32.CreateMutexW.restype = wintypes.HANDLE
+    _LOCK = kernel32.CreateMutexW(None, False, 'XonimPrintAgentSingleInstance')
+    ERROR_ALREADY_EXISTS = 183
+    return kernel32.GetLastError() == ERROR_ALREADY_EXISTS
 
 
 def apply_update(data):
@@ -319,7 +385,11 @@ class Worker(threading.Thread):
         self.last_check = 0.0
 
     def say(self, level, text):
+        # Oynaga ham, faylga ham. Oyna kichraytirilgan bo'lsa nima
+        # bo'layotganini faqat jurnaldan bilib bo'ladi, ilgari esa u
+        # amalda bo'sh qolardi.
         self.events.put((level, text))
+        LOG.log({'error': logging.ERROR, 'warn': logging.WARNING}.get(level, logging.INFO), text)
 
     def run(self):
         self.say('info', f'Agent ishga tushdi · versiya {VERSION}')
@@ -606,6 +676,19 @@ def main():
         encoding='utf-8',
     )
 
+    # Ikkinchi nusxa ishga tushirilsa — to'xtaymiz. Ikkalasi navbatdan
+    # topshiriq olsa, bitta chek ikki marta chiqishi mumkin.
+    if already_running():
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showinfo(
+            'Xonim',
+            'Chek printeri allaqachon ishlab turibdi.\n\n'
+            'Uning oynasi yopilmagan — kichraytirilgan. Vazifalar '
+            'panelidan oching.')
+        root.destroy()
+        return 0
+
     config = read_config()
     if config is None:
         values = SetupWindow().run()
@@ -615,9 +698,17 @@ def main():
         config = read_config()
 
     # O'rnatish: o'zini doimiy joyga ko'chirish va avtoishga tushirish.
+    #
+    # Bu qadam ishlamasa ham dastur TO'XTAMAYDI: u shu yerdan ishlayveradi.
+    # O'rnatish qulaylik uchun, chek chiqarish esa asosiy ish — birinchisi
+    # ikkinchisini to'xtatib qo'ymasligi kerak.
     if running_frozen():
-        moved = install_self()
-        register_autostart()
+        try:
+            moved = install_self()
+            register_autostart()
+        except Exception:  # noqa: BLE001 - sabab jurnalda qoladi
+            LOG.exception('O‘rnatish bajarilmadi')
+            moved = False
         if moved:
             subprocess.Popen([str(installed_exe())],
                              creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
