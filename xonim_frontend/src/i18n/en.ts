@@ -1518,4 +1518,5 @@ export const en: Record<string, string> = {
   'Zaxira nusxa olindi': 'Backup created',
   'Zaxira nusxa olinmadi': 'Backup failed',
   'Qidiruvni tozalash': 'Clear search',
+  'Tavsiya etamiz': 'Our picks',
 }

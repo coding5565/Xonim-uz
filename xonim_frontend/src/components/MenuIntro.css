@@ -346,12 +346,13 @@
   to { opacity: 1; transform: none; }
 }
 .public-menu.is-entering .public-header { animation: mi-rise 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.3s both; }
-.public-menu.is-entering .menu-hero { animation: mi-rise 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) 0.4s both; }
-.public-menu.is-entering .mm-search { animation: mi-rise 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.55s both; }
-.public-menu.is-entering .mm-chips { animation: mi-rise 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.62s both; }
-.public-menu.is-entering .mm-section-head { animation: mi-rise 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.7s both; }
+.public-menu.is-entering .mm-hero-copy { animation: mi-rise 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) 0.45s both; }
+.public-menu.is-entering .mm-rail-block { animation: mi-rise 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) 0.7s both; }
+.public-menu.is-entering .mm-search { animation: mi-rise 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.8s both; }
+.public-menu.is-entering .mm-chips { animation: mi-rise 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.86s both; }
+.public-menu.is-entering .mm-section-head { animation: mi-rise 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.92s both; }
 .public-menu.is-entering .mm-card:not([data-reveal]) {
-  animation: mi-rise 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) calc(0.72s + var(--n, 0) * 0.055s) both;
+  animation: mi-rise 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) calc(0.95s + var(--n, 0) * 0.055s) both;
 }
 
 @media (prefers-reduced-motion: reduce) {

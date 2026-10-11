@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowUpRight, Clock3, Leaf, MapPin, Search, Sparkles, UtensilsCrossed, X } from 'lucide-react'
+import { ArrowUpRight, Clock3, MapPin, Search, Sparkles, UtensilsCrossed, X } from 'lucide-react'
 import { api, money } from '../api'
 import { useI18n } from '../i18n'
 import type { Category, Dish } from '../types'
@@ -33,6 +33,9 @@ const FIRST_SCREEN_CARDS = 8
 
 const SKELETON_CARDS = 6
 
+/** Qahramon sahnasida markaziy likopcha + shuncha yo'ldosh likopcha aylanadi. */
+const SATELLITES = 3
+
 /**
  * Kirish animatsiyasi har QR skanerlashda bir marta ochiladi (brauzer
  * yorlig'i yopilguncha). `?intro=1` uni majburan ochadi, `?intro=0` o'chiradi.
@@ -51,10 +54,10 @@ function shouldPlayIntro(): boolean {
   }
 }
 
-/** Likopchalar uchun: avval har kategoriyadan bittadan, keyin qolganlari. */
-function pickPlateImages(dishes: Dish[] | undefined): string[] {
+/** Tanlangan taomlar: rasmli, mavjud, rasmi takrorlanmaydi; avval har kategoriyadan bittadan. */
+function pickFeatured(dishes: Dish[] | undefined): Dish[] {
   if (!dishes) return []
-  // Bir xil rasm bir necha taomga qo'yilgan bo'lishi mumkin — likopchalar takrorlanmasin.
+  // Bir xil rasm bir necha taomga qo'yilgan bo'lishi mumkin — takrorlanmasin.
   const seen = new Set<string>()
   const shown = dishes.filter(dish => {
     if (!dish.image || !dish.available || seen.has(dish.image)) return false
@@ -70,7 +73,7 @@ function pickPlateImages(dishes: Dish[] | undefined): string[] {
     if (picked.length >= 6) break
     if (!picked.includes(dish)) picked.push(dish)
   }
-  return picked.slice(0, 6).map(dish => dish.image as string)
+  return picked.slice(0, 6)
 }
 
 /** Taomlarni bo'limlarga ajratadi; bo'limlar menyudagi tartibda turadi. */
@@ -106,11 +109,12 @@ export default function PublicMenu() {
   const chips = useRef<HTMLDivElement>(null)
   const list = useRef<HTMLDivElement>(null)
 
-  const plateImages = useMemo(() => pickPlateImages(data?.dishes), [data])
+  const featured = useMemo(() => pickFeatured(data?.dishes), [data])
+  const plateImages = useMemo(() => featured.map(dish => dish.image as string), [featured])
   // Parda ochila boshlaganda menyu ham qatma-qat paydo bo'ladi.
   const startEntering = useCallback(() => {
     setEntering(true)
-    enterTimer.current = window.setTimeout(() => setEntering(false), 2600)
+    enterTimer.current = window.setTimeout(() => setEntering(false), 2800)
   }, [])
   const finishIntro = useCallback(() => setIntroOn(false), [])
   const closeDish = useCallback(() => setOpened(null), [])
@@ -177,9 +181,12 @@ export default function PublicMenu() {
   }
 
   const canReveal = typeof IntersectionObserver !== 'undefined'
+  const hero = featured[0]
+  const satellites = featured.slice(1, 1 + SATELLITES)
+  const showRail = featured.length >= 3 && !category && !query
 
   return (
-    <div className={`public-menu${entering ? ' is-entering' : ''}`}>
+    <div className={`public-menu${entering ? ' is-entering' : ''}${introOn && !entering ? ' intro-hold' : ''}`}>
       <header className="public-header">
         <Link to={slug ? `/menu/${slug}` : '/menu'} className="brand">
           <span className="brand-mark">x<span>•</span></span>
@@ -189,22 +196,64 @@ export default function PublicMenu() {
         </Link>
         <div className="public-header-meta">
           <span className="open-badge"><i /> {t('Bugun ochiq')}</span>
-          <span className="public-language">{t('O‘zbekcha')}</span>
         </div>
       </header>
-      <section className="menu-hero">
-        <div className="hero-copy">
-          <span className="eyebrow"><Sparkles size={13} /> {t('DID BILAN TAYYORLANGAN')}</span>
+
+      <section className="mm-hero">
+        <div className="mm-hero-glow" />
+        {hero && (
+          <div className="mm-stage" aria-hidden="true">
+            <span className="mm-stage-ring" />
+            <span className="mm-stage-ring mm-stage-ring-inner" />
+            <div className="mm-steam"><i /><i /></div>
+            <div className="mm-stage-plate"><img src={hero.image as string} alt="" draggable={false} /></div>
+            <div className="mm-stage-orbit">
+              {satellites.map((dish, index) => (
+                <div
+                  key={dish.id}
+                  className="mm-sat"
+                  style={{ '--a': `${-52 + (360 / satellites.length) * index}deg`, '--i': index } as CSSProperties}
+                >
+                  <div className="mm-sat-counter"><img src={dish.image as string} alt="" draggable={false} /></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="mm-hero-copy">
+          <span className="mm-kicker"><Sparkles size={13} /> {t('DID BILAN TAYYORLANGAN')}</span>
           <h1>{t('Ta’mlar')}<br /><em>{t('bir dasturxonda.')}</em></h1>
-          <p>{t('Sevimli taomlaringizni tanlang.')}<br />{t('Buyurtmani ofitsiantga ayting.')}</p>
-          <div className="hero-details">
+          <p>{t('Sevimli taomlaringizni tanlang.')} {t('Buyurtmani ofitsiantga ayting.')}</p>
+          <div className="mm-hero-stats">
             <span><UtensilsCrossed size={15} /> {tn('{count} ta taom', data?.dishes.length || 0)}</span>
             <span><Clock3 size={15} /> {t('Har kuni xizmatda')}</span>
           </div>
         </div>
-        <div className="hero-ornament"><Leaf size={142} strokeWidth={0.8} /><span>XONIM<br />RESTAURANT</span></div>
       </section>
+
       <main className="public-content">
+        {showRail && (
+          <section className="mm-rail-block">
+            <header className="mm-section-head">
+              <h2>{t('Tavsiya etamiz')}</h2>
+            </header>
+            <div className="mm-rail">
+              {featured.map(dish => (
+                <button key={dish.id} type="button" className="mm-feature" onClick={() => setOpened(dish)}>
+                  <span className="mm-media"><DishArt name={dish.name} category={dish.category_name} image={dish.image} /></span>
+                  <span className="mm-shade" />
+                  <span className="mm-body">
+                    <span className="mm-tag">{dish.category_name}</span>
+                    <span className="mm-name">{dish.name}</span>
+                    <span className="mm-foot"><strong>{money(dish.price)} <small>{t('so‘m')}</small></strong></span>
+                  </span>
+                  <span className="mm-go"><ArrowUpRight size={18} /></span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
         <div className="mm-search">
           <Search size={18} />
           <input
@@ -244,7 +293,6 @@ export default function PublicMenu() {
               {Array.from({ length: SKELETON_CARDS }, (_, index) => (
                 <div key={index} className="mm-card mm-skeleton" aria-hidden="true">
                   <span className="mm-media" />
-                  <span className="mm-body"><i /><i /><i /></span>
                 </div>
               ))}
             </div>
@@ -270,16 +318,17 @@ export default function PublicMenu() {
                     >
                       <span className="mm-media">
                         <DishArt name={dish.name} category={dish.category_name} image={dish.image} />
-                        {!dish.available && <span className="dish-state unavailable">{t('Hozir mavjud emas')}</span>}
                       </span>
+                      <span className="mm-shade" />
+                      {!dish.available && <span className="mm-off-badge">{t('Hozir mavjud emas')}</span>}
                       <span className="mm-body">
                         <span className="mm-name">{dish.name}</span>
-                        {dish.description && <span className="mm-desc">{dish.description}</span>}
                         <span className="mm-foot">
                           <strong>{money(dish.price)} <small>{t('so‘m')}</small></strong>
                           {dish.portion && <span>{dish.portion}</span>}
                         </span>
                       </span>
+                      <span className="mm-go"><ArrowUpRight size={16} /></span>
                     </button>
                   )
                 })}

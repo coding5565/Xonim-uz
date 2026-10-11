@@ -1518,4 +1518,5 @@ export const ru: Record<string, string> = {
   'Zaxira nusxa olindi': 'Резервная копия создана',
   'Zaxira nusxa olinmadi': 'Резервная копия не создана',
   'Qidiruvni tozalash': 'Очистить поиск',
+  'Tavsiya etamiz': 'Рекомендуем',
 }
