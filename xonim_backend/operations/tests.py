@@ -424,8 +424,15 @@ class WorkflowTests(TestCase):
         from operations import printing
 
         order = create_order(self.cashier, self.order_data())
-        text = printing.receipt_bytes(order).decode('ascii')
-        self.assertIn('XONIM', text)
+        raw = printing.receipt_bytes(order)
+        # Shapka endi matn emas, logotip rastri. Qolgan hamma narsa
+        # avvalgidek sof ASCII bo'lishi shart, shuning uchun rastrni
+        # ajratib olamiz — aks holda uning baytlari matn tekshiruvini
+        # buzardi.
+        logo = printing.logo_bytes()
+        self.assertTrue(logo, 'chek logotipi topilmadi')
+        self.assertIn(logo, raw)
+        text = raw.replace(logo, b'').decode('ascii')
         self.assertIn('Osh', text)
         self.assertIn('90 000', text)
         self.assertIn('FISKAL CHEK EMAS', text)
@@ -4427,6 +4434,8 @@ class PrintQueueTests(TestCase):
         self.sell()
         jobs = self.claim().data['jobs']
         self.assertTrue(jobs)
+        from operations.printing import logo_bytes as printing_logo
+
         by_kind = {row['kind']: base64.b64decode(row['payload']) for row in jobs}
         for payload in by_kind.values():
             # ESC/POS oqimi INIT bilan boshlanadi va kesish bilan tugaydi.
@@ -4436,7 +4445,11 @@ class PrintQueueTests(TestCase):
         # bilan chiqadi — ular bir xil emas.
         self.assertIn(b'OSHXONA', by_kind['prep'])
         self.assertNotIn(b'40 000', by_kind['prep'])
-        self.assertIn(b'XONIM', by_kind['receipt'])
+        # Mijoz chekida logotip bor, oshxona talonida yo'q: talon
+        # oshpaz uchun, unga bezak shart emas va qog'oz tejaladi.
+        logo = printing_logo()
+        self.assertIn(logo, by_kind['receipt'])
+        self.assertNotIn(logo, by_kind['prep'])
         self.assertIn(b'40 000', by_kind['receipt'])
 
     def test_a_claimed_ticket_is_not_handed_out_twice(self):

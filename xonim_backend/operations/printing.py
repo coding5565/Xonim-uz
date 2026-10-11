@@ -21,6 +21,8 @@ import socket
 import sys
 from ctypes import wintypes
 from decimal import ROUND_HALF_UP, Decimal
+from functools import lru_cache
+from pathlib import Path
 
 from django.conf import settings
 from django.utils import timezone
@@ -53,8 +55,30 @@ ASCII_MAP = {
 }
 
 
+# Chek shapkasidagi logotip — tayyor ESC/POS rastr. U `GS v 0` lentalari
+# bo'lib saqlanadi va shu holicha printerga uzatiladi; uni
+# `deploy/make_receipt_logo.py` yasaydi. Fayl shu yerda hisoblanmaydi,
+# chunki unga Pillow kerak bo'lardi — logotip esa deyarli o'zgarmaydi.
+LOGO_FILE = Path(__file__).resolve().parent / 'receipt_logo.bin'
+
+
 class PrinterError(Exception):
     """Chek chiqmadi. Savdo baribir saqlanadi."""
+
+
+@lru_cache(maxsize=1)
+def logo_bytes():
+    """Logotip rastri, topilmasa bo'sh.
+
+    Fayl yo'qligi chekni to'xtatmaydi: shapka matn ko'rinishiga
+    qaytadi. Savdo cheki — hujjat, logotip esa bezak; bezak yo'qligi
+    uchun mijozni chekisiz qoldirish noto'g'ri bo'lardi.
+    """
+    try:
+        return LOGO_FILE.read_bytes()
+    except OSError as error:
+        logger.warning('Chek logotipi o‘qilmadi (%s), matn shapka ishlatiladi', error)
+        return b''
 
 
 def ascii_only(text):
@@ -118,7 +142,15 @@ def receipt_bytes(order, *, open_drawer=False):
     if open_drawer:
         ticket.raw(OPEN_DRAWER)
 
-    ticket.raw(ALIGN_CENTER).raw(SIZE_BIG).text('XONIM').raw(SIZE_NORMAL)
+    ticket.raw(ALIGN_CENTER)
+    logo = logo_bytes()
+    if logo:
+        # Rastrdan keyin qator tashlanadi: `GS v 0` qog'ozni o'zi
+        # surmaydi va keyingi matn logotipning oxirgi qatoriga yopishib
+        # chiqardi.
+        ticket.raw(logo).text()
+    else:
+        ticket.raw(SIZE_BIG).text('XONIM').raw(SIZE_NORMAL)
     ticket.text(branch)
     ticket.raw(ALIGN_LEFT).rule('=')
 

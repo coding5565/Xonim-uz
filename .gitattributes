@@ -11,6 +11,12 @@ Dockerfile*     text eol=lf
 *.yml           text eol=lf
 *.yaml          text eol=lf
 
+# Ikkilik fayllar HECH QACHON o'girilmaydi. Git NUL baytiga qarab buni
+# o'zi ham topadi, lekin bu yerda taxminga tayanmaymiz: chek logotipi
+# rastr bo'lib, undagi 0x0A baytlar oddiy qator oxiri emas — rasm
+# qatori. CRLF ga o'girilsa, chekdan logotip o'rniga axlat chiqardi.
+*.bin           binary
+
 # PowerShell Windows'da ishlaydi va o'z ko'rinishida qolsin.
 *.ps1           text eol=crlf
 
