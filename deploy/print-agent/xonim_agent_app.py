@@ -36,11 +36,12 @@ import time
 import tkinter as tk
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from ctypes import wintypes
 from pathlib import Path
 from tkinter import messagebox, ttk
 
-VERSION = '1.3'
+VERSION = '1.4'
 APP_NAME = 'XonimAgent'
 TASK_NAME = 'Xonim print agent'
 # Yangilanish shuncha vaqtda bir marta tekshiriladi.
@@ -87,30 +88,166 @@ class _DocInfo(ctypes.Structure):
     ]
 
 
+class _PrinterInfo2(ctypes.Structure):
+    """Windows navbati haqida to'liq ma'lumot.
+
+    4-daraja faqat nomni beradi, 2-daraja esa PORT va HAYDOVCHI ni ham.
+    Ular kerak: «XP-80C» degan nomning o'zi hech narsa aytmaydi,
+    «USB001» yoki «192.168.1.50» esa qaysi printer ekanini ko'rsatadi.
+    """
+
+    _fields_ = [
+        ('pServerName', wintypes.LPWSTR),
+        ('pPrinterName', wintypes.LPWSTR),
+        ('pShareName', wintypes.LPWSTR),
+        ('pPortName', wintypes.LPWSTR),
+        ('pDriverName', wintypes.LPWSTR),
+        ('pComment', wintypes.LPWSTR),
+        ('pLocation', wintypes.LPWSTR),
+        ('pDevMode', wintypes.LPVOID),
+        ('pSepFile', wintypes.LPWSTR),
+        ('pPrintProcessor', wintypes.LPWSTR),
+        ('pDatatype', wintypes.LPWSTR),
+        ('pParameters', wintypes.LPWSTR),
+        ('pSecurityDescriptor', wintypes.LPVOID),
+        ('Attributes', wintypes.DWORD),
+        ('Priority', wintypes.DWORD),
+        ('DefaultPriority', wintypes.DWORD),
+        ('StartTime', wintypes.DWORD),
+        ('UntilTime', wintypes.DWORD),
+        ('Status', wintypes.DWORD),
+        ('cJobs', wintypes.DWORD),
+        ('AveragePPM', wintypes.DWORD),
+    ]
+
+
+# Bu «printerlar» qog'ozga emas, faylga yozadi. Ro'yxatdan olib
+# tashlamaymiz — ba'zan ataylab kerak bo'ladi — lekin oxiriga suramiz
+# va belgilab qo'yamiz. Aynan shu xato bir marta sodir bo'lgan: agent
+# «Microsoft Print to PDF» ga sozlanib qolib, chek o'rniga Hujjatlar
+# papkasiga PDF yozardi.
+VIRTUAL_HINTS = ('print to pdf', 'microsoft xps', 'xps document', 'onenote',
+                 'fax', 'pdfcreator', 'dopdf', 'bullzip')
+
+
 def windows_printers():
-    """Kompyuterdagi printerlar ro'yxati — sozlama oynasidagi tanlov uchun."""
+    """Kompyuterdagi navbatlar: nom, port, haydovchi."""
     spooler = ctypes.WinDLL('winspool.drv')
     needed = wintypes.DWORD(0)
     returned = wintypes.DWORD(0)
     # PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS
     flags = 0x00000002 | 0x00000004
-    spooler.EnumPrintersW(flags, None, 4, None, 0, ctypes.byref(needed), ctypes.byref(returned))
+    spooler.EnumPrintersW(flags, None, 2, None, 0, ctypes.byref(needed), ctypes.byref(returned))
     if not needed.value:
         return []
     buffer = ctypes.create_string_buffer(needed.value)
-    if not spooler.EnumPrintersW(flags, None, 4, buffer, needed.value,
+    if not spooler.EnumPrintersW(flags, None, 2, buffer, needed.value,
                                  ctypes.byref(needed), ctypes.byref(returned)):
         return []
 
-    class PrinterInfo4(ctypes.Structure):
-        _fields_ = [
-            ('pPrinterName', wintypes.LPWSTR),
-            ('pServerName', wintypes.LPWSTR),
-            ('Attributes', wintypes.DWORD),
-        ]
+    array = ctypes.cast(buffer, ctypes.POINTER(_PrinterInfo2))
+    found = []
+    for index in range(returned.value):
+        item = array[index]
+        if not item.pPrinterName:
+            continue
+        found.append({
+            'name': item.pPrinterName,
+            'port': item.pPortName or '',
+            'driver': item.pDriverName or '',
+        })
+    return found
 
-    array = ctypes.cast(buffer, ctypes.POINTER(PrinterInfo4))
-    return [array[i].pPrinterName for i in range(returned.value) if array[i].pPrinterName]
+
+def local_ipv4():
+    """Shu kompyuterning tarmoqdagi manzillari."""
+    found = set()
+    try:
+        # Hech narsa yuborilmaydi: UDP «ulanishi» shunchaki qaysi tarmoq
+        # kartasi ishlatilishini aniqlashga xizmat qiladi.
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.connect(('8.8.8.8', 53))
+            found.add(probe.getsockname()[0])
+    except OSError:
+        pass
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            found.add(info[4][0])
+    except OSError:
+        pass
+    return sorted(ip for ip in found if not ip.startswith('127.'))
+
+
+def scan_network(timeout=0.4, workers=128):
+    """LAN da 9100 portini ochgan qurilmalarni topadi.
+
+    9100 — RAW chop etish porti; termal printerlar deyarli har doim shu
+    portda turadi. Qurilmaga hech narsa YUBORILMAYDI, faqat ulanib
+    ko'riladi: begona printerga sinov bayti yuborilsa, u yerda qog'oz
+    behuda chiqib ketardi.
+    """
+    hosts = []
+    seen = set()
+    for ip in local_ipv4():
+        head = ip.rsplit('.', 1)[0]
+        for last in range(1, 255):
+            host = f'{head}.{last}'
+            if host != ip and host not in seen:
+                seen.add(host)
+                hosts.append(host)
+    if not hosts:
+        return []
+
+    found = []
+    lock = threading.Lock()
+
+    def probe(host):
+        try:
+            with socket.create_connection((host, 9100), timeout=timeout):
+                pass
+        except OSError:
+            return
+        with lock:
+            found.append(host)
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        list(pool.map(probe, hosts))
+    return sorted(found, key=lambda ip: [int(part) for part in ip.split('.')])
+
+
+def discover(scan=False):
+    """Tanlash uchun printerlar ro'yxati.
+
+    Har bir yozuv: `device` — sozlamaga tushadigan qiymat, `label` —
+    odamga ko'rsatiladigan matn.
+    """
+    real, virtual = [], []
+    for item in windows_printers():
+        low = f"{item['name']} {item['driver']}".lower()
+        where = item['port'] or 'port noma’lum'
+        if any(hint in low for hint in VIRTUAL_HINTS):
+            virtual.append({
+                'device': item['name'],
+                'label': f"{item['name']} — faylga yozadi, chek chiqmaydi",
+            })
+        else:
+            real.append({
+                'device': item['name'],
+                'label': f"{item['name']} — {where}",
+            })
+
+    entries = list(real)
+    if scan:
+        for host in scan_network():
+            # Windows'da shu manzilga navbat allaqachon bo'lsa, ikki
+            # marta ko'rsatmaymiz.
+            if any(host in item['label'] for item in real):
+                continue
+            entries.append({
+                'device': f'{host}:9100',
+                'label': f'{host}:9100 — tarmoq printeri',
+            })
+    return entries + virtual
 
 
 def send_windows(data, queue_name):
@@ -162,6 +299,27 @@ def send(data, device):
         send_network(data, device)
     else:
         send_windows(data, device)
+
+
+def test_ticket(device, station=''):
+    """Qisqa sinov taloni.
+
+    Printerni ko'z bilan aniqlash uchun: ikkitasidan qaysi biri
+    oshxonada turganini faqat qog'ozdan bilib bo'ladi.
+    """
+    esc, gs = b'\x1b', b'\x1d'
+    out = esc + b'@'
+    out += esc + b'a\x01' + esc + b'!\x30' + b'XONIM\n' + esc + b'!\x00'
+    out += b'SINOV TALONI\n' + b'-' * 48 + b'\n'
+    out += esc + b'a\x00'
+    if station:
+        out += f'Stansiya: {station}\n'.encode('ascii', 'replace')
+    out += f'Printer:  {device}\n'.encode('ascii', 'replace')
+    out += f'Agent:    v{VERSION}\n'.encode('ascii', 'replace')
+    out += b'-' * 48 + b'\n'
+    out += esc + b'a\x01' + b'Shu talon chiqdi = printer tayyor\n\n\n'
+    out += gs + b'V\x00'
+    return out
 
 
 # --------------------------------------------------------------------
@@ -588,37 +746,157 @@ class SetupWindow:
             entry.grid(row=index, column=1, pady=4)
             self.fields[key] = entry
 
-        printers = windows_printers() or ['(printer topilmadi)']
+        # Ro'yxat ikki bosqichda to'ladi: avval Windows navbatlari —
+        # ular bir zumda keladi — keyin fonda tarmoq qidiruvi. Agar
+        # ikkalasini ham kutsak, oyna ochilishi sekin ko'rinardi.
+        self.entries = discover(scan=False)
+        self.scan_results = queue.Queue()
+        self.boxes = {}
         for offset, (key, label) in enumerate([('counter', 'Kassa printeri'),
                                                ('kitchen', 'Oshxona printeri')]):
             row = 6 + offset
             tk.Label(frame, text=label, bg=PALETTE['bg'], fg=PALETTE['ink']).grid(
                 row=row, column=0, sticky='w', pady=4)
-            box = ttk.Combobox(frame, values=printers, width=39, state='readonly')
-            saved = existing['printers'].get(key, '') if existing else ''
-            box.set(saved if saved in printers else printers[0])
-            box.grid(row=row, column=1, pady=4)
+            holder = tk.Frame(frame, bg=PALETTE['bg'])
+            holder.grid(row=row, column=1, sticky='w', pady=4)
+            # `readonly` EMAS: tarmoq printerining manzilini qo'lda ham
+            # yozish mumkin bo'lsin — qidiruv uni topmasligi mumkin,
+            # masalan printer boshqa quyi tarmoqda tursa.
+            box = ttk.Combobox(holder, width=33)
+            box.pack(side='left')
+            tk.Button(holder, text='Sinov', command=lambda k=key: self.test_print(k),
+                      bg=PALETTE['bg'], fg=PALETTE['ink'], relief='groove',
+                      padx=8).pack(side='left', padx=(6, 0))
+            self.boxes[key] = box
             self.fields[key] = box
 
+        saved = existing['printers'] if existing else {}
+        self.show_entries({key: saved.get(key, '') for key in self.boxes})
+
+        hunt = tk.Frame(frame, bg=PALETTE['bg'])
+        hunt.grid(row=8, column=0, columnspan=2, sticky='w', pady=(10, 0))
+        self.scan_button = tk.Button(hunt, text='Printerlarni qidirish',
+                                     command=self.rescan, bg=PALETTE['bg'],
+                                     fg=PALETTE['ink'], relief='groove', padx=10)
+        self.scan_button.pack(side='left')
+        self.scan_note = tk.Label(hunt, text='', bg=PALETTE['bg'], fg=PALETTE['muted'])
+        self.scan_note.pack(side='left', padx=(10, 0))
+
         tk.Label(frame,
-                 text='Printer "Generic / Text Only" haydovchisi bilan\n'
-                      'o‘rnatilgan bo‘lishi kerak, aks holda avtomatik kesish ishlamaydi.',
+                 text='USB printer ro‘yxatda o‘z porti bilan ko‘rinadi (USB001).\n'
+                      'Tarmoq printeri 9100-port bo‘yicha topiladi; manzilini\n'
+                      '192.168.0.50:9100 ko‘rinishida qo‘lda ham yozsa bo‘ladi.\n'
+                      'Qaysi printer qayerda turganini «Sinov» tugmasi ko‘rsatadi.',
                  bg=PALETTE['bg'], fg=PALETTE['muted'], justify='left').grid(
-            row=8, column=0, columnspan=2, sticky='w', pady=(10, 12))
+            row=9, column=0, columnspan=2, sticky='w', pady=(8, 12))
 
         tk.Button(frame, text='Saqlash va ishga tushirish', command=self.save,
                   bg='#2f6f52', fg='white', relief='flat', padx=16, pady=7,
-                  font=('Segoe UI', 10, 'bold')).grid(row=9, column=0, columnspan=2, sticky='e')
+                  font=('Segoe UI', 10, 'bold')).grid(row=10, column=0, columnspan=2, sticky='e')
+
+        # Oyna chizilib bo'lgach tarmoqni o'zi qidiradi: odam tugmani
+        # bosishi shart emas, ro'yxat shundoq ham to'ladi.
+        self.root.after(250, self.rescan)
+
+    def show_entries(self, chosen):
+        """Ro'yxatni qutilarga joylaydi va tanlovni tiklaydi."""
+        labels = [item['label'] for item in self.entries]
+        for key, box in self.boxes.items():
+            box['values'] = labels
+            want = chosen.get(key, '')
+            # Saqlangan qiymat — qurilma nomi, ro'yxatda esa izohli
+            # matn turadi. Mosini topamiz, topilmasa qiymatning o'zini
+            # ko'rsatamiz: u qo'lda yozilgan bo'lishi mumkin.
+            shown = next((item['label'] for item in self.entries
+                          if item['device'] == want), want)
+            box.set(shown or (labels[0] if labels else ''))
+
+    def device_for(self, text):
+        """Oynadagi matndan sozlamaga tushadigan qiymatni ajratadi."""
+        text = (text or '').strip()
+        for item in self.entries:
+            if item['label'] == text:
+                return item['device']
+        return text
+
+    def rescan(self):
+        self.scan_note.config(text='Tarmoq qidirilmoqda…')
+        self.scan_button.config(state='disabled')
+
+        def work():
+            try:
+                self.scan_results.put(('topildi', discover(scan=True)))
+            except Exception as error:  # noqa: BLE001 - qidiruv xatosi oynani yiqitmasin
+                LOG.exception('Printer qidiruvi')
+                self.scan_results.put(('xato', error))
+
+        threading.Thread(target=work, daemon=True).start()
+        self.root.after(200, self.collect_scan)
+
+    def collect_scan(self):
+        """Qidiruv natijasini ASOSIY oqimda oladi.
+
+        tkinter ni boshqa oqimdan chaqirib bo'lmaydi — hatto `after()`
+        ni ham: u interpretatorga yangi buyruq qo'shadi va buning
+        uchun asosiy oqimda turish shart. Natijada «main thread is not
+        in main loop» bilan yiqilardi. Shuning uchun qidiruv oqimi
+        javobni navbatga qo'yadi, oyna esa uni shu yerda, o'z oqimida
+        olib ketadi — jurnal xabarlari bilan qanday ishlansa, shunday.
+        """
+        try:
+            kind, payload = self.scan_results.get_nowait()
+        except queue.Empty:
+            self.root.after(200, self.collect_scan)
+            return
+        if kind == 'topildi':
+            self.scan_done(payload)
+        else:
+            self.scan_failed(payload)
+
+    def scan_done(self, entries):
+        # Odam allaqachon tanlagan bo'lsa, tanlovi saqlanib qolsin.
+        chosen = {key: self.device_for(box.get()) for key, box in self.boxes.items()}
+        self.entries = entries
+        self.show_entries(chosen)
+        network = sum(1 for item in entries if item['device'].endswith(':9100'))
+        self.scan_note.config(
+            text=f'Topildi: {len(entries)} ta, shundan tarmoqda {network} ta')
+        self.scan_button.config(state='normal')
+
+    def scan_failed(self, error):
+        self.scan_note.config(text=f'Qidiruv bajarilmadi: {str(error)[:40]}')
+        self.scan_button.config(state='normal')
+
+    def test_print(self, key):
+        device = self.device_for(self.boxes[key].get())
+        if not device or device.startswith('('):
+            messagebox.showwarning('Xonim', 'Avval printerni tanlang.')
+            return
+        try:
+            send(test_ticket(device, key), device)
+        except Exception as error:  # noqa: BLE001 - sabab odamga ko'rsatiladi
+            messagebox.showerror('Xonim', f'Sinov taloni chiqmadi:\n\n{error}')
+            return
+        messagebox.showinfo(
+            'Xonim',
+            f'Sinov taloni yuborildi:\n{device}\n\n'
+            'Qaysi printerdan chiqqanini qarang.')
 
     def save(self):
         values = {key: field.get().strip() for key, field in self.fields.items()}
+        for key in self.boxes:
+            values[key] = self.device_for(values[key])
         missing = [key for key in ('url', 'token', 'branch') if not values[key]]
         if missing:
             messagebox.showwarning('Xonim', 'Server, token va filial to‘ldirilishi shart.')
             return
-        if values['counter'].startswith('('):
-            messagebox.showwarning('Xonim', 'Avval printerni Windows‘ga qo‘shing.')
+        if not values['counter'] or values['counter'].startswith('('):
+            messagebox.showwarning('Xonim', 'Avval kassa printerini tanlang.')
             return
+        # Oshxona printeri ko'rsatilmasa, talon kassadan chiqaveradi:
+        # bitta printerli joylar ham bor va ular uchun bu to'g'ri xatti-harakat.
+        if not values['kitchen']:
+            values['kitchen'] = values['counter']
         values.setdefault('name', 'kassa-1')
         self.result = values
         self.root.destroy()
